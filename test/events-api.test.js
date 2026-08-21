@@ -193,4 +193,27 @@ describe('Mini Eventos API', () => {
     assert.equal(rejected.status, 403);
     assert.equal(rejected.body.error.code, 'MATCHES_DISABLED');
   });
+
+  it('keeps only historical unauthenticated compatibility when REPORTER_TOKEN is absent', async () => {
+    await request(app).post('/api/matches').send({
+      reportId: 'legacy-open',
+      players: []
+    }).expect(201);
+
+    const event = database.getDefaultEvent();
+    const stage = database.competition.listStages(event.id)[0];
+    database.competition.updateStage(stage.id, { status: 'active' });
+    const group = database.competition.listGroups(stage.id)[0];
+    const host = database.competition.listHosts(event.id)[0];
+    await request(app).post('/api/matches').send({
+      reportId: 'competitive-must-be-closed',
+      stageId: stage.id,
+      groupId: group.id,
+      hostId: host.identifier,
+      matchNumber: 1,
+      players: []
+    }).expect(401).expect((response) => {
+      assert.equal(response.body.error.code, 'REPORTER_TOKEN_REQUIRED');
+    });
+  });
 });

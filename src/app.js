@@ -10,6 +10,13 @@ const { InformationValidationError } = require('./tournament-information');
 const { EventValidationError } = require('./events');
 const { CompetitionError } = require('./competition');
 const { createMatchIngestor } = require('./services/match-ingest');
+const {
+  ReporterAuthError,
+  createReporterAuthorizer,
+  generateReporterToken,
+  hashReporterToken,
+  readBearer
+} = require('./services/reporter-auth');
 
 const PUBLIC_DIRECTORY = path.resolve(__dirname, '..', 'public');
 const MAX_MATCHES_PER_PAGE = 100;
@@ -20,6 +27,10 @@ function sendError(response, status, code, message) {
 
 function isReport(body) {
   return body !== null && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length > 0;
+}
+
+function hasStageContext(report) {
+  return report.stageId !== undefined && report.stageId !== null && report.stageId !== '';
 }
 
 function parseLimit(rawLimit) {
@@ -82,11 +93,22 @@ function eventScoring(event) {
   return event.game.toLocaleLowerCase('es') === 'among us' ? scoringPayload() : null;
 }
 
-function createApp({ database, trustProxy = false, logger = console, adminToken = null, reporterToken = null }) {
+function createApp({
+  database,
+  trustProxy = false,
+  logger = console,
+  adminToken = null,
+  reporterToken = null,
+  reporterPrivateUrl = null
+}) {
   if (!database) throw new TypeError('createApp necesita una base de datos');
 
   const app = express();
   const matchIngestor = createMatchIngestor({ database });
+  const reporterAuthorizer = createReporterAuthorizer({
+    legacyToken: reporterToken,
+    competition: database.competition
+  });
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy);
   app.use(helmet({
@@ -124,16 +146,41 @@ function createApp({ database, trustProxy = false, logger = console, adminToken 
     return event;
   }
 
-  function authorizeReporter(request, response) {
-    if (!reporterToken) return true;
-    const authorization = request.get('authorization') || '';
-    const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : '';
-    const supplied = bearer || request.get('x-reporter-token') || '';
-    if (!tokensMatch(supplied, reporterToken)) {
-      sendError(response, 401, 'REPORTER_UNAUTHORIZED', 'Token del Tournament Reporter incorrecto.');
-      return false;
+  function authorizeReporter(request, event, report) {
+    const suppliedToken = readBearer(request);
+    const competitive = hasStageContext(report);
+    if (!competitive && !reporterToken && !suppliedToken) {
+      return { host: null, authenticationKind: 'LEGACY_UNAUTHENTICATED' };
     }
-    return true;
+    return reporterAuthorizer.authorize({
+      eventId: event.id,
+      hostId: report.hostId,
+      suppliedToken,
+      requireHost: competitive
+    });
+  }
+
+  function ingestReporterMatch({ event, report, request }) {
+    const authentication = authorizeReporter(request, event, report);
+    const submittedBy = authentication.host?.identifier || 'LEGACY_REPORTER';
+    const match = hasStageContext(report)
+      ? matchIngestor.ingest({
+        eventId: event.id,
+        report,
+        sourceIp: request.ip,
+        origin: 'REPORTER',
+        submittedBy,
+        requireHost: true
+      })
+      : database.insertMatch(report, request.ip, event.id, {
+        hostId: authentication.host?.id ?? null,
+        origin: 'REPORTER',
+        submittedBy
+      });
+    if (authentication.host) {
+      database.competition.touchHostReporterToken(event.id, authentication.host.id);
+    }
+    return match;
   }
 
   app.get('/api/health', (_request, response, next) => {
@@ -227,15 +274,12 @@ function createApp({ database, trustProxy = false, logger = console, adminToken 
   });
 
   app.post('/api/events/:slug/matches', (request, response, next) => {
-    if (!authorizeReporter(request, response)) return;
     if (!isReport(request.body)) return sendError(response, 400, 'INVALID_REPORT', 'El cuerpo debe ser un objeto JSON no vacio.');
     try {
       const event = eventFromSlug(request, response);
       if (!event) return;
       if (!event.modules.matches) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no utiliza partidas.');
-      const match = request.body.stageId
-        ? matchIngestor.ingest({ eventId:event.id, report:request.body, sourceIp:request.ip, origin:'REPORTER', submittedBy:'REPORTER' })
-        : database.insertMatch(request.body, request.ip, event.id);
+      const match = ingestReporterMatch({ event, report: request.body, request });
       response.location(`/api/matches/${match.id}`).status(match.duplicate ? 200 : 201).json(publicMatch(match));
     } catch (error) { next(error); }
   });
@@ -259,7 +303,6 @@ function createApp({ database, trustProxy = false, logger = console, adminToken 
     catch (error) { next(error); }
   });
   app.post('/api/matches', (request, response, next) => {
-    if (!authorizeReporter(request, response)) return;
     if (!isReport(request.body)) return sendError(response, 400, 'INVALID_REPORT', 'El cuerpo debe ser un objeto JSON no vacio.');
     try {
       const { eventSlug, eventId, ...reportWithoutContext } = request.body;
@@ -268,9 +311,7 @@ function createApp({ database, trustProxy = false, logger = console, adminToken 
       if (!event.modules.matches) return sendError(response, 403, 'MATCHES_DISABLED', 'Este evento no admite resultados.');
       const report = eventSlug || eventId ? { ...reportWithoutContext, eventId: event?.id } : request.body;
       if (!isReport(report)) return sendError(response, 400, 'INVALID_REPORT', 'Faltan los datos de la partida.');
-      const match = report.stageId
-        ? matchIngestor.ingest({ eventId:event.id, report, sourceIp:request.ip, origin:'REPORTER', submittedBy:'REPORTER' })
-        : database.insertMatch(report, request.ip, event.id);
+      const match = ingestReporterMatch({ event, report, request });
       response.location(`/api/matches/${match.id}`).status(match.duplicate ? 200 : 201).json(publicMatch(match));
     } catch (error) { next(error); }
   });
@@ -369,6 +410,30 @@ function createApp({ database, trustProxy = false, logger = console, adminToken 
   });
   app.get('/api/admin/events/:id/hosts', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({hosts:database.competition.listHosts(id)});}catch(error){next(error);}});
   app.put('/api/admin/events/:id/hosts', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({hosts:database.competition.replaceHosts(id,request.body?.hosts||[])});}catch(error){next(error);}});
+  app.post('/api/admin/events/:eventId/hosts/:hostId/token', (request, response, next) => {
+    const eventId = parseId(request.params.eventId);
+    if (!eventId) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
+    if (!reporterPrivateUrl) return sendError(response, 503, 'REPORTER_PRIVATE_URL_NOT_CONFIGURED', 'Configura REPORTER_PRIVATE_URL antes de crear credenciales Reporter.');
+    try {
+      const host = database.competition.getHost(eventId, /^\d+$/.test(request.params.hostId) ? Number(request.params.hostId) : request.params.hostId);
+      if (!host) return sendError(response, 404, 'HOST_NOT_FOUND', 'El host no pertenece al evento.');
+      const token = generateReporterToken();
+      const updatedHost = database.competition.setHostReporterToken(eventId, host.id, {
+        tokenHash: hashReporterToken(token)
+      });
+      const reporterConfig = `ServerUrl=${reporterPrivateUrl}\nHostId=${updatedHost.identifier}\nReporterToken=${token}\n`;
+      response.set('Cache-Control', 'no-store').status(201).json({ host: updatedHost, token, reporterConfig });
+    } catch (error) { next(error); }
+  });
+  app.delete('/api/admin/events/:eventId/hosts/:hostId/token', (request, response, next) => {
+    const eventId = parseId(request.params.eventId);
+    if (!eventId) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
+    try {
+      const host = database.competition.getHost(eventId, /^\d+$/.test(request.params.hostId) ? Number(request.params.hostId) : request.params.hostId);
+      if (!host) return sendError(response, 404, 'HOST_NOT_FOUND', 'El host no pertenece al evento.');
+      response.json({ host: database.competition.revokeHostReporterToken(eventId, host.id) });
+    } catch (error) { next(error); }
+  });
   app.get('/api/admin/events/:id/schedule', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({schedule:database.competition.listSchedule(id)});}catch(error){next(error);}});
   app.put('/api/admin/events/:id/schedule', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({schedule:database.competition.replaceSchedule(id,request.body?.schedule||[])});}catch(error){next(error);}});
   app.get('/api/admin/events/:id/prizes', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({prizes:database.competition.listPrizes(id)});}catch(error){next(error);}});
@@ -484,6 +549,7 @@ function createApp({ database, trustProxy = false, logger = console, adminToken 
     if (error?.type === 'entity.too.large') return sendError(response, 413, 'REPORT_TOO_LARGE', 'El informe supera el limite de 1 MB.');
     if (error instanceof EventValidationError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof CompetitionError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof ReporterAuthError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof InformationValidationError) return sendError(response, 400, 'INVALID_TOURNAMENT_INFORMATION', error.message);
     logger.error({ event: 'request_error', method: request.method, path: request.originalUrl, message: error?.message || String(error) });
     return sendError(response, 500, 'INTERNAL_ERROR', 'Error interno del servidor.');

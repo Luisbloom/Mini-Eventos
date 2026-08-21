@@ -36,6 +36,25 @@ function parseTrustProxy(rawValue) {
   throw new Error('TRUST_PROXY debe ser true, false o un numero entero');
 }
 
+function parseReporterPrivateUrl(rawValue) {
+  const value = rawValue?.trim();
+  if (!value) return null;
+
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('REPORTER_PRIVATE_URL debe ser una URL HTTPS válida');
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('REPORTER_PRIVATE_URL debe ser una URL HTTPS válida');
+  }
+  if (url.username || url.password) {
+    throw new Error('REPORTER_PRIVATE_URL debe ser una URL HTTPS válida sin credenciales');
+  }
+  return url.origin;
+}
+
 function loadConfig(env = process.env, projectRoot = PROJECT_ROOT) {
   const dataDir = resolveFromRoot(env.DATA_DIR || 'data', projectRoot);
   const dbPath = resolveFromRoot(
@@ -56,6 +75,7 @@ function loadConfig(env = process.env, projectRoot = PROJECT_ROOT) {
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     adminToken: env.ADMIN_TOKEN?.trim() || null,
     reporterToken: env.REPORTER_TOKEN?.trim() || null,
+    reporterPrivateUrl: parseReporterPrivateUrl(env.REPORTER_PRIVATE_URL),
     nodeEnv: env.NODE_ENV || 'development'
   });
 }

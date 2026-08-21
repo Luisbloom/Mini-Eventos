@@ -8,6 +8,7 @@ const path = require('node:path');
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const { openDatabase } = require('../src/database');
+const { hashReporterToken } = require('../src/services/reporter-auth');
 
 describe('competition API', () => {
   let directory,database,app,event,stage,group,host,participant;
@@ -31,6 +32,7 @@ describe('competition API', () => {
     const first=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send(structured()).expect(201);
     const replay=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send(structured()).expect(200);
     assert.equal(replay.body.id,first.body.id);
+    assert.equal(database.getMatch(first.body.id).submittedBy,host.identifier);
     assert.equal(database.countMatches(event.id),1);
     const publicList=await request(app).get(`/api/events/${event.slug}/matches`).expect(200);
     assert.equal(publicList.body.matches[0].report,undefined);
@@ -42,8 +44,124 @@ describe('competition API', () => {
     const other=database.createEvent({name:'Otro',slug:'otro',game:'Otro',description:'',modules:{matches:true,competition:true}});
     const wrong={...structured('wrong-event'),eventId:other.id};
     const rejected=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send(wrong);
-    assert.equal(rejected.status,400);
-    assert.equal(rejected.body.error.code,'STAGE_EVENT_MISMATCH');
+    assert.equal(rejected.status,403);
+    assert.equal(rejected.body.error.code,'REPORTER_HOST_MISMATCH');
+  });
+
+  it('authenticates each Reporter host independently and updates only successful activity', async()=>{
+    const hosts=database.competition.listHosts(event.id);
+    const [host1,host2]=hosts;
+    const token1=`jtr_${'A'.repeat(43)}`;
+    const token2=`jtr_${'B'.repeat(43)}`;
+    database.competition.setHostReporterToken(event.id,host1.id,{tokenHash:hashReporterToken(token1)});
+    database.competition.setHostReporterToken(event.id,host2.id,{tokenHash:hashReporterToken(token2)});
+    app=createApp({database,logger:{info(){},error(){}},adminToken,reporterToken});
+
+    const accepted=await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token1}`)
+      .send({...structured('host1-a-1'),hostId:host1.identifier})
+      .expect(201);
+    assert.equal(accepted.body.result.reportId,'host1-a-1');
+    const stored=database.getMatch(accepted.body.id);
+    assert.equal(stored.hostId,host1.id);
+    assert.equal(stored.submittedBy,host1.identifier);
+    assert.ok(database.competition.getHost(event.id,host1.id).lastSeenAt);
+    assert.equal(database.competition.getHost(event.id,host2.id).lastSeenAt,null);
+
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token1}`)
+      .send({...structured('spoofed-host'),hostId:host2.identifier,matchNumber:2})
+      .expect(403)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_HOST_MISMATCH'));
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${reporterToken}`)
+      .send({...structured('unknown-host'),hostId:'HOST_UNKNOWN',matchNumber:2})
+      .expect(403)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_HOST_MISMATCH'));
+    await request(app).post('/api/matches')
+      .set('Authorization','Bearer jtr_invalid')
+      .send({...structured('invalid-token'),matchNumber:2})
+      .expect(401)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_TOKEN_INVALID'));
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token1}`)
+      .send({...structured('missing-host'),hostId:undefined,matchNumber:2})
+      .expect(400)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_HOST_REQUIRED'));
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token1}`)
+      .send({reportId:'historical-missing-host',players:[]})
+      .expect(400)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_HOST_REQUIRED'));
+
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token2}`)
+      .send({...structured('failed-ingest'),hostId:host2.identifier,matchNumber:stage.matchesPerGroup+1})
+      .expect(400)
+      .expect((response)=>assert.equal(response.body.error.code,'MATCH_NUMBER_OUT_OF_RANGE'));
+    assert.equal(database.competition.getHost(event.id,host2.id).lastSeenAt,null);
+
+    const other=database.createEvent({name:'Token ajeno',slug:'token-ajeno',game:'Otro',description:'',modules:{matches:true}});
+    await request(app).post(`/api/events/${other.slug}/matches`)
+      .set('Authorization',`Bearer ${token2}`)
+      .send({reportId:'wrong-token-event',hostId:host2.identifier,players:[]})
+      .expect(401)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_TOKEN_INVALID'));
+
+    database.competition.revokeHostReporterToken(event.id,host1.id);
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token1}`)
+      .send({...structured('revoked-token'),matchNumber:2})
+      .expect(401)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_TOKEN_INVALID'));
+
+    database.competition.replaceHosts(event.id,hosts.map((item)=>({
+      ...item,
+      enabled:item.id===host2.id?false:item.enabled
+    })));
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token2}`)
+      .send({...structured('disabled-host'),hostId:host2.identifier,matchNumber:2})
+      .expect(403)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORTER_HOST_DISABLED'));
+  });
+
+  it('creates one-time Reporter configuration and revokes it without exposing hashes',async()=>{
+    const withoutUrl=await admin('post',`/api/admin/events/${event.id}/hosts/${host.identifier}/token`).expect(503);
+    assert.equal(withoutUrl.body.error.code,'REPORTER_PRIVATE_URL_NOT_CONFIGURED');
+    assert.equal(database.competition.getHost(event.id,host.id).tokenConfigured,false);
+    const previousToken=`jtr_${'C'.repeat(43)}`;
+    database.competition.setHostReporterToken(event.id,host.id,{tokenHash:hashReporterToken(previousToken)});
+    await admin('post',`/api/admin/events/${event.id}/hosts/${host.identifier}/token`).expect(503);
+    assert.equal(database.competition.findHostByReporterTokenHash(event.id,hashReporterToken(previousToken)).id,host.id);
+
+    app=createApp({
+      database,
+      logger:{info(){},error(){}},
+      adminToken,
+      reporterToken,
+      reporterPrivateUrl:'https://mini-eventos-jartiland.example.ts.net'
+    });
+    const generated=await admin('post',`/api/admin/events/${event.id}/hosts/${host.identifier}/token`).expect(201);
+    assert.equal(generated.headers['cache-control'],'no-store');
+    assert.match(generated.body.token,/^jtr_[A-Za-z0-9_-]{43}$/);
+    assert.equal(generated.body.reporterConfig,
+      `ServerUrl=https://mini-eventos-jartiland.example.ts.net\nHostId=${host.identifier}\nReporterToken=${generated.body.token}\n`);
+    assert.equal(generated.body.host.tokenConfigured,true);
+    assert.equal(JSON.stringify(generated.body).includes('reporter_token_hash'),false);
+    assert.equal(JSON.stringify(generated.body.host).includes(generated.body.token),false);
+
+    const listed=await admin('get',`/api/admin/events/${event.id}/hosts`).expect(200);
+    assert.equal(JSON.stringify(listed.body).includes(generated.body.token),false);
+    assert.equal(JSON.stringify(listed.body).includes('reporter_token_hash'),false);
+    assert.equal(listed.body.hosts.find((item)=>item.id===host.id).tokenConfigured,true);
+
+    const revoked=await admin('delete',`/api/admin/events/${event.id}/hosts/${host.id}/token`).expect(200);
+    assert.equal(revoked.body.host.tokenConfigured,false);
+    await request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${generated.body.token}`)
+      .send(structured('revoked-admin-token'))
+      .expect(401);
   });
 
   it('uses the same ingestion for simulator, exposes scoring breakdown privately and supports VOID', async()=>{

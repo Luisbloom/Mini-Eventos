@@ -56,7 +56,8 @@ try {
     trustProxy: config.trustProxy,
     logger,
     adminToken: config.adminToken,
-    reporterToken: config.reporterToken
+    reporterToken: config.reporterToken,
+    reporterPrivateUrl: config.reporterPrivateUrl
   });
 
   server = app.listen(config.port, config.host, () => {

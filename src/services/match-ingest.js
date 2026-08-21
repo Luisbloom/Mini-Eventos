@@ -8,7 +8,7 @@ const ORIGINS = new Set(['REPORTER', 'MANUAL', 'SIMULATOR']);
 function createMatchIngestor({ database }) {
   if (!database?.competition) throw new TypeError('Se necesita un repositorio competitivo.');
   return {
-    ingest({ eventId, report, context = {}, sourceIp = null, origin = 'REPORTER', submittedBy = null }) {
+    ingest({ eventId, report, context = {}, sourceIp = null, origin = 'REPORTER', submittedBy = null, requireHost = false }) {
       const event = database.getEventById(Number(eventId));
       if (!event || event.archived) throw new CompetitionError('El evento no existe.', 'EVENT_NOT_FOUND', 404);
       if (report.eventId !== undefined && Number(report.eventId) !== event.id) {
@@ -23,6 +23,7 @@ function createMatchIngestor({ database }) {
         playedAt: context.playedAt ?? report.playedAt ?? null
       };
       const scope = database.competition.validateContext(event.id, requested);
+      if (requireHost && !scope.host) throw new CompetitionError('hostId es obligatorio para resultados competitivos.', 'HOST_REQUIRED');
       if (!scope.stage) throw new CompetitionError('stageId es obligatorio para resultados competitivos.', 'STAGE_REQUIRED');
       if (!scope.stage.enabled || scope.stage.status !== 'active') throw new CompetitionError('La fase no está activa.', 'STAGE_NOT_ACTIVE', 409);
       if (scope.stage.type === 'group_stage' && !scope.group) throw new CompetitionError('groupId es obligatorio en una fase de grupos.', 'GROUP_REQUIRED');

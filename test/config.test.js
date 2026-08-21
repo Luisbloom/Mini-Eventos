@@ -19,6 +19,7 @@ describe('config', () => {
     assert.equal(config.trustProxy, false);
     assert.equal(config.adminToken, null);
     assert.equal(config.reporterToken, null);
+    assert.equal(config.reporterPrivateUrl, null);
   });
 
   it('accepts explicit paths, port and proxy configuration', () => {
@@ -29,7 +30,8 @@ describe('config', () => {
       DB_PATH: 'state/custom.db',
       TRUST_PROXY: 'true',
       ADMIN_TOKEN: '  un-secreto-largo  ',
-      REPORTER_TOKEN: ' reporter-secreto '
+      REPORTER_TOKEN: ' reporter-secreto ',
+      REPORTER_PRIVATE_URL: ' https://mini-eventos-jartiland.example.ts.net/ '
     }, projectRoot);
 
     assert.equal(config.host, '127.0.0.1');
@@ -39,6 +41,7 @@ describe('config', () => {
     assert.equal(config.trustProxy, true);
     assert.equal(config.adminToken, 'un-secreto-largo');
     assert.equal(config.reporterToken, 'reporter-secreto');
+    assert.equal(config.reporterPrivateUrl, 'https://mini-eventos-jartiland.example.ts.net');
   });
 
   for (const invalidPort of ['abc', '0', '65536', '3000.5']) {
@@ -56,4 +59,33 @@ describe('config', () => {
       /TRUST_PROXY debe ser true, false o un numero entero/
     );
   });
+
+  for (const invalidUrl of ['http://servidor.example', 'servidor.example', 'not a url']) {
+    it(`rejects invalid REPORTER_PRIVATE_URL=${invalidUrl}`, () => {
+      assert.throws(
+        () => loadConfig({ REPORTER_PRIVATE_URL: invalidUrl }, projectRoot),
+        /REPORTER_PRIVATE_URL debe ser una URL HTTPS válida/
+      );
+    });
+  }
+
+  it('normalizes REPORTER_PRIVATE_URL to its HTTPS origin', () => {
+    const config = loadConfig({
+      REPORTER_PRIVATE_URL: 'https://mini-eventos.example.ts.net:8443/reporter/api?mode=host#setup'
+    }, projectRoot);
+
+    assert.equal(config.reporterPrivateUrl, 'https://mini-eventos.example.ts.net:8443');
+  });
+
+  for (const url of [
+    'https://host-user@mini-eventos.example.ts.net',
+    'https://host-user:host-password@mini-eventos.example.ts.net'
+  ]) {
+    it('rejects credentials embedded in REPORTER_PRIVATE_URL', () => {
+      assert.throws(
+        () => loadConfig({ REPORTER_PRIVATE_URL: url }, projectRoot),
+        /REPORTER_PRIVATE_URL debe ser una URL HTTPS válida sin credenciales/
+      );
+    });
+  }
 });
