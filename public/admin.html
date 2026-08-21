@@ -36,15 +36,20 @@
           </section>
 
           <section id="schedule-admin-section" class="admin-section" hidden>
-            <header class="admin-section-heading"><div><span>07 / PRODUCCIÓN</span><h2>Agenda, hosts y premios</h2></div></header>
+            <header class="admin-section-heading"><div><span>07 / PRODUCCIÓN</span><h2>Agenda y premios</h2></div></header>
             <div class="competition-editor-block"><div class="mini-heading"><h3>AGENDA</h3><button id="add-schedule" type="button">+ ENTRADA</button></div><div id="admin-schedule" class="compact-editor"></div><button id="save-schedule" class="secondary-action" type="button">GUARDAR AGENDA</button></div>
-            <div class="competition-editor-block"><div class="mini-heading"><h3>HOSTS</h3><button id="add-host" type="button">+ HOST</button></div><div id="admin-hosts" class="compact-editor"></div><button id="save-hosts" class="secondary-action" type="button">GUARDAR HOSTS</button></div>
             <div class="competition-editor-block"><div class="mini-heading"><h3>PREMIOS</h3><button id="add-prize" type="button">+ PREMIO</button></div><div id="admin-prizes" class="compact-editor"></div><button id="save-prizes" class="secondary-action" type="button">GUARDAR PREMIOS</button></div>
           </section>
 
           <section id="reporter-simulator-section" class="admin-section" hidden>
-            <header class="admin-section-heading"><div><span>08 / INTEGRACIÓN</span><h2>Simular resultado del Reporter</h2><p>Usa exactamente la misma ingestión, validación, scoring e idempotencia que el Reporter futuro.</p></div></header>
-            <form id="simulator-form" class="admin-form"><div class="field-grid"><label><span>Fase</span><select id="sim-stage" required></select></label><label><span>Grupo</span><select id="sim-group"></select></label><label><span>Host</span><select id="sim-host"></select></label><label><span>Partida nº</span><input id="sim-match-number" type="number" min="1" value="1" required></label><label><span>Mapa</span><input id="sim-map" value="The Skeld" required></label><label><span>Equipo ganador</span><select id="sim-winner"><option value="crew">Tripulantes</option><option value="impostors">Impostores</option></select></label></div><div id="sim-players" class="sim-players"></div><button class="primary-action" type="submit">SIMULAR RESULTADO <span>→</span></button></form>
+            <header class="admin-section-heading reporter-heading"><div><span>08 / REPORTER</span><h2>Hosts del torneo</h2><p>Cada PC host recibe su propio archivo de configuración. Créalo, envíaselo por privado y el Reporter quedará identificado automáticamente.</p></div><span class="reporter-step">01 · CONFIGURAR PCS</span></header>
+            <div class="host-command-bar"><div><strong>HOST 1 / HOST 2</strong><span>Edita sus nombres y guarda antes de crear una configuración.</span></div><button id="add-host" class="secondary-action" type="button">+ AÑADIR HOST</button></div>
+            <div id="admin-hosts" class="host-card-grid"></div>
+            <div class="host-save-row"><p id="host-credential-feedback" class="host-credential-feedback" role="status" aria-live="polite">Las claves nunca vuelven a mostrarse: conserva el archivo <code>.ini</code> descargado.</p><button id="save-hosts" class="primary-action" type="button">GUARDAR HOSTS <span>→</span></button></div>
+            <div class="reporter-simulator-block">
+              <header class="admin-section-heading"><div><span>09 / COMPROBACIÓN</span><h2>Simular resultado</h2><p>Prueba la misma validación, puntuación e idempotencia del Reporter sin esperar a una partida real.</p></div><span class="reporter-step">02 · PROBAR FLUJO</span></header>
+              <form id="simulator-form" class="admin-form"><div class="field-grid"><label><span>Fase</span><select id="sim-stage" required></select></label><label><span>Grupo</span><select id="sim-group"></select></label><label><span>Host</span><select id="sim-host"></select></label><label><span>Partida nº</span><input id="sim-match-number" type="number" min="1" value="1" required></label><label><span>Mapa</span><input id="sim-map" value="The Skeld" required></label><label><span>Equipo ganador</span><select id="sim-winner"><option value="crew">Tripulantes</option><option value="impostors">Impostores</option></select></label></div><div id="sim-players" class="sim-players"></div><button class="primary-action" type="submit">SIMULAR RESULTADO <span>→</span></button></form>
+            </div>
           </section>
 
           <section id="fields-section" class="admin-section">
