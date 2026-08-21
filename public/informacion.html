@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Reglas, formato y puntuación del Torneo Among Us de Jartiland">
+    <title>Información del torneo · Jartiland</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/information.css">
+    <script src="/information.js" defer></script>
+  </head>
+  <body class="information-page">
+    <div class="grain" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Jartiland Among Us">
+        <span class="mini-crew lime" aria-hidden="true"><i></i></span>
+        <span class="brand-copy"><strong>JARTILAND</strong><small>AMONG US TOURNAMENT</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Navegación principal">
+        <a href="/">Inicio</a>
+        <a href="/#leaderboard">Clasificación</a>
+        <a class="active" href="/informacion" aria-current="page">Información</a>
+      </nav>
+      <div class="broadcast"><span id="info-status-dot" class="live-dot loading"></span><span id="info-status">CARGANDO</span></div>
+    </header>
+
+    <main class="info-main">
+      <section class="info-hero">
+        <p class="kicker"><span>MANUAL DEL PARTICIPANTE</span> · EDICIÓN 01</p>
+        <h1 aria-label="INFORMACIÓN DEL TORNEO">Información<br><span>del torneo</span></h1>
+        <p>Todo lo que necesitas saber sobre el Torneo de Among Us de Jartiland.</p>
+        <a class="jump-link" href="#general">EMPEZAR A LEER <span aria-hidden="true">↓</span></a>
+      </section>
+
+      <details class="mobile-index">
+        <summary>Índice de contenidos</summary>
+        <nav aria-label="Índice móvil">
+          <a href="#general">Información general</a><a href="#formato">Formato</a>
+          <a href="#puntuacion">Puntuaciones</a><a href="#reglas">Reglas</a>
+          <a href="#automatico">Sistema automático</a><a href="#desempates">Desempates</a>
+          <a href="#faq">Preguntas frecuentes</a>
+        </nav>
+      </details>
+
+      <div class="info-layout">
+        <aside class="side-index">
+          <span>EN ESTA PÁGINA</span>
+          <nav aria-label="Índice de la página">
+            <a href="#general">01 · General</a><a href="#formato">02 · Formato</a>
+            <a href="#roles">03 · Roles</a><a href="#puntuacion">04 · Puntuación</a>
+            <a href="#automatico">05 · Sistema</a><a href="#reglas">06 · Reglas</a>
+            <a href="#desempates">07 · Desempates</a><a href="#faq">08 · FAQ</a>
+          </nav>
+          <a class="admin-link" href="/admin">Administración ↗</a>
+        </aside>
+
+        <div class="info-content">
+          <section id="general" class="info-section lead-section">
+            <p class="section-index">01 / CONTEXTO</p>
+            <h2>Información general</h2>
+            <p id="general-intro" class="large-copy">Cargando información oficial…</p>
+            <dl class="fact-grid">
+              <div><dt>FECHA</dt><dd id="tournament-date">—</dd></div>
+              <div><dt>HORA</dt><dd id="tournament-time">—</dd></div>
+              <div><dt>PARTICIPANTES</dt><dd id="participant-count">—</dd></div>
+              <div><dt>ESTADO</dt><dd id="tournament-status">—</dd></div>
+              <div><dt>FASE ACTUAL</dt><dd id="current-phase">—</dd></div>
+            </dl>
+          </section>
+
+          <section id="formato" class="info-section">
+            <p class="section-index">02 / ESTRUCTURA</p>
+            <h2>Formato del torneo</h2>
+            <div class="phase-flow" aria-label="Fases del torneo">
+              <article><span>01</span><strong>FASE DE CLASIFICACIÓN</strong></article><i>↓</i>
+              <article><span>02</span><strong>GRAN FINAL</strong></article><i>↓</i>
+              <article class="champion"><span>03</span><strong>CAMPEÓN</strong></article>
+            </div>
+            <div class="split-cards">
+              <article>
+                <span class="card-tag">FASE DE GRUPOS</span>
+                <h3>Sumar para avanzar</h3>
+                <p id="classification-format"></p>
+                <p id="groups-note" class="signal-note" hidden>La configuración actual contempla Grupo A y Grupo B.</p>
+              </article>
+              <article>
+                <span class="card-tag">GRAN FINAL</span>
+                <h3>Todo se decide aquí</h3>
+                <p id="final-format"></p>
+              </article>
+            </div>
+          </section>
+
+          <section id="roles" class="info-section">
+            <p class="section-index">03 / EQUIDAD</p>
+            <h2>Reparto de roles</h2>
+            <div class="feature-card role-card">
+              <div><span class="crew red large-crew" aria-hidden="true"></span></div>
+              <div>
+                <h3>El azar no debería decidir la tabla</h3>
+                <p>Se intentará que todos los participantes tengan aproximadamente las mismas oportunidades de jugar como impostor. Siempre que el número de jugadores y partidas lo permita, el reparto será equilibrado.</p>
+                <div class="formula"><strong>5 partidas</strong><b>×</b><strong>2 impostores</strong><b>=</b><strong>10 plazas</strong></div>
+                <small>Ejemplo con 10 jugadores: cada persona podría jugar exactamente una partida como impostor. No es una condición fija.</small>
+              </div>
+            </div>
+          </section>
+
+          <section id="puntuacion" class="info-section scoring-section">
+            <p class="section-index">04 / PUNTOS</p>
+            <h2>Sistema de puntuación</h2>
+            <p class="large-copy">La clasificación es individual. Estos valores llegan directamente del motor que calcula el leaderboard.</p>
+            <div id="scoring-cards" class="score-grid" aria-live="polite"></div>
+
+            <article class="explanation-card">
+              <span class="card-tag">¿POR QUÉ ES INDIVIDUAL?</span>
+              <h3>Mismo equipo, distinta puntuación</h3>
+              <p>Dos jugadores pueden ganar juntos y terminar con diferente puntuación según su actuación.</p>
+              <div class="score-example">
+                <div><strong>JUGADOR A</strong><span>Victoria impostor <b id="example-win-a">+—</b></span><span>2 kills <b id="example-kills-a">+—</b></span><em>Total <b id="example-total-a">—</b></em></div>
+                <div><strong>JUGADOR B</strong><span>Victoria impostor <b id="example-win-b">+—</b></span><span>0 kills <b>+0</b></span><em>Total <b id="example-total-b">—</b></em></div>
+              </div>
+            </article>
+
+            <article class="early-death">
+              <div class="death-mark" aria-hidden="true">✕</div>
+              <div>
+                <span class="card-tag">DUDA FRECUENTE</span>
+                <h3>¿Qué pasa si me matan al principio?</h3>
+                <p>Morir pronto no elimina tus posibilidades. Como fantasma puedes completar tareas y, si gana la tripulación, mantienes los puntos de victoria.</p>
+                <div class="result-line"><span>Victoria</span><b id="early-win">+—</b><span>Todas las tareas</span><b id="early-tasks">+—</b><strong>TOTAL <i id="early-total">—</i></strong></div>
+                <small>No se conceden puntos adicionales por sobrevivir: morir pronto no implica necesariamente haber jugado peor.</small>
+              </div>
+            </article>
+
+            <div class="no-points">
+              <h3>Acciones que no dan puntos</h3>
+              <div class="chip-list"><span>Sobrevivir</span><span>Reportar cadáveres</span><span>Acertar una acusación</span><span>Votar correctamente</span><span>Provocar una expulsión</span><span>Realizar sabotajes</span></div>
+              <p>Pueden registrarse como estadísticas, pero no afectan directamente a la clasificación.</p>
+            </div>
+          </section>
+
+          <section id="automatico" class="info-section">
+            <p class="section-index">05 / TECNOLOGÍA</p>
+            <h2>Registro automático</h2>
+            <p class="large-copy">Las puntuaciones no se introducen manualmente. El host registra la partida con EHR y el Tournament Reporter envía el resultado al servidor de Jartiland cuando termina.</p>
+            <div class="data-flow" aria-label="Flujo automático de resultados">
+              <span>AMONG US</span><i>↓</i><span>EHR / REPORTER</span><i>↓</i><span>SERVIDOR</span><i>↓</i><span>RESULTADO</span><i>↓</i><span>PUNTOS</span><i>↓</i><span>CLASIFICACIÓN</span>
+            </div>
+            <aside class="privacy-note"><strong>PARTIDA EN CURSO = DATOS PRIVADOS</strong><p>La información privada nunca se publica mientras se está jugando. Los datos se envían únicamente después de terminar.</p></aside>
+
+            <h3 class="subheading">Datos que puede registrar el sistema</h3>
+            <div class="data-chips"><span>Rol</span><span>Equipo</span><span>Victoria o derrota</span><span>Kills</span><span>Tareas completadas</span><span>Tareas totales</span><span>Vivo / muerto</span><span>Motivo de muerte</span><span>Asesino</span><span>Duración</span><span>Mapa</span></div>
+            <p class="muted-copy">No todos estos datos otorgan puntos. Algunos sirven únicamente como estadísticas o para revisar un resultado.</p>
+          </section>
+
+          <section id="reglas" class="info-section rules-section">
+            <p class="section-index">06 / JUEGO LIMPIO</p>
+            <h2>Reglas</h2>
+            <ol id="rules-list" class="official-rules"></ol>
+
+            <article class="technical-card">
+              <span class="card-tag">DESCONEXIONES Y PROBLEMAS TÉCNICOS</span>
+              <h3>Cada caso se revisará en contexto</h3>
+              <p>Una desconexión aislada no implica repetir automáticamente una partida. La organización tendrá en cuenta el momento, el estado de la ronda, cuántos jugadores se vieron afectados y si se puede continuar con normalidad.</p>
+              <strong>Si el fallo es grave, la partida podrá marcarse como <b>ANULADA</b> y no contará para la clasificación.</strong>
+            </article>
+          </section>
+
+          <section id="desempates" class="info-section">
+            <p class="section-index">07 / ORDEN FINAL</p>
+            <h2>Criterios de desempate</h2>
+            <ol id="tiebreakers-list" class="tiebreaker-list"></ol>
+          </section>
+
+          <section id="estadisticas" class="info-section">
+            <p class="section-index">08 / DATOS</p>
+            <h2>Estadísticas</h2>
+            <p class="large-copy">La web puede mostrar partidas jugadas, victorias, win rate, kills, veces como impostor, tareas, muertes y supervivencia.</p>
+            <div class="signal-note">Que una estadística aparezca en la web no significa necesariamente que otorgue puntos.</div>
+          </section>
+
+          <section id="faq" class="info-section faq-section">
+            <p class="section-index">09 / RESPUESTAS RÁPIDAS</p>
+            <h2>Preguntas frecuentes</h2>
+            <div id="faq-list" class="faq-list"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="ticker" aria-label="Torneo Jartiland"><div><span>INFORMACIÓN OFICIAL</span><b>✦</b><span>JUEGA LIMPIO</span><b>✦</b><span>JARTILAND</span><b>✦</b><span>TRUST NO ONE</span><b>✦</b><span aria-hidden="true">INFORMACIÓN OFICIAL</span><b aria-hidden="true">✦</b></div></footer>
+  </body>
+</html>

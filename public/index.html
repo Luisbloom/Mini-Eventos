@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Clasificación oficial del Torneo Among Us de Jartiland">
+    <title>Leaderboard · Torneo Among Us Jartiland</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Leaderboard Jartiland">
+        <span class="mini-crew lime" aria-hidden="true"><i></i></span>
+        <span class="brand-copy">
+          <strong>JARTILAND</strong>
+          <small>AMONG US TOURNAMENT</small>
+        </span>
+      </a>
+
+      <nav class="primary-nav" aria-label="Navegación principal">
+        <a href="/">Inicio</a>
+        <a class="active" href="/#leaderboard" aria-current="page">Clasificación</a>
+        <a href="/informacion">Información</a>
+      </nav>
+
+      <div class="broadcast" aria-live="polite">
+        <span id="live-dot" class="live-dot loading"></span>
+        <span id="live-label">CONECTANDO</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <div class="title-lockup">
+          <p class="kicker"><span>CLASIFICACIÓN OFICIAL</span> · TEMPORADA 01</p>
+          <h1 id="page-title"><span>Among Us</span> Leaderboard</h1>
+          <p class="subtitle">Cada partida cuenta. Una sola tabla decide quién domina la nave.</p>
+        </div>
+
+        <dl class="tournament-stats">
+          <div>
+            <dt>JUGADORES</dt>
+            <dd id="player-count">—</dd>
+          </div>
+          <div>
+            <dt>PARTIDAS</dt>
+            <dd id="match-count">—</dd>
+          </div>
+          <div>
+            <dt>ACTUALIZADO</dt>
+            <dd id="last-updated">ESPERANDO</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section id="leaderboard" class="leaderboard" aria-labelledby="leaderboard-title">
+        <div class="section-bar">
+          <div>
+            <p class="section-index">01 / RANKING GLOBAL</p>
+            <h2 id="leaderboard-title">La clasificación</h2>
+          </div>
+          <div class="section-actions">
+            <span id="demo-badge" class="demo-badge" hidden>DATOS DE DEMOSTRACIÓN</span>
+            <button id="refresh" class="refresh" type="button">
+              <span aria-hidden="true">↻</span> ACTUALIZAR
+            </button>
+          </div>
+        </div>
+
+        <div id="loading-state" class="state-panel" role="status">
+          <span class="scanner" aria-hidden="true"></span>
+          Cargando clasificación…
+        </div>
+
+        <div id="empty-state" class="state-panel empty" hidden>
+          <span class="empty-number">00</span>
+          <div>
+            <h3>La nave está lista</h3>
+            <p>El leaderboard aparecerá en cuanto llegue el primer resultado del Tournament Reporter.</p>
+          </div>
+        </div>
+
+        <div id="ranking-content" hidden>
+          <ol id="podium" class="podium" aria-label="Podio del torneo"></ol>
+
+          <div class="ranking-table-wrap">
+            <table class="ranking-table">
+              <thead>
+                <tr>
+                  <th scope="col">POS</th>
+                  <th scope="col">JUGADOR</th>
+                  <th scope="col" class="numeric">PUNTOS</th>
+                  <th scope="col" class="numeric optional">VICTORIAS</th>
+                  <th scope="col" class="numeric optional">PARTIDAS</th>
+                  <th scope="col" class="numeric optional">WIN RATE</th>
+                  <th scope="col" class="numeric optional">KILLS</th>
+                </tr>
+              </thead>
+              <tbody id="standings"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="rules" aria-label="Cómo se ordena la clasificación">
+        <p class="section-index">02 / SISTEMA</p>
+        <p>Ordenado por <strong>puntos</strong>, después victorias y kills. Si el Reporter no envía puntuación, cada victoria suma tres puntos.</p>
+        <span class="auto-refresh">ACTUALIZACIÓN AUTOMÁTICA · 20 S</span>
+      </section>
+    </main>
+
+    <footer class="ticker" aria-label="Retransmisión oficial">
+      <div>
+        <span>TRANSMISIÓN OFICIAL</span><b>✦</b>
+        <span>TORNEO AMONG US</span><b>✦</b>
+        <span>JARTILAND</span><b>✦</b>
+        <span>TRUST NO ONE</span><b>✦</b>
+        <span aria-hidden="true">TRANSMISIÓN OFICIAL</span><b aria-hidden="true">✦</b>
+        <span aria-hidden="true">TORNEO AMONG US</span><b aria-hidden="true">✦</b>
+      </div>
+    </footer>
+  </body>
+</html>

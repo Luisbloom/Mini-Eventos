@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="theme-color" content="#080b0d">
+    <title>Administración del torneo · Jartiland</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/admin.css">
+    <script src="/admin.js" defer></script>
+  </head>
+  <body class="admin-page">
+    <div class="grain" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Jartiland Among Us">
+        <span class="mini-crew lime" aria-hidden="true"><i></i></span>
+        <span class="brand-copy"><strong>JARTILAND</strong><small>AMONG US TOURNAMENT</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Navegación principal">
+        <a href="/">Inicio</a><a href="/#leaderboard">Clasificación</a><a href="/informacion">Información</a>
+      </nav>
+      <div class="broadcast"><span id="admin-dot" class="live-dot loading"></span><span id="admin-state">CARGANDO</span></div>
+    </header>
+
+    <main class="admin-main">
+      <header class="admin-hero">
+        <p class="kicker"><span>ÁREA RESTRINGIDA</span> · CONFIGURACIÓN</p>
+        <h1>Administración<br><span>del torneo</span></h1>
+        <p>Edita la información pública sin modificar HTML. Los resultados de partidas y la base de datos no se alteran desde esta pantalla.</p>
+      </header>
+
+      <section class="token-panel" aria-labelledby="access-title">
+        <div><span class="panel-number">01</span><div><h2 id="access-title">Acceso</h2><p>El token sólo se mantiene en esta pestaña y se envía en la cabecera de guardado.</p></div></div>
+        <label><span>ADMIN_TOKEN</span><input id="admin-token" type="password" autocomplete="current-password" placeholder="Pega el token configurado en Debian"></label>
+      </section>
+
+      <form id="information-form" class="admin-form">
+        <fieldset>
+          <legend><span>02</span> Información general</legend>
+          <label class="full"><span>Texto introductorio</span><textarea id="intro" rows="6" required maxlength="3000"></textarea></label>
+          <div class="field-grid">
+            <label><span>Fecha</span><input id="date" type="date"></label>
+            <label><span>Hora</span><input id="time" type="time"></label>
+            <label><span>Número de participantes</span><input id="participants" type="number" min="1" max="500" placeholder="Por confirmar"></label>
+            <label><span>Estado actual</span><input id="status" type="text" required maxlength="100"></label>
+            <label><span>Fase actual</span><input id="phase" type="text" required maxlength="100"></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend><span>03</span> Formato</legend>
+          <label class="toggle"><input id="groups-enabled" type="checkbox"><span>Mostrar que el torneo utiliza Grupo A y Grupo B</span></label>
+          <label class="full"><span>Fase de clasificación / grupos</span><textarea id="classification" rows="6" required maxlength="3000"></textarea></label>
+          <label class="full"><span>Gran Final</span><textarea id="final" rows="5" required maxlength="3000"></textarea></label>
+        </fieldset>
+
+        <fieldset>
+          <legend><span>04</span> Reglas y desempates</legend>
+          <label class="full"><span>Reglas · una por línea</span><textarea id="rules" rows="12" required></textarea></label>
+          <label class="full"><span>Criterios de desempate · uno por línea</span><textarea id="tiebreakers" rows="7" required></textarea></label>
+        </fieldset>
+
+        <fieldset>
+          <legend><span>05</span> Preguntas frecuentes</legend>
+          <div class="format-help"><strong>FORMATO</strong><code>Pregunta || Respuesta</code><span>Una pregunta por línea.</span></div>
+          <label class="full"><span>FAQ</span><textarea id="faqs" rows="14" required></textarea></label>
+        </fieldset>
+
+        <fieldset class="readonly-scoring">
+          <legend><span>06</span> Puntuación real</legend>
+          <p>Estos valores son de sólo lectura. Proceden de <code>src/services/scoring.js</code> y son los mismos que utiliza el leaderboard.</p>
+          <div id="admin-scoring" class="admin-score-grid"></div>
+        </fieldset>
+
+        <div class="save-bar">
+          <div id="save-message" role="status">Sin cambios guardados en esta sesión.</div>
+          <button id="save-button" type="submit">GUARDAR INFORMACIÓN <span>→</span></button>
+        </div>
+      </form>
+    </main>
+  </body>
+</html>

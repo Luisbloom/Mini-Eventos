@@ -1,0 +1,40 @@
+[Unit]
+Description=Web del Torneo Among Us de Jartiland
+Documentation=file:/opt/jartiland-amongus/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=jartiland
+Group=jartiland
+WorkingDirectory=/opt/jartiland-amongus
+EnvironmentFile=/opt/jartiland-amongus/.env
+ExecStart=/usr/bin/node /opt/jartiland-amongus/src/server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+KillSignal=SIGTERM
+
+# Los mensajes JSON de Node quedan disponibles en journalctl.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jartiland-amongus
+
+# El codigo y la configuracion son de solo lectura; SQLite conserva acceso a data/.
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+ReadWritePaths=/opt/jartiland-amongus/data
+
+[Install]
+WantedBy=multi-user.target
