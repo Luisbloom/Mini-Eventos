@@ -1,4 +1,5 @@
-.information-page { background: radial-gradient(circle at 82% 3%, rgba(255, 92, 77, .09), transparent 27rem), var(--void); }
+.information-page { background: radial-gradient(circle at 82% 3%, color-mix(in srgb, var(--event-accent, var(--coral)) 9%, transparent), transparent 27rem), var(--void); }
+.information-page [hidden] { display: none !important; }
 .info-main { width: min(1540px, 100%); }
 
 .info-hero {

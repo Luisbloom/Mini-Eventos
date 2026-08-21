@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#080b0d">
-    <meta name="description" content="Reglas, formato y puntuación del Torneo Among Us de Jartiland">
-    <title>Información del torneo · Jartiland</title>
+    <meta name="description" content="Reglas, formato y puntuación del evento de Jartiland">
+    <title>Información del evento · Jartiland</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/information.css">
     <script src="/information.js" defer></script>
@@ -13,14 +13,14 @@
   <body class="information-page">
     <div class="grain" aria-hidden="true"></div>
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Jartiland Among Us">
+      <a class="brand" href="/" aria-label="Mini Eventos Jartiland">
         <span class="mini-crew lime" aria-hidden="true"><i></i></span>
-        <span class="brand-copy"><strong>JARTILAND</strong><small>AMONG US TOURNAMENT</small></span>
+        <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
       </a>
       <nav class="primary-nav" aria-label="Navegación principal">
-        <a href="/">Inicio</a>
-        <a href="/#leaderboard">Clasificación</a>
-        <a class="active" href="/informacion" aria-current="page">Información</a>
+        <a href="/">Eventos</a>
+        <a id="info-event-link" href="/">Volver al evento</a>
+        <a class="active" href="#general" aria-current="page">Información</a>
       </nav>
       <div class="broadcast"><span id="info-status-dot" class="live-dot loading"></span><span id="info-status">CARGANDO</span></div>
     </header>
@@ -29,7 +29,7 @@
       <section class="info-hero">
         <p class="kicker"><span>MANUAL DEL PARTICIPANTE</span> · EDICIÓN 01</p>
         <h1 aria-label="INFORMACIÓN DEL TORNEO">Información<br><span>del torneo</span></h1>
-        <p>Todo lo que necesitas saber sobre el Torneo de Among Us de Jartiland.</p>
+        <p id="info-event-intro">Todo lo que necesitas saber para participar en este evento de Jartiland.</p>
         <a class="jump-link" href="#general">EMPEZAR A LEER <span aria-hidden="true">↓</span></a>
       </section>
 
@@ -37,8 +37,8 @@
         <summary>Índice de contenidos</summary>
         <nav aria-label="Índice móvil">
           <a href="#general">Información general</a><a href="#formato">Formato</a>
-          <a href="#puntuacion">Puntuaciones</a><a href="#reglas">Reglas</a>
-          <a href="#automatico">Sistema automático</a><a href="#desempates">Desempates</a>
+          <a data-among-only href="#puntuacion">Puntuaciones</a><a href="#reglas">Reglas</a>
+          <a data-among-only href="#automatico">Sistema automático</a><a href="#desempates">Desempates</a>
           <a href="#faq">Preguntas frecuentes</a>
         </nav>
       </details>
@@ -48,8 +48,8 @@
           <span>EN ESTA PÁGINA</span>
           <nav aria-label="Índice de la página">
             <a href="#general">01 · General</a><a href="#formato">02 · Formato</a>
-            <a href="#roles">03 · Roles</a><a href="#puntuacion">04 · Puntuación</a>
-            <a href="#automatico">05 · Sistema</a><a href="#reglas">06 · Reglas</a>
+            <a data-among-only href="#roles">03 · Roles</a><a data-among-only href="#puntuacion">04 · Puntuación</a>
+            <a data-among-only href="#automatico">05 · Sistema</a><a href="#reglas">06 · Reglas</a>
             <a href="#desempates">07 · Desempates</a><a href="#faq">08 · FAQ</a>
           </nav>
           <a class="admin-link" href="/admin">Administración ↗</a>
@@ -92,7 +92,7 @@
             </div>
           </section>
 
-          <section id="roles" class="info-section">
+          <section id="roles" class="info-section" data-among-only>
             <p class="section-index">03 / EQUIDAD</p>
             <h2>Reparto de roles</h2>
             <div class="feature-card role-card">
@@ -106,7 +106,7 @@
             </div>
           </section>
 
-          <section id="puntuacion" class="info-section scoring-section">
+          <section id="puntuacion" class="info-section scoring-section" data-among-only>
             <p class="section-index">04 / PUNTOS</p>
             <h2>Sistema de puntuación</h2>
             <p class="large-copy">La clasificación es individual. Estos valores llegan directamente del motor que calcula el leaderboard.</p>
@@ -140,7 +140,7 @@
             </div>
           </section>
 
-          <section id="automatico" class="info-section">
+          <section id="automatico" class="info-section" data-among-only>
             <p class="section-index">05 / TECNOLOGÍA</p>
             <h2>Registro automático</h2>
             <p class="large-copy">Las puntuaciones no se introducen manualmente. El host registra la partida con EHR y el Tournament Reporter envía el resultado al servidor de Jartiland cuando termina.</p>

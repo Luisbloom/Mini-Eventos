@@ -1,83 +1,73 @@
 <!doctype html>
 <html lang="es">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex,nofollow">
-    <meta name="theme-color" content="#080b0d">
-    <title>Administración del torneo · Jartiland</title>
-    <link rel="stylesheet" href="/styles.css">
-    <link rel="stylesheet" href="/admin.css">
-    <script src="/admin.js" defer></script>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#080b0d">
+    <title>Administración · Mini Eventos Jartiland</title>
+    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><script src="/admin.js" defer></script><script src="/admin-competition.js" defer></script>
   </head>
   <body class="admin-page">
     <div class="grain" aria-hidden="true"></div>
-    <header class="topbar">
-      <a class="brand" href="/" aria-label="Jartiland Among Us">
-        <span class="mini-crew lime" aria-hidden="true"><i></i></span>
-        <span class="brand-copy"><strong>JARTILAND</strong><small>AMONG US TOURNAMENT</small></span>
-      </a>
-      <nav class="primary-nav" aria-label="Navegación principal">
-        <a href="/">Inicio</a><a href="/#leaderboard">Clasificación</a><a href="/informacion">Información</a>
-      </nav>
-      <div class="broadcast"><span id="admin-dot" class="live-dot loading"></span><span id="admin-state">CARGANDO</span></div>
-    </header>
+    <header class="topbar"><a class="brand" href="/"><span class="mini-crew lime"><i></i></span><span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span></a><nav class="primary-nav"><a href="/">Portal público</a><a class="active" href="/admin">Administración</a></nav><div class="broadcast"><span id="admin-dot" class="live-dot loading"></span><span id="admin-state">SIN AUTENTICAR</span></div></header>
 
     <main class="admin-main">
-      <header class="admin-hero">
-        <p class="kicker"><span>ÁREA RESTRINGIDA</span> · CONFIGURACIÓN</p>
-        <h1>Administración<br><span>del torneo</span></h1>
-        <p>Edita la información pública sin modificar HTML. Los resultados de partidas y la base de datos no se alteran desde esta pantalla.</p>
-      </header>
+      <header class="admin-hero"><p class="kicker"><span>CENTRO DE CONTROL</span> · MINI EVENTOS</p><h1>Administración<br><span>de eventos</span></h1><p>Crea eventos, decide qué módulos aparecen y gestiona inscripciones y resultados sin modificar código.</p></header>
+      <section class="token-panel"><div><span class="panel-number">01</span><div><h2>Acceso</h2><p>El token permanece únicamente en esta pestaña.</p></div></div><label><span>ADMIN_TOKEN</span><span class="token-row"><input id="admin-token" type="password" autocomplete="current-password" placeholder="Token configurado en Debian"><button id="connect-admin" type="button">CONECTAR</button></span></label></section>
+      <p id="global-feedback" class="global-feedback" role="status"></p>
+      <nav id="admin-tabs" class="admin-tabs" hidden><button class="active" data-admin-tab="general">GENERAL</button><button data-admin-tab="participants">PARTICIPANTES</button><button data-admin-tab="competition">FASES Y GRUPOS</button><button data-admin-tab="matches">PARTIDAS / REPORTER</button><button data-admin-tab="schedule">AGENDA Y PREMIOS</button><button data-admin-tab="information">INFORMACIÓN</button></nav>
 
-      <section class="token-panel" aria-labelledby="access-title">
-        <div><span class="panel-number">01</span><div><h2 id="access-title">Acceso</h2><p>El token sólo se mantiene en esta pestaña y se envía en la cabecera de guardado.</p></div></div>
-        <label><span>ADMIN_TOKEN</span><input id="admin-token" type="password" autocomplete="current-password" placeholder="Pega el token configurado en Debian"></label>
-      </section>
+      <div id="admin-workspace" class="admin-workspace" hidden>
+        <aside class="event-sidebar"><header><span>EVENTOS</span><button id="new-event" type="button">+ NUEVO</button></header><div id="admin-event-list"></div></aside>
+        <div class="admin-content">
+          <section class="admin-section event-editor">
+            <header class="admin-section-heading"><div><span>02 / EVENTO</span><h2 id="event-editor-title">Editar evento</h2></div><div><button id="view-event" class="secondary-action" type="button">VER PÚBLICO ↗</button><button id="archive-event" class="danger-action" type="button">ARCHIVAR</button></div></header>
+            <form id="event-form" class="admin-form">
+              <input id="event-id" type="hidden">
+              <div class="field-grid"><label><span>Nombre</span><input id="event-name-input" required maxlength="120"></label><label><span>Slug</span><input id="event-slug" required pattern="[a-z0-9-]+" maxlength="80"></label><label><span>Juego</span><input id="event-game-input" required maxlength="120"></label><label><span>Estado</span><select id="event-status-input"><option>Próximamente</option><option>Inscripciones abiertas</option><option>Inscripciones cerradas</option><option>En curso</option><option>Finalizado</option><option>Cancelado</option></select></label><label><span>Fecha y hora</span><input id="event-starts" type="datetime-local"></label><label><span>Mínimo para realizarse</span><input id="event-minimum" type="number" min="1" max="10000" placeholder="Por definir"></label><label><span>Máximo participantes</span><input id="event-capacity" type="number" min="1" max="10000" placeholder="Sin límite"></label><label><span>Apertura inscripción</span><input id="registration-opens" type="datetime-local"></label><label><span>Cierre inscripción</span><input id="registration-closes" type="datetime-local"></label><label><span>Color</span><input id="event-accent" type="color" value="#d7ff3f"></label><label><span>Icono</span><select id="event-icon"><option value="gamepad">Jartiland</option><option value="crewmate">Among Us</option><option value="blocks">Minecraft</option><option value="crosshair">Competitivo</option><option value="trophy">Trofeo</option></select></label><label class="cover-path"><span>Imagen de portada</span><input id="event-cover-image" required maxlength="500" placeholder="/images/events/mi-evento.png"></label></div>
+              <figure class="admin-cover-preview"><img id="event-cover-preview" src="/images/events/default-event-cover.png" alt="Vista previa de la portada"><figcaption>Guarda las portadas dentro de <code>public/images/events</code> y escribe aquí su ruta pública.</figcaption></figure>
+              <label class="full"><span>Descripción</span><textarea id="event-description-input" rows="4" maxlength="2000"></textarea></label>
+              <div class="toggle-grid"><label class="toggle"><input id="registrations-open" type="checkbox"><span>Inscripciones abiertas</span></label><label class="toggle"><input data-module-input="information" type="checkbox"><span>Información</span></label><label class="toggle"><input data-module-input="participants" type="checkbox"><span>Participantes</span></label><label class="toggle"><input data-module-input="leaderboard" type="checkbox"><span>Clasificación histórica</span></label><label class="toggle"><input data-module-input="matches" type="checkbox"><span>Partidas</span></label><label class="toggle"><input data-module-input="registration" type="checkbox"><span>Inscripción</span></label><label class="toggle"><input data-module-input="competition" type="checkbox"><span>Fases competitivas</span></label><label class="toggle"><input data-module-input="schedule" type="checkbox"><span>Agenda</span></label><label class="toggle"><input data-module-input="prizes" type="checkbox"><span>Premios</span></label></div>
+              <button class="primary-action" type="submit">GUARDAR EVENTO <span>→</span></button>
+            </form>
+          </section>
 
-      <form id="information-form" class="admin-form">
-        <fieldset>
-          <legend><span>02</span> Información general</legend>
-          <label class="full"><span>Texto introductorio</span><textarea id="intro" rows="6" required maxlength="3000"></textarea></label>
-          <div class="field-grid">
-            <label><span>Fecha</span><input id="date" type="date"></label>
-            <label><span>Hora</span><input id="time" type="time"></label>
-            <label><span>Número de participantes</span><input id="participants" type="number" min="1" max="500" placeholder="Por confirmar"></label>
-            <label><span>Estado actual</span><input id="status" type="text" required maxlength="100"></label>
-            <label><span>Fase actual</span><input id="phase" type="text" required maxlength="100"></label>
-          </div>
-        </fieldset>
+          <section id="competition-admin-section" class="admin-section" hidden>
+            <header class="admin-section-heading"><div><span>03 / COMPETICIÓN</span><h2>Fases y grupos</h2><p>Configura el camino hasta el campeón. Los cambios se guardan por ID interno.</p></div><button id="add-stage" class="secondary-action" type="button">+ FASE</button></header>
+            <div id="admin-stages" class="admin-stages"></div>
+          </section>
 
-        <fieldset>
-          <legend><span>03</span> Formato</legend>
-          <label class="toggle"><input id="groups-enabled" type="checkbox"><span>Mostrar que el torneo utiliza Grupo A y Grupo B</span></label>
-          <label class="full"><span>Fase de clasificación / grupos</span><textarea id="classification" rows="6" required maxlength="3000"></textarea></label>
-          <label class="full"><span>Gran Final</span><textarea id="final" rows="5" required maxlength="3000"></textarea></label>
-        </fieldset>
+          <section id="schedule-admin-section" class="admin-section" hidden>
+            <header class="admin-section-heading"><div><span>07 / PRODUCCIÓN</span><h2>Agenda, hosts y premios</h2></div></header>
+            <div class="competition-editor-block"><div class="mini-heading"><h3>AGENDA</h3><button id="add-schedule" type="button">+ ENTRADA</button></div><div id="admin-schedule" class="compact-editor"></div><button id="save-schedule" class="secondary-action" type="button">GUARDAR AGENDA</button></div>
+            <div class="competition-editor-block"><div class="mini-heading"><h3>HOSTS</h3><button id="add-host" type="button">+ HOST</button></div><div id="admin-hosts" class="compact-editor"></div><button id="save-hosts" class="secondary-action" type="button">GUARDAR HOSTS</button></div>
+            <div class="competition-editor-block"><div class="mini-heading"><h3>PREMIOS</h3><button id="add-prize" type="button">+ PREMIO</button></div><div id="admin-prizes" class="compact-editor"></div><button id="save-prizes" class="secondary-action" type="button">GUARDAR PREMIOS</button></div>
+          </section>
 
-        <fieldset>
-          <legend><span>04</span> Reglas y desempates</legend>
-          <label class="full"><span>Reglas · una por línea</span><textarea id="rules" rows="12" required></textarea></label>
-          <label class="full"><span>Criterios de desempate · uno por línea</span><textarea id="tiebreakers" rows="7" required></textarea></label>
-        </fieldset>
+          <section id="reporter-simulator-section" class="admin-section" hidden>
+            <header class="admin-section-heading"><div><span>08 / INTEGRACIÓN</span><h2>Simular resultado del Reporter</h2><p>Usa exactamente la misma ingestión, validación, scoring e idempotencia que el Reporter futuro.</p></div></header>
+            <form id="simulator-form" class="admin-form"><div class="field-grid"><label><span>Fase</span><select id="sim-stage" required></select></label><label><span>Grupo</span><select id="sim-group"></select></label><label><span>Host</span><select id="sim-host"></select></label><label><span>Partida nº</span><input id="sim-match-number" type="number" min="1" value="1" required></label><label><span>Mapa</span><input id="sim-map" value="The Skeld" required></label><label><span>Equipo ganador</span><select id="sim-winner"><option value="crew">Tripulantes</option><option value="impostors">Impostores</option></select></label></div><div id="sim-players" class="sim-players"></div><button class="primary-action" type="submit">SIMULAR RESULTADO <span>→</span></button></form>
+          </section>
 
-        <fieldset>
-          <legend><span>05</span> Preguntas frecuentes</legend>
-          <div class="format-help"><strong>FORMATO</strong><code>Pregunta || Respuesta</code><span>Una pregunta por línea.</span></div>
-          <label class="full"><span>FAQ</span><textarea id="faqs" rows="14" required></textarea></label>
-        </fieldset>
+          <section id="fields-section" class="admin-section">
+            <header class="admin-section-heading"><div><span>03 / FORMULARIO</span><h2>Campos de inscripción</h2><p>El Discord debe permanecer como texto obligatorio. Las opciones de select se separan con comas.</p></div><button id="add-field" class="secondary-action" type="button">+ CAMPO</button></header>
+            <div id="field-editor" class="field-editor"></div><button id="save-fields" class="primary-action" type="button">GUARDAR CAMPOS <span>→</span></button>
+          </section>
 
-        <fieldset class="readonly-scoring">
-          <legend><span>06</span> Puntuación real</legend>
-          <p>Estos valores son de sólo lectura. Proceden de <code>src/services/scoring.js</code> y son los mismos que utiliza el leaderboard.</p>
-          <div id="admin-scoring" class="admin-score-grid"></div>
-        </fieldset>
+          <section id="participants-section" class="admin-section">
+            <header class="admin-section-heading"><div><span>04 / INSCRIPCIONES</span><h2>Participantes</h2></div><span id="admin-participant-total" class="admin-counter">00</span></header>
+            <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>DISCORD / JUEGO</th><th>ESTADO</th><th>FRIEND CODE INTERNO</th><th></th></tr></thead><tbody id="admin-participants"></tbody></table></div><p id="participants-placeholder" class="admin-placeholder">No hay inscripciones para este evento.</p>
+          </section>
 
-        <div class="save-bar">
-          <div id="save-message" role="status">Sin cambios guardados en esta sesión.</div>
-          <button id="save-button" type="submit">GUARDAR INFORMACIÓN <span>→</span></button>
+          <form id="information-form" class="admin-section admin-form">
+            <header class="admin-section-heading"><div><span>05 / CONTENIDO</span><h2>Información ampliada</h2><p>Reglas y puntuación visibles en la página de información.</p></div></header>
+            <label class="full"><span>Introducción</span><textarea id="intro" rows="5" required></textarea></label><div class="field-grid"><label><span>Fecha informativa</span><input id="date" type="date"></label><label><span>Hora</span><input id="time" type="time"></label><label><span>Participantes previstos</span><input id="participants" type="number" min="1"></label><label><span>Estado informativo</span><input id="status" required></label><label><span>Fase</span><input id="phase" required></label></div><label class="toggle"><input id="groups-enabled" type="checkbox"><span>Usa grupos A y B</span></label><label class="full"><span>Clasificación / grupos</span><textarea id="classification" rows="4" required></textarea></label><label class="full"><span>Final</span><textarea id="final" rows="4" required></textarea></label><label class="full"><span>Reglas · una por línea</span><textarea id="rules" rows="8" required></textarea></label><label class="full"><span>Desempates · uno por línea</span><textarea id="tiebreakers" rows="5" required></textarea></label><label class="full"><span>FAQ · Pregunta || Respuesta</span><textarea id="faqs" rows="8" required></textarea></label><div id="admin-scoring" class="admin-score-grid"></div><button class="primary-action" type="submit">GUARDAR INFORMACIÓN <span>→</span></button>
+          </form>
+
+          <section id="results-section" class="admin-section">
+            <header class="admin-section-heading"><div><span>06 / RESULTADOS</span><h2>Partidas y clasificación</h2><p>El Reporter seguirá siendo la vía habitual. Este formulario permite corregir o añadir un resultado manual.</p></div><span id="admin-match-total" class="admin-counter">00</span></header>
+            <div id="admin-leaders" class="admin-leaders"></div><form id="manual-match-form" class="manual-match"><label><span>Informe JSON</span><textarea id="manual-match-json" rows="7" spellcheck="false" placeholder='{"map":"The Skeld","winner":"crewmates","players":[]}'></textarea></label><button class="secondary-action" type="submit">AÑADIR RESULTADO</button></form><div id="admin-matches" class="admin-matches"></div><p id="matches-placeholder" class="admin-placeholder">No hay partidas en este evento.</p>
+          </section>
         </div>
-      </form>
+      </div>
     </main>
   </body>
 </html>

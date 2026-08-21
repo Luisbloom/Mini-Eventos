@@ -18,6 +18,8 @@ const elements = {
   faqs: document.querySelector('#faq-list')
 };
 
+const eventSlug = decodeURIComponent(location.pathname.split('/').filter(Boolean)[1] || 'among-us-agosto-2026');
+
 function setText(selector, value) {
   document.querySelector(selector).textContent = value;
 }
@@ -80,6 +82,15 @@ function renderFaqs(faqs) {
 }
 
 function render(data) {
+  if (data.event) {
+    document.title = `Información · ${data.event.name}`;
+    document.documentElement.style.setProperty('--event-accent', data.event.accentColor);
+    document.querySelector('#info-event-link').href = `/eventos/${encodeURIComponent(data.event.slug)}`;
+    document.querySelector('#info-event-intro').textContent = `Todo lo que necesitas saber sobre ${data.event.name}.`;
+  }
+  document.querySelectorAll('[data-among-only]').forEach((element) => {
+    element.hidden = !data.scoring;
+  });
   const { general, format, rules, tiebreakers, faqs } = data.information;
   elements.intro.textContent = general.intro;
   elements.date.textContent = displayDate(general.date);
@@ -90,7 +101,7 @@ function render(data) {
   elements.classification.textContent = format.classification;
   elements.final.textContent = format.final;
   elements.groupsNote.hidden = !format.groupsEnabled;
-  renderScoring(data.scoring);
+  if (data.scoring) renderScoring(data.scoring);
   renderList(elements.rules, rules);
   renderList(elements.tiebreakers, tiebreakers);
   renderFaqs(faqs);
@@ -100,7 +111,7 @@ function render(data) {
 
 async function loadInformation() {
   try {
-    const response = await fetch('/api/tournament-information', { cache: 'no-store' });
+    const response = await fetch(`/api/events/${encodeURIComponent(eventSlug)}/tournament-information`, { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     render(await response.json());
   } catch {

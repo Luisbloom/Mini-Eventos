@@ -1,0 +1,80 @@
+'use strict';
+
+const { afterEach, describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const BetterSqlite3 = require('better-sqlite3');
+const { openDatabase } = require('../src/database');
+const { createMatchIngestor } = require('../src/services/match-ingest');
+
+describe('competition database', () => {
+  const directories = [];
+  const temporaryPath = () => { const directory=fs.mkdtempSync(path.join(os.tmpdir(),'jartiland-competition-'));directories.push(directory);return path.join(directory,'tournament.db'); };
+  afterEach(()=>directories.splice(0).forEach((directory)=>fs.rmSync(directory,{recursive:true,force:true})));
+
+  function participant(database, eventId, name, status = 'confirmed') {
+    const created=database.createParticipant(eventId,{discord_username:`${name}@qa`,game_name:name});
+    return database.updateParticipant(created.id,{status});
+  }
+
+  it('migrates twice, preserves historical rows and seeds editable Among Us competition data once', () => {
+    const dbPath=temporaryPath(); let database=openDatabase(dbPath); const event=database.getDefaultEvent();
+    database.insertMatch({reportId:'legacy-preserved',players:[]},null,event.id); const stageIds=database.competition.listStages(event.id).map((stage)=>stage.id); database.close();
+    database=openDatabase(dbPath);
+    assert.equal(database.countMatches(event.id),1);
+    assert.deepEqual(database.competition.listStages(event.id).map((stage)=>stage.id),stageIds);
+    assert.deepEqual(database.competition.listStages(event.id).map((stage)=>[stage.name,stage.matchesPerGroup,stage.qualifiersPerGroup,stage.resetPoints]),[
+      ['Fase de Clasificación',5,5,true],['Gran Final',5,0,true]
+    ]);
+    assert.deepEqual(database.competition.listGroups(stageIds[0]).map((group)=>group.name),['Grupo A','Grupo B']);
+    assert.deepEqual(database.competition.listHosts(event.id).map((host)=>host.identifier),['HOST_1','HOST_2']);
+    assert.equal(database.competition.listSchedule(event.id).length,5);
+    assert.equal(database.competition.listPrizes(event.id).length,4);
+    database.close();
+    const raw=new BetterSqlite3(dbPath,{readonly:true}); assert.equal(raw.pragma('integrity_check',{simple:true}),'ok'); raw.close();
+  });
+
+  it('distributes only confirmed participants evenly and supports manual moves until locked', () => {
+    const database=openDatabase(temporaryPath()); const event=database.getDefaultEvent(); const stage=database.competition.listStages(event.id)[0]; const groups=database.competition.listGroups(stage.id);
+    const confirmed=Array.from({length:5},(_,index)=>participant(database,event.id,`Jugador ${index+1}`));
+    participant(database,event.id,'Pendiente','pending'); participant(database,event.id,'Rechazado','rejected'); participant(database,event.id,'Ausente','absent'); participant(database,event.id,'DQ','disqualified');
+    let assignments=database.competition.distributeGroups(stage.id);
+    assert.equal(assignments.length,5);
+    assert.deepEqual(groups.map((group)=>assignments.filter((row)=>row.groupId===group.id).length),[3,2]);
+    database.competition.assignParticipant(stage.id,confirmed[0].id,groups[1].id);
+    assert.equal(database.competition.listStageParticipants(stage.id).find((row)=>row.participantId===confirmed[0].id).groupId,groups[1].id);
+    database.competition.setGroupsLocked(stage.id,true);
+    assert.throws(()=>database.competition.assignParticipant(stage.id,confirmed[0].id,groups[0].id),(error)=>error.code==='GROUPS_LOCKED');
+    assert.throws(()=>database.competition.distributeGroups(stage.id),(error)=>error.code==='GROUPS_LOCKED');
+    database.competition.setGroupsLocked(stage.id,false);
+    database.competition.assignParticipant(stage.id,confirmed[0].id,null);
+    assert.equal(database.competition.listStageParticipants(stage.id).find((row)=>row.participantId===confirmed[0].id).groupId,null);
+    database.close();
+  });
+
+  it('edits groups and hosts without changing ids or orphaning historical matches', () => {
+    const database=openDatabase(temporaryPath());const event=database.getDefaultEvent();const stage=database.competition.listStages(event.id)[0];const groups=database.competition.listGroups(stage.id);const hosts=database.competition.listHosts(event.id);const player=participant(database,event.id,'Histórico');database.competition.distributeGroups(stage.id);const assigned=database.competition.listStageParticipants(stage.id).find((row)=>row.participantId===player.id);const group=groups.find((row)=>row.id===assigned.groupId);
+    database.insertMatch({reportId:'historical-scope',players:[{participantId:player.id,name:player.displayName,role:'Crewmate',won:true}]},null,event.id,{stageId:stage.id,groupId:group.id,hostId:hosts[0].id,matchNumber:1});
+    database.competition.replaceGroups(stage.id,groups.map((row)=>({id:row.id,name:`${row.name} editado`,position:row.position})));
+    database.competition.replaceHosts(event.id,hosts.map((row)=>({id:row.id,identifier:row.identifier,name:`${row.name} editado`,enabled:true})));
+    assert.deepEqual(database.competition.listGroups(stage.id).map((row)=>row.id),groups.map((row)=>row.id));
+    assert.deepEqual(database.competition.listHosts(event.id).map((row)=>row.id),hosts.map((row)=>row.id));
+    assert.equal(database.competition.listStageParticipants(stage.id,group.id).length,1);
+    assert.equal(database.competition.getStageLeaderboard(stage.id,group.id).matchCount,1);
+    assert.throws(()=>database.competition.replaceGroups(stage.id,groups.filter((row)=>row.id!==group.id)),(error)=>error.code==='GROUP_IN_USE');
+    assert.throws(()=>database.competition.replaceHosts(event.id,hosts.filter((row)=>row.id!==hosts[0].id)),(error)=>error.code==='HOST_IN_USE');
+    database.close();
+  });
+
+  it('keeps registration and competitive disqualification separate and excludes the player',()=>{
+    const database=openDatabase(temporaryPath());const ingest=createMatchIngestor({database});const event=database.getDefaultEvent();let stage=database.competition.listStages(event.id)[0];database.competition.updateStage(stage.id,{status:'active'});stage=database.competition.getStage(stage.id);const player=participant(database,event.id,'Expulsado');database.competition.distributeGroups(stage.id);const member=database.competition.listStageParticipants(stage.id).find((row)=>row.participantId===player.id);ingest.ingest({eventId:event.id,report:{reportId:'before-dq',players:[{participantId:player.id,role:'Crewmate',won:true}]},context:{stageId:stage.id,groupId:member.groupId,matchNumber:1}});assert.equal(database.competition.getStageLeaderboard(stage.id,member.groupId).standings[0].points,4);
+    database.updateParticipant(player.id,{status:'disqualified'});const disqualified=database.competition.listStageParticipants(stage.id).find((row)=>row.participantId===player.id);assert.equal(disqualified.registrationStatus,'disqualified');assert.equal(disqualified.competitiveStatus,'disqualified');assert.equal(database.competition.getStageLeaderboard(stage.id,member.groupId).standings.length,0);assert.throws(()=>ingest.ingest({eventId:event.id,report:{reportId:'after-dq',players:[{participantId:player.id,role:'Crewmate',won:true}]},context:{stageId:stage.id,groupId:member.groupId,matchNumber:2}}),(error)=>error.code==='PLAYER_DISQUALIFIED');database.close();
+  });
+
+  it('validates tie scope, audit reason and contradictory cycles',()=>{
+    const database=openDatabase(temporaryPath());const event=database.getDefaultEvent();const stage=database.competition.listStages(event.id)[0];const group=database.competition.listGroups(stage.id)[0];const players=['Uno','Dos','Tres'].map((name)=>participant(database,event.id,name));database.competition.distributeGroups(stage.id);players.forEach((player)=>database.competition.assignParticipant(stage.id,player.id,group.id));
+    assert.throws(()=>database.competition.resolveTie(stage.id,{groupId:group.id,higherParticipantId:players[0].id,lowerParticipantId:players[1].id,reason:''}),(error)=>error.code==='TIE_REASON_REQUIRED');database.competition.resolveTie(stage.id,{groupId:group.id,higherParticipantId:players[0].id,lowerParticipantId:players[1].id,reason:'Primera decisión'});assert.throws(()=>database.competition.resolveTie(stage.id,{groupId:group.id,higherParticipantId:players[1].id,lowerParticipantId:players[0].id,reason:'Contradicción'}),(error)=>error.code==='TIE_RESOLUTION_CYCLE');assert.equal(database.competition.listTieResolutions(stage.id).length,1);database.close();
+  });
+});

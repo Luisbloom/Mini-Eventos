@@ -2,7 +2,7 @@
   "name": "jartiland-amongus",
   "version": "1.0.0",
   "private": true,
-  "description": "Servidor del Torneo de Among Us de Jartiland",
+  "description": "Portal multi-evento de la comunidad Jartiland",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

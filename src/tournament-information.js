@@ -68,6 +68,42 @@ const DEFAULT_TOURNAMENT_INFORMATION = Object.freeze({
   ])
 });
 
+function createDefaultEventInformation(game) {
+  const gameName = String(game || 'este juego').trim();
+  if (gameName.toLocaleLowerCase('es') === 'among us') {
+    return DEFAULT_TOURNAMENT_INFORMATION;
+  }
+  return {
+    general: {
+      intro: `Este evento de ${gameName} forma parte de Mini Eventos Jartiland. Aquí se publicarán el formato, los horarios y las indicaciones necesarias para participar.`,
+      date: '',
+      time: '',
+      participantCount: null,
+      status: 'Próximamente',
+      phase: 'Preparación'
+    },
+    format: {
+      groupsEnabled: false,
+      classification: 'La organización publicará el formato definitivo antes del inicio del evento.',
+      final: 'Si existe una fase final, sus participantes y condiciones se anunciarán en esta página.'
+    },
+    rules: [
+      'Respeta al resto de participantes y las indicaciones de la organización.',
+      'No se permite utilizar herramientas o ventajas no autorizadas.',
+      'Cualquier intento de manipular resultados puede provocar la descalificación.'
+    ],
+    tiebreakers: [
+      'Se aplicarán los criterios publicados por la organización para este evento.'
+    ],
+    faqs: [
+      {
+        question: '¿Dónde se anunciarán los detalles?',
+        answer: 'La información confirmada se actualizará en esta página y en los canales de la comunidad.'
+      }
+    ]
+  };
+}
+
 function boundedString(value, field, maximum, allowEmpty = false) {
   if (typeof value !== 'string') {
     throw new InformationValidationError(`${field} debe ser texto.`);
@@ -172,6 +208,7 @@ function mergeWithDefaults(stored) {
 
 module.exports = {
   DEFAULT_TOURNAMENT_INFORMATION,
+  createDefaultEventInformation,
   InformationValidationError,
   mergeWithDefaults,
   normalizeTournamentInformation

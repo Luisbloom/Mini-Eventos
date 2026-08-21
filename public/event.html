@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Evento de la comunidad Jartiland">
+    <title>Evento · Mini Eventos Jartiland</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/event.css">
+    <link rel="stylesheet" href="/competition.css">
+    <script src="/event.js" defer></script>
+  </head>
+  <body class="event-page">
+    <div class="grain" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="/"><span class="mini-crew lime" aria-hidden="true"><i></i></span><span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span></a>
+      <nav class="primary-nav" aria-label="Navegación principal"><a href="/">Todos los eventos</a><a class="active" href="#resumen">Este evento</a></nav>
+      <div class="broadcast" aria-live="polite"><span id="event-dot" class="live-dot loading"></span><span id="event-connection">CARGANDO</span></div>
+    </header>
+
+    <main id="event-main" hidden>
+      <section id="resumen" class="event-hero">
+        <img id="event-hero-cover" class="event-hero-cover" src="/images/events/default-event-cover.png" alt="">
+        <div class="event-title-lockup">
+          <p class="kicker"><span id="event-game">EVENTO</span> · MINI EVENTOS JARTILAND</p>
+          <h1 id="event-name">Cargando <span>evento</span></h1>
+          <p id="event-description" class="subtitle"></p>
+          <div class="hero-actions"><a id="register-cta" class="primary-cta" href="#inscripcion">INSCRIBIRME <span>→</span></a><span id="hero-registration-state" class="registration-chip"></span></div>
+          <div id="event-quorum" class="event-quorum">
+            <div><span>MÍNIMO PARA REALIZARSE</span><strong id="event-minimum-copy">POR DEFINIR</strong></div>
+            <p id="event-minimum-status">La organización confirmará el mínimo necesario.</p>
+            <div class="quorum-track" aria-hidden="true"><i id="event-minimum-progress"></i></div>
+          </div>
+        </div>
+        <dl class="event-facts">
+          <div><dt>ESTADO</dt><dd id="event-status">—</dd></div>
+          <div><dt>FECHA</dt><dd id="event-date">—</dd></div>
+          <div><dt>PARTICIPANTES</dt><dd id="event-participant-count">—</dd></div>
+          <div><dt>MÍNIMO REQUERIDO</dt><dd id="event-minimum-count">—</dd></div>
+        </dl>
+        <div class="event-monogram" aria-hidden="true" id="event-monogram">J</div>
+      </section>
+
+      <nav id="event-nav" class="event-subnav" aria-label="Secciones del evento">
+        <a href="#resumen">Resumen</a><a data-module-link="competition" href="#fases">Fases</a>
+        <a data-module-link="information" id="information-link" href="#">Información</a>
+        <a data-module-link="participants" href="#participantes">Participantes</a>
+        <a data-module-link="leaderboard" href="#clasificacion">Clasificación</a>
+        <a data-module-link="matches" href="#partidas">Partidas</a>
+        <a data-module-link="registration" href="#inscripcion">Inscripción</a>
+      </nav>
+
+      <section id="fases" class="competition-section content-section" data-module="competition" aria-labelledby="competition-title">
+        <header class="section-bar"><div><p class="section-index">01 / TORNEO</p><h2 id="competition-title">Camino a la final</h2></div><span id="competition-state" class="section-stat">CARGANDO FASES</span></header>
+        <ol id="stage-progress" class="stage-progress"></ol>
+        <div id="champion-banner" class="champion-banner" hidden></div>
+        <div id="finalists-panel" class="finalists-panel" hidden><span>FINALISTAS</span><div id="finalists-list" class="finalists-list"></div></div>
+        <div id="stage-board" class="stage-board"><div id="group-tabs" class="group-tabs" role="tablist"></div><div id="stage-leaderboard"></div></div>
+      </section>
+
+      <section id="agenda" class="schedule-section content-section" data-module="schedule" aria-labelledby="schedule-title">
+        <header class="section-bar"><div><p class="section-index">02 / HORARIOS</p><h2 id="schedule-title">Agenda del torneo</h2></div><span class="section-stat">HORA LOCAL</span></header>
+        <ol id="event-schedule" class="event-schedule"></ol>
+      </section>
+
+      <section class="event-overview content-section" aria-labelledby="overview-title">
+        <div><p class="section-index">01 / RESUMEN</p><h2 id="overview-title">Todo en un solo lugar</h2></div>
+        <div class="overview-copy"><p id="overview-description"></p><div id="module-list" class="module-list"></div></div>
+      </section>
+
+      <section id="participantes" class="content-section stack-section" data-module="participants" aria-labelledby="participants-title">
+        <header class="section-bar"><div><p class="section-index">02 / COMUNIDAD</p><h2 id="participants-title">Participantes</h2></div><span id="public-participant-count" class="section-stat">00 CONFIRMADOS</span></header>
+        <div id="participants-loading" class="state-panel">Cargando participantes…</div>
+        <div id="participants-empty" class="state-panel empty compact" hidden><span class="empty-number">00</span><div><h3>Aún no hay confirmados</h3><p>Las inscripciones aprobadas aparecerán aquí.</p></div></div>
+        <ol id="participant-list" class="participant-list" hidden></ol>
+      </section>
+
+      <section id="clasificacion" class="leaderboard content-section" data-module="leaderboard" aria-labelledby="leaderboard-title">
+        <header class="section-bar"><div><p class="section-index">03 / RANKING</p><h2 id="leaderboard-title">Leaderboard</h2></div><button id="refresh-leaderboard" class="refresh" type="button"><span>↻</span> ACTUALIZAR</button></header>
+        <div id="leaderboard-loading" class="state-panel"><span class="scanner"></span>Cargando clasificación…</div>
+        <div id="leaderboard-empty" class="state-panel empty" hidden><span class="empty-number">00</span><div><h3>El marcador está a cero</h3><p>La clasificación aparecerá cuando llegue el primer resultado.</p></div></div>
+        <div id="leaderboard-content" hidden><ol id="event-podium" class="podium"></ol><div class="ranking-table-wrap"><table class="ranking-table"><thead><tr><th>POS</th><th>JUGADOR</th><th class="numeric">PUNTOS</th><th class="numeric optional">VICTORIAS</th><th class="numeric optional">PARTIDAS</th><th class="numeric optional">WIN RATE</th><th class="numeric optional">KILLS</th></tr></thead><tbody id="event-standings"></tbody></table></div></div>
+      </section>
+
+      <section id="partidas" class="content-section stack-section" data-module="matches" aria-labelledby="matches-title">
+        <header class="section-bar"><div><p class="section-index">04 / RESULTADOS</p><h2 id="matches-title">Partidas</h2></div><span id="match-total" class="section-stat">00 REGISTRADAS</span></header>
+        <div id="matches-loading" class="state-panel">Cargando resultados…</div>
+        <div id="matches-empty" class="state-panel empty compact" hidden><span class="empty-number">00</span><div><h3>Esperando la primera partida</h3><p>Los resultados enviados por el Reporter aparecerán aquí.</p></div></div>
+        <div id="match-list" class="match-list" hidden></div>
+      </section>
+
+      <section id="premios" class="prizes-section content-section" data-module="prizes" aria-labelledby="prizes-title">
+        <header class="section-bar"><div><p class="section-index">07 / RECOMPENSAS</p><h2 id="prizes-title">Premios</h2></div></header>
+        <div id="event-prizes" class="event-prizes"></div>
+      </section>
+
+      <section id="inscripcion" class="registration-section content-section" data-module="registration" aria-labelledby="registration-title">
+        <div class="registration-heading"><p class="section-index">05 / TU PLAZA</p><h2 id="registration-title">Apúntate</h2><p>Te pedimos únicamente lo imprescindible para participar. Sin cuentas, correos ni contraseñas.</p></div>
+        <div class="registration-panel">
+          <div id="registration-closed" class="registration-closed" hidden><strong id="registration-closed-title">INSCRIPCIONES CERRADAS</strong><p id="registration-closed-copy">Ahora mismo no se admiten nuevas inscripciones.</p></div>
+          <form id="registration-form" novalidate><div id="registration-fields" class="registration-fields"></div><label class="privacy-note"><span>✓</span> Tus datos sólo se usan para organizar este evento.</label><button id="registration-submit" type="submit">CONFIRMAR INSCRIPCIÓN <span>→</span></button><p id="registration-feedback" role="status"></p></form>
+          <div id="registration-success" class="registration-success" hidden><span>✓</span><div><strong>INSCRIPCIÓN RECIBIDA</strong><p>El equipo de Jartiland la revisará y te confirmará por Discord.</p></div></div>
+        </div>
+      </section>
+    </main>
+
+    <section id="event-error" class="event-fatal" hidden><span>404</span><h1>Evento no encontrado</h1><p>Puede que se haya archivado o que el enlace no sea correcto.</p><a href="/">VOLVER A EVENTOS</a></section>
+    <footer class="ticker"><div><span>MINI EVENTOS JARTILAND</span><b>✦</b><span>JUEGA CON LA COMUNIDAD</span><b>✦</b><span>CLASIFICACIÓN EN DIRECTO</span><b>✦</b><span aria-hidden="true">MINI EVENTOS JARTILAND</span><b aria-hidden="true">✦</b><span aria-hidden="true">JUEGA CON LA COMUNIDAD</span><b aria-hidden="true">✦</b></div></footer>
+  </body>
+</html>

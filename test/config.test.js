@@ -18,6 +18,7 @@ describe('config', () => {
     assert.equal(config.dbPath, path.join(projectRoot, 'data', 'tournament.db'));
     assert.equal(config.trustProxy, false);
     assert.equal(config.adminToken, null);
+    assert.equal(config.reporterToken, null);
   });
 
   it('accepts explicit paths, port and proxy configuration', () => {
@@ -27,7 +28,8 @@ describe('config', () => {
       DATA_DIR: 'state',
       DB_PATH: 'state/custom.db',
       TRUST_PROXY: 'true',
-      ADMIN_TOKEN: '  un-secreto-largo  '
+      ADMIN_TOKEN: '  un-secreto-largo  ',
+      REPORTER_TOKEN: ' reporter-secreto '
     }, projectRoot);
 
     assert.equal(config.host, '127.0.0.1');
@@ -36,6 +38,7 @@ describe('config', () => {
     assert.equal(config.dbPath, path.join(projectRoot, 'state', 'custom.db'));
     assert.equal(config.trustProxy, true);
     assert.equal(config.adminToken, 'un-secreto-largo');
+    assert.equal(config.reporterToken, 'reporter-secreto');
   });
 
   for (const invalidPort of ['abc', '0', '65536', '3000.5']) {

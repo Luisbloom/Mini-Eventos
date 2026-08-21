@@ -21,6 +21,7 @@ function buildLeaderboard(matches) {
   let hasDemoData = false;
 
   for (const match of matches) {
+    if ((match?.matchStatus || 'VALID') === 'VOID') continue;
     const report = match?.report;
     if (!report || typeof report !== 'object') {
       continue;

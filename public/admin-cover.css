@@ -1,0 +1,36 @@
+.field-grid .cover-path {
+  grid-column: span 2;
+}
+
+.admin-cover-preview {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 420px) 1fr;
+  gap: 1rem;
+  align-items: end;
+}
+
+.admin-cover-preview img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: #090d0f;
+}
+
+.admin-cover-preview figcaption {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: .72rem;
+  line-height: 1.55;
+}
+
+.admin-cover-preview code {
+  color: var(--cyan);
+  font-family: var(--mono);
+}
+
+@media (max-width: 700px) {
+  .field-grid .cover-path { grid-column: auto; }
+  .admin-cover-preview { grid-template-columns: 1fr; }
+}

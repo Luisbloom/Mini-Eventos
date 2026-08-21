@@ -1,5 +1,5 @@
 [Unit]
-Description=Web del Torneo Among Us de Jartiland
+Description=Portal Mini Eventos de Jartiland
 Documentation=file:/opt/jartiland-amongus/README.md
 Wants=network-online.target
 After=network-online.target

@@ -30,22 +30,22 @@ describe('Jartiland Among Us API', () => {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   });
 
-  it('serves the dashboard', async () => {
+  it('serves the Mini Eventos portal', async () => {
     const response = await request(app).get('/');
 
     assert.equal(response.status, 200);
     assert.match(response.headers['content-type'], /text\/html/);
-    assert.match(response.text, /Torneo Among Us/);
+    assert.match(response.text, /MINI EVENTOS JARTILAND/);
   });
 
   it('serves the public information and administration pages', async () => {
     const information = await request(app).get('/informacion');
-    assert.equal(information.status, 200);
-    assert.match(information.text, /INFORMACIÓN DEL TORNEO/);
+    assert.equal(information.status, 302);
+    assert.equal(information.headers.location, '/eventos/among-us-agosto-2026/informacion');
 
     const admin = await request(app).get('/admin');
     assert.equal(admin.status, 200);
-    assert.match(admin.text, /Administración del torneo/i);
+    assert.match(admin.text, /Administración/i);
   });
 
   it('reports API and database health', async () => {
@@ -71,19 +71,19 @@ describe('Jartiland Among Us API', () => {
       .send(report);
 
     assert.equal(created.status, 201);
-    assert.equal(created.body.report.reportId, report.reportId);
-    assert.equal(created.body.report.map, 'The Skeld');
+    assert.equal(created.body.result.reportId, report.reportId);
+    assert.equal(created.body.result.map, 'The Skeld');
     assert.equal(created.body.id, 1);
     assert.match(created.headers.location, /^\/api\/matches\/1$/);
 
     const list = await request(app).get('/api/matches');
     assert.equal(list.status, 200);
     assert.equal(list.body.count, 1);
-    assert.deepEqual(list.body.matches[0].report, report);
+    assert.equal(list.body.matches[0].result.map, report.map);
 
     const detail = await request(app).get('/api/matches/1');
     assert.equal(detail.status, 200);
-    assert.deepEqual(detail.body.report, report);
+    assert.equal(detail.body.result.map, report.map);
   });
 
   it('keeps reports after the database is closed and reopened', async () => {
@@ -95,16 +95,16 @@ describe('Jartiland Among Us API', () => {
     const response = await request(app).get('/api/matches');
 
     assert.equal(response.body.count, 1);
-    assert.equal(response.body.matches[0].report.map, 'Polus');
+    assert.equal(response.body.matches[0].result.map, 'Polus');
   });
 
   it('returns reports newest first and caps the requested limit', async () => {
     for (let index = 1; index <= 3; index += 1) {
-      await request(app).post('/api/matches').send({ sequence: index });
+      await request(app).post('/api/matches').send({ reportId: `sequence-${index}`, sequence: index });
     }
 
     const limited = await request(app).get('/api/matches?limit=2');
-    assert.deepEqual(limited.body.matches.map((match) => match.report.sequence), [3, 2]);
+    assert.deepEqual(limited.body.matches.map((match) => match.result.reportId), ['sequence-3', 'sequence-2']);
 
     const capped = await request(app).get('/api/matches?limit=500');
     assert.equal(capped.body.limit, 100);

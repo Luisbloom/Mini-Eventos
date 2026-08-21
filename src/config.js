@@ -55,6 +55,7 @@ function loadConfig(env = process.env, projectRoot = PROJECT_ROOT) {
     dbPath,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     adminToken: env.ADMIN_TOKEN?.trim() || null,
+    reporterToken: env.REPORTER_TOKEN?.trim() || null,
     nodeEnv: env.NODE_ENV || 'development'
   });
 }

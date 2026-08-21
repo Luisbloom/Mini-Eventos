@@ -1,6 +1,6 @@
-# Torneo Among Us de Jartiland
+# Mini Eventos Jartiland
 
-Servidor web para recibir por HTTP los resultados del futuro Tournament Reporter, conservarlos en SQLite y consultarlos desde cualquier equipo de la red. Está diseñado para ejecutarse permanentemente **dentro de la máquina virtual Debian**, no en macOS ni en el PC Windows del juego.
+Portal multi-evento para organizar torneos ocasionales, recibir por HTTP los resultados del futuro Tournament Reporter, conservarlos en SQLite y consultarlos desde cualquier equipo de la red. Está diseñado para ejecutarse permanentemente **dentro de la máquina virtual Debian**, no en macOS ni en el PC Windows del juego.
 
 ```text
 PC WINDOWS                            MÁQUINA VIRTUAL DEBIAN
@@ -8,22 +8,40 @@ Among Us + EHR                       Node.js LTS + Express
         │                                      │
 Tournament Reporter ── HTTP POST ──> :3000 ──> SQLite persistente
                                                │
-                                      Web Torneo Jartiland
+                                      Portal Mini Eventos Jartiland
 ```
 
 ## Qué incluye
 
 - escucha en `0.0.0.0:3000` de forma predeterminada;
-- `POST /api/matches` acepta un objeto JSON de hasta 1 MB y conserva el contenido original;
-- `GET /api/tournament-information`, `GET /api/leaderboard`, `GET /api/matches`, `GET /api/matches/:id` y `GET /api/health`;
+- portal de tarjetas en `/` y página modular propia en `/eventos/:slug`;
+- eventos independientes con información, participantes, clasificación, partidas e inscripción configurables;
+- formulario público dinámico con campos `text`, `select` y `checkbox`, sin cuentas de usuario;
+- `POST /api/matches` acepta un objeto JSON de hasta 1 MB y conserva el contenido original en el evento Among Us por compatibilidad;
+- API multi-evento bajo `/api/events/:slug` y endpoints históricos compatibles;
 - base SQLite con modo WAL en `/opt/jartiland-amongus/data/tournament.db`;
-- leaderboard público responsive en `/`, con podio, clasificación y actualización automática;
-- página oficial de reglas y formato en `/informacion` y editor protegido en `/admin`;
+- leaderboard público responsive dentro de cada evento que lo habilite, con podio y actualización automática;
+- centro de control protegido en `/admin` para eventos, formularios, participantes, información y resultados;
 - cierre limpio ante `SIGTERM`, adecuado para `systemd`;
 - logs estructurados en stdout/stderr, recogidos por journald;
 - soporte de `TRUST_PROXY` para Nginx o Caddy.
 
-> La API de recepción todavía no tiene autenticación porque está pensada para la LAN. No publiques el puerto 3000 directamente en Internet. Antes de exponer el dominio, añade autenticación al Reporter/API o impón una política equivalente en el reverse proxy.
+> Configura siempre `REPORTER_TOKEN` antes de conectar el PC Windows o publicar el servicio. Si se deja vacío, la API conserva el modo LAN sin autenticación únicamente por compatibilidad con la primera versión. No publiques ese modo en Internet.
+
+## Migración automática del torneo existente
+
+`src/init-db.js` y el arranque normal ejecutan una migración idempotente. En una base de la versión anterior:
+
+- crean `events`, `event_information`, `event_registration_fields`, `event_participants` y `app_settings`;
+- añaden `event_id` a `matches` sin reconstruir ni vaciar la tabla;
+- crean el evento `Torneo Among Us` con slug `among-us-agosto-2026`;
+- vinculan a ese evento todas las partidas que aún no tengan `event_id`;
+- copian el contenido de `tournament_information` a `event_information`;
+- crean `discord_username`, `game_name` y `same_as_discord` como formulario mínimo.
+
+`app_settings.default_event_id` mantiene estable la identidad del evento original aunque el administrador cambie su slug. Las rutas históricas redirigen siempre al slug actual de ese mismo ID.
+
+La tabla histórica `tournament_information` se conserva. Ejecutar la migración varias veces no duplica eventos, campos, partidas ni información.
 
 ## 1. Instalar Node.js LTS en Debian
 
@@ -91,9 +109,10 @@ DATA_DIR=/opt/jartiland-amongus/data
 TRUST_PROXY=false
 NODE_ENV=production
 ADMIN_TOKEN=PEGA_AQUI_UN_TOKEN_LARGO_Y_ALEATORIO
+REPORTER_TOKEN=PEGA_AQUI_OTRO_TOKEN_LARGO_Y_ALEATORIO
 ```
 
-Genera el secreto administrativo con `openssl rand -hex 32`, copia el resultado después de `ADMIN_TOKEN=` y no lo compartas con participantes. Reinicia el servicio si cambias el token.
+Ejecuta `openssl rand -hex 32` dos veces y usa secretos distintos para `ADMIN_TOKEN` y `REPORTER_TOKEN`. El primero protege `/admin`; el segundo debe conocerlo únicamente el Tournament Reporter. Reinicia el servicio si cambias cualquiera.
 
 Aplicar permisos para que sólo `root` y el grupo del servicio puedan leerlo:
 
@@ -204,6 +223,7 @@ PowerShell convierte el objeto a JSON y conserva estructuras anidadas:
 
 ```powershell
 $report = @{
+  eventSlug = 'among-us-agosto-2026'
   reportId = 'prueba-windows-001'
   map = 'The Skeld'
   winner = 'crewmates'
@@ -216,13 +236,16 @@ $report = @{
 Invoke-RestMethod `
   -Method Post `
   -Uri 'http://192.168.1.80:3000/api/matches' `
+  -Headers @{ Authorization = 'Bearer PEGA_AQUI_REPORTER_TOKEN' } `
   -ContentType 'application/json' `
   -Body $report
 
 Invoke-RestMethod -Uri 'http://192.168.1.80:3000/api/matches'
 ```
 
-El `POST` correcto responde HTTP `201`, asigna un `id` y devuelve el informe. El contrato deliberadamente acepta cualquier **objeto JSON no vacío**, de modo que el esquema final del Tournament Reporter puede evolucionar sin perder campos.
+El primer `POST` correcto responde HTTP `201` y asigna un `id`. Si se reintenta el mismo `reportId` dentro del evento, responde `200` con el mismo `id` y no duplica la clasificación. `eventSlug` selecciona el evento y no se guarda dentro del payload; si se omite, la petición se asocia al Among Us migrado por compatibilidad. También se puede publicar directamente en `POST /api/events/among-us-agosto-2026/matches`.
+
+Las lecturas públicas de partidas sólo devuelven un resumen permitido (`reportId`, mapa, modo, ganador, duración y número de jugadores); nunca incluyen IP de origen ni el payload completo. El informe original sólo se consulta con `ADMIN_TOKEN` desde administración.
 
 Para alimentar el leaderboard, cada informe puede incluir `players` con esta forma:
 
@@ -245,30 +268,99 @@ Para alimentar el leaderboard, cada informe puede incluir `players` con esta for
 `points` también puede llamarse `score`. Si no llega ninguno de los dos, `src/services/scoring.js` calcula el resultado con las reglas reales: victoria tripulante +4, victoria impostor +5, cada kill de impostor +1 hasta un máximo de +3 y todas las tareas +1. La derrota tiene base 0, pero conserva los bonus de acciones válidas. La clasificación se ordena por puntos, victorias, victorias como impostor y kills. `playerId` o `id` mantiene la identidad aunque cambie el nombre; si falta, se utiliza el nombre normalizado. El resultado agregado se puede consultar en:
 
 ```text
-http://IP_DEBIAN:3000/api/leaderboard
+http://IP_DEBIAN:3000/api/events/among-us-agosto-2026/leaderboard
 ```
 
-## 10.1. Información pública y administración
+## 10.1. Portal público y administración
 
 Las rutas son:
 
 ```text
-http://IP_DEBIAN:3000/informacion
+http://IP_DEBIAN:3000/
+http://IP_DEBIAN:3000/eventos/among-us-agosto-2026
+http://IP_DEBIAN:3000/eventos/among-us-agosto-2026/informacion
 http://IP_DEBIAN:3000/admin
 ```
 
-Desde `/admin` se pueden editar sin tocar HTML:
+Desde `/admin`, después de pegar `ADMIN_TOKEN`, se puede:
 
-- texto introductorio;
-- fecha, hora, participantes, estado y fase actual;
-- formato de clasificación/grupos y Gran Final;
-- reglas;
-- criterios de desempate;
-- preguntas frecuentes.
+- crear, editar y archivar eventos;
+- cambiar estado, fechas, mínimo requerido, cupo, apertura de inscripción, color, icono y portada;
+- habilitar Información, Participantes, Clasificación, Partidas e Inscripción por separado;
+- configurar campos públicos de tipo texto, selección y casilla;
+- aprobar, marcar ausentes, descalificar o eliminar inscripciones;
+- guardar un Friend Code interno que nunca se expone públicamente;
+- editar formato, reglas, desempates y FAQ;
+- consultar el leaderboard y añadir o eliminar resultados.
 
 Para guardar, pega en el formulario el mismo `ADMIN_TOKEN` configurado en `/opt/jartiland-amongus/.env`. El navegador lo mantiene sólo en la pestaña actual y lo envía en la cabecera `Authorization`; no se guarda en SQLite ni en almacenamiento local.
 
-Las puntuaciones aparecen en el editor como sólo lectura. Proceden de `src/services/scoring.js`, el mismo módulo utilizado por la clasificación. El contenido editable se almacena en la tabla SQLite `tournament_information`, dentro de la misma base persistente y, por tanto, queda incluido en los backups descritos más abajo.
+El navegador conserva el token en `sessionStorage`: desaparece al cerrar la pestaña y nunca se guarda en SQLite. Las puntuaciones proceden de `src/services/scoring.js`, el mismo módulo utilizado por la clasificación. Todos los eventos, formularios, participantes y resultados quedan incluidos en los backups descritos más abajo.
+
+## 10.2. Crear un evento y configurar su inscripción
+
+1. Abrir `/admin`, pegar `ADMIN_TOKEN` y pulsar **Conectar**.
+2. Pulsar **+ Nuevo**, completar nombre, slug configurable, juego, estado, mínimo de participantes y módulos.
+3. Guardar la portada en `public/images/events/` y escribir su ruta pública —por ejemplo `/images/events/minecraft.png`— en **Imagen de portada**. Si no hay una específica, puede usarse `/images/events/default-event-cover.png`.
+4. En **Campos de inscripción**, editar las filas creadas automáticamente. `discord_username` debe seguir habilitado, obligatorio y de tipo `text`.
+5. Para un juego distinto, cambiar `game_name` por una key como `minecraft_name` o `riot_id`, ajustar etiqueta/placeholder y guardar.
+6. Para un `select`, escribir sus opciones separadas por comas. La posición controla el orden público.
+7. Activar **Inscripciones abiertas** y el módulo **Inscripción** en el evento.
+
+Para comprobar el flujo, abrir una ventana privada en `/eventos/SLUG#inscripcion`, enviar el formulario y volver a `/admin`. La fila debe aparecer como **Pendiente**; al cambiarla a **Confirmado**, el nombre de juego aparecerá en Participantes. El listado público nunca devuelve Discord ni Friend Code.
+
+## 10.3. Fases, grupos y Gran Final
+
+Los eventos pueden habilitar los módulos **Fases competitivas**, **Agenda** y **Premios**. Among Us se inicializa con datos editables: clasificación con dos grupos, 5 partidas por grupo y top 5; después una Gran Final de 5 partidas con puntos reiniciados.
+
+En `/admin`:
+
+1. Confirma las inscripciones y entra en **Fases y grupos**.
+2. Pulsa **Repartir automáticamente**; sólo entran participantes `confirmed` y la diferencia entre grupos nunca supera uno.
+3. Ajusta jugadores manualmente y pulsa **Bloquear grupos**.
+4. Cambia el estado de la fase a **En curso** y guarda. Sólo la fase activa admite nuevos resultados.
+5. Usa **Partidas / Reporter** para simular resultados. El simulador pasa por la misma validación e ingestión que el Reporter real.
+6. **Finalizar fase** muestra partidas faltantes, participantes insuficientes y empates en el corte. Un empate decisivo debe resolverse y queda auditado.
+7. Al cerrar grupos se crean los finalistas; al cerrar la final se registra el campeón. Los puntos nunca se borran: cada ranking se reconstruye desde partidas `VALID` de su ámbito.
+
+Una partida `VOID` permanece en el historial con su motivo, pero no puntúa. **Recalcular** reconstruye las posiciones desde los informes brutos.
+
+### Contrato competitivo del Reporter
+
+`POST /api/matches` conserva el formato histórico. Para una partida competitiva acepta:
+
+```json
+{
+  "reportId": "host1-20260821-group-a-match-1",
+  "eventId": 1,
+  "stageId": 1,
+  "groupId": 1,
+  "hostId": "HOST_1",
+  "matchNumber": 1,
+  "playedAt": "2026-08-21T16:14:32+02:00",
+  "map": "The Skeld",
+  "winnerTeam": "crew",
+  "players": [
+    { "participantId": 1, "role": "Crewmate", "won": true, "kills": 0, "tasksCompleted": 4, "tasksTotal": 4, "alive": true }
+  ]
+}
+```
+
+Puede enviarse `hostId` como ID numérico o identificador (`HOST_1`). El servidor valida que evento, fase, grupo, host y jugadores pertenezcan al mismo ámbito. También puede vincular internamente un jugador mediante `friendCode`; ese dato se elimina del payload normalizado y jamás aparece en APIs públicas. `reportId` mantiene la idempotencia por evento.
+
+El servidor calcula siempre los puntos con las reglas centrales e ignora cualquier `points` o `score` declarado por el cliente. Cada fase/grupo sólo admite un resultado `VALID` por número de partida; para corregirlo, primero se anula el anterior con motivo y después se envía el reemplazo con otro `reportId`.
+
+APIs públicas principales:
+
+```text
+GET /api/events/:slug/competition
+GET /api/events/:slug/stages/:stageId/leaderboard?groupId=:groupId
+GET /api/events/:slug/schedule
+GET /api/events/:slug/prizes
+GET /api/events/:slug/matches
+```
+
+Las operaciones de fases, grupos, hosts, agenda, premios, simulador, desempates y anulación están bajo `/api/admin` y requieren `ADMIN_TOKEN`.
 
 ## 11. Backup de SQLite
 
