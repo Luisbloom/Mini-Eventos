@@ -3,17 +3,15 @@
 Portal multi-evento para organizar torneos ocasionales, recibir por HTTP los resultados del futuro Tournament Reporter, conservarlos en SQLite y consultarlos desde cualquier equipo de la red. Está diseñado para ejecutarse permanentemente **dentro de la máquina virtual Debian**, no en macOS ni en el PC Windows del juego.
 
 ```text
-PC WINDOWS                            MÁQUINA VIRTUAL DEBIAN
-Among Us + EHR                       Node.js LTS + Express
-        │                                      │
-Tournament Reporter ── HTTP POST ──> :3000 ──> SQLite persistente
-                                               │
-                                      Portal Mini Eventos Jartiland
+VISITANTES                     VM DEBIAN
+Web pública ── HTTPS :8443 ──> Tailscale Funnel ─┐
+                                                 ├─> Express 0.0.0.0:3100 ─> SQLite
+HOST_1 / HOST_2 ─ HTTPS :10000 ─> Tailscale Serve ┘
 ```
 
 ## Qué incluye
 
-- escucha en `0.0.0.0:3000` de forma predeterminada;
+- producción escucha en `0.0.0.0:3100`; Tailscale publica los accesos HTTPS sin cambiar la LAN existente;
 - portal de tarjetas en `/` y página modular propia en `/eventos/:slug`;
 - eventos independientes con información, participantes, clasificación, partidas e inscripción configurables;
 - formulario público dinámico con campos `text`, `select` y `checkbox`, sin cuentas de usuario;
@@ -26,7 +24,7 @@ Tournament Reporter ── HTTP POST ──> :3000 ──> SQLite persistente
 - logs estructurados en stdout/stderr, recogidos por journald;
 - soporte de `TRUST_PROXY` para Nginx o Caddy.
 
-> Configura siempre `REPORTER_TOKEN` antes de conectar el PC Windows o publicar el servicio. Si se deja vacío, la API conserva el modo LAN sin autenticación únicamente por compatibilidad con la primera versión. No publiques ese modo en Internet.
+> Cada PC Reporter usa un token `jtr_` independiente generado desde `/admin`. `REPORTER_TOKEN` queda sólo como compatibilidad heredada y nunca debe empezar por `jtr_`. La guía operativa está en [Acceso privado de los Reporter con Tailscale](deploy/tailscale/private-reporter-access.md).
 
 ## Migración automática del torneo existente
 
@@ -104,15 +102,18 @@ Contenido inicial recomendado:
 
 ```dotenv
 HOST=0.0.0.0
-PORT=3000
+PORT=3100
 DATA_DIR=/opt/jartiland-amongus/data
-TRUST_PROXY=false
+TRUST_PROXY=1
 NODE_ENV=production
 ADMIN_TOKEN=PEGA_AQUI_UN_TOKEN_LARGO_Y_ALEATORIO
 REPORTER_TOKEN=PEGA_AQUI_OTRO_TOKEN_LARGO_Y_ALEATORIO
+REPORTER_PRIVATE_URL=https://mini-eventos-jartiland.tail9d0334.ts.net:10000
 ```
 
-Ejecuta `openssl rand -hex 32` dos veces y usa secretos distintos para `ADMIN_TOKEN` y `REPORTER_TOKEN`. El primero protege `/admin`; el segundo debe conocerlo únicamente el Tournament Reporter. Reinicia el servicio si cambias cualquiera.
+En una instalación que ya está funcionando, **no copies este bloque sobre `.env`**: el despliegue preserva ese archivo. Inspecciona sus valores y añade únicamente `REPORTER_PRIVATE_URL` si falta. Los valores reales actuales son `HOST=0.0.0.0`, `PORT=3100` y `TRUST_PROXY=1`; no se cambian al añadir Serve.
+
+Ejecuta `openssl rand -hex 32` para `ADMIN_TOKEN`. Si todavía necesitas el `REPORTER_TOKEN` heredado, genera otro secreto distinto que **no empiece por `jtr_`**. Los Reporter nuevos no comparten ese valor: cada host recibe desde `/admin` un archivo `.ini` con su propio token. `REPORTER_PRIVATE_URL` es la dirección de Tailscale Serve HTTPS 10000 que se incluirá en esos archivos. Reinicia el servicio si cambias cualquiera de estas variables.
 
 Aplicar permisos para que sólo `root` y el grupo del servicio puedan leerlo:
 
@@ -172,50 +173,43 @@ sudo journalctl -u jartiland-amongus -f
 Comprobaciones locales dentro de Debian:
 
 ```bash
-curl http://127.0.0.1:3000/api/health
-sudo ss -ltnp | grep ':3000'
+curl --fail --silent http://127.0.0.1:3100/api/health
+sudo ss -ltnp | grep ':3100'
 ```
 
-La respuesta de salud debe incluir `"status":"ok"` y `"database":"ok"`. `ss` debe mostrar escucha en `0.0.0.0:3000`, no únicamente en `127.0.0.1`.
+La respuesta de salud debe incluir `"status":"ok"` y `"database":"ok"`. En producción, `ss` muestra Express en `0.0.0.0:3100`; la comprobación local sigue usando `127.0.0.1`.
 
-## 8. Averiguar la IP de Debian y preparar la red
+## 8. Configurar Tailscale sin abrir la red local
 
-En la VM Debian:
+Los Reporter no dependen de la IP LAN de Debian. Añadir Serve no requiere reserva DHCP, reenvío NAT, UPnP ni abrir o cambiar UFW o el router. El bind y cualquier acceso LAN que ya exista permanecen sin cambios. Tailscale ofrece dos entradas separadas:
 
-```bash
-hostname -I
-ip -br address show
-```
+- web pública mediante Funnel: `https://mini-eventos-jartiland.tail9d0334.ts.net:8443/`;
+- Reporter privados mediante Serve: `https://mini-eventos-jartiland.tail9d0334.ts.net:10000/`.
 
-Usa la dirección privada de la interfaz de red, por ejemplo `192.168.1.80`, no `127.0.0.1`. Conviene reservar esa IP en el DHCP del router o configurar una IP fija para que el Reporter no pierda el destino.
-
-La interfaz virtual debe estar en modo **puente/bridged** para que Debian sea un equipo más de la LAN. Si la VM usa NAT, configura en el hipervisor del Mac Mini un reenvío del puerto TCP 3000 hacia la VM; de lo contrario otros dispositivos no podrán alcanzarla.
-
-Si Debian usa UFW:
-
-```bash
-sudo ufw allow 3000/tcp
-sudo ufw status
-```
-
-No instales UFW sólo por ejecutar este comando si el servidor ya tiene reglas nftables/iptables administradas de otra forma; abre TCP 3000 en el cortafuegos que realmente utilice la VM.
+Antes de tocar la configuración existente hay que inspeccionar Serve, Funnel, sockets y salud local. HTTPS 443 ya lo ocupa Nginx Proxy Manager y 9443 pertenece a Portainer, por eso no se reutilizan. Sigue la guía completa [Acceso privado de los Reporter con Tailscale](deploy/tailscale/private-reporter-access.md); contiene el comando de alta, la política mínima revisable y un rollback que sólo retira Serve 10000.
 
 ## 9. Acceder desde el PC Windows
 
-Sustituye `192.168.1.80` por la IP obtenida antes.
+Los visitantes no necesitan Tailscale. Abren:
 
-- Web: `http://192.168.1.80:3000`
-- Estado: `http://192.168.1.80:3000/api/health`
-- Receptor del Tournament Reporter: `http://192.168.1.80:3000/api/matches`
+- Web: `https://mini-eventos-jartiland.tail9d0334.ts.net:8443/`
+- Estado: `https://mini-eventos-jartiland.tail9d0334.ts.net:8443/api/health`
+
+Los PC `HOST_1` y `HOST_2` sí deben iniciar sesión en la tailnet autorizada. El futuro Tournament Reporter usa la configuración completa de su archivo `HOST_N-reporter.ini`:
+
+- Servidor Reporter: `https://mini-eventos-jartiland.tail9d0334.ts.net:10000`
+- Receptor: `https://mini-eventos-jartiland.tail9d0334.ts.net:10000/api/matches`
+
+El puerto queda encapsulado en el `.ini` descargado desde `/admin`: HOST_1 y HOST_2 no tienen que recordarlo ni escribir la URL manualmente.
 
 Desde PowerShell en Windows:
 
 ```powershell
-Test-NetConnection 192.168.1.80 -Port 3000
-Invoke-RestMethod -Uri 'http://192.168.1.80:3000/api/health'
+tailscale status
+Invoke-RestMethod -Uri 'https://mini-eventos-jartiland.tail9d0334.ts.net:10000/api/health'
 ```
 
-Si `TcpTestSucceeded` es falso, revisar en este orden: estado de `systemd`, escucha con `ss`, firewall de Debian y modo puente/NAT de la VM.
+Si falla, revisar en este orden: `systemd` y salud local en Debian, `tailscale serve status`, sesión de Tailscale del PC y Grants/ACL de la tailnet. No abras puertos como solución.
 
 ## 10. Probar `POST /api/matches` desde Windows
 
@@ -235,12 +229,12 @@ $report = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri 'http://192.168.1.80:3000/api/matches' `
+  -Uri 'https://mini-eventos-jartiland.tail9d0334.ts.net:10000/api/matches' `
   -Headers @{ Authorization = 'Bearer PEGA_AQUI_REPORTER_TOKEN' } `
   -ContentType 'application/json' `
   -Body $report
 
-Invoke-RestMethod -Uri 'http://192.168.1.80:3000/api/matches'
+Invoke-RestMethod -Uri 'https://mini-eventos-jartiland.tail9d0334.ts.net:8443/api/matches'
 ```
 
 El primer `POST` correcto responde HTTP `201` y asigna un `id`. Si se reintenta el mismo `reportId` dentro del evento, responde `200` con el mismo `id` y no duplica la clasificación. `eventSlug` selecciona el evento y no se guarda dentro del payload; si se omite, la petición se asocia al Among Us migrado por compatibilidad. También se puede publicar directamente en `POST /api/events/among-us-agosto-2026/matches`.
@@ -268,7 +262,7 @@ Para alimentar el leaderboard, cada informe puede incluir `players` con esta for
 `points` también puede llamarse `score`. Si no llega ninguno de los dos, `src/services/scoring.js` calcula el resultado con las reglas reales: victoria tripulante +4, victoria impostor +5, cada kill de impostor +1 hasta un máximo de +3 y todas las tareas +1. La derrota tiene base 0, pero conserva los bonus de acciones válidas. La clasificación se ordena por puntos, victorias, victorias como impostor y kills. `playerId` o `id` mantiene la identidad aunque cambie el nombre; si falta, se utiliza el nombre normalizado. El resultado agregado se puede consultar en:
 
 ```text
-http://IP_DEBIAN:3000/api/events/among-us-agosto-2026/leaderboard
+https://mini-eventos-jartiland.tail9d0334.ts.net:8443/api/events/among-us-agosto-2026/leaderboard
 ```
 
 ## 10.1. Portal público y administración
@@ -276,10 +270,10 @@ http://IP_DEBIAN:3000/api/events/among-us-agosto-2026/leaderboard
 Las rutas son:
 
 ```text
-http://IP_DEBIAN:3000/
-http://IP_DEBIAN:3000/eventos/among-us-agosto-2026
-http://IP_DEBIAN:3000/eventos/among-us-agosto-2026/informacion
-http://IP_DEBIAN:3000/admin
+https://mini-eventos-jartiland.tail9d0334.ts.net:8443/
+https://mini-eventos-jartiland.tail9d0334.ts.net:8443/eventos/among-us-agosto-2026
+https://mini-eventos-jartiland.tail9d0334.ts.net:8443/eventos/among-us-agosto-2026/informacion
+https://mini-eventos-jartiland.tail9d0334.ts.net:8443/admin
 ```
 
 Desde `/admin`, después de pegar `ADMIN_TOKEN`, se puede:
@@ -436,58 +430,21 @@ sudo systemctl daemon-reload
 # 4. Arrancar y verificar.
 sudo systemctl start jartiland-amongus
 sudo systemctl status jartiland-amongus --no-pager
-curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3100/api/health
 ```
 
 Los dos `--exclude` importantes son `.env` y `data/`: impiden que `rsync --delete` borre la configuración o SQLite. `init-db.js` sólo crea objetos que falten; no reinicia la base.
 
-## 13. Reverse proxy Nginx (fase posterior)
+## 13. Publicación HTTPS vigente
 
-Express ya usa rutas del mismo origen y puede confiar en las cabeceras de un proxy. Para Nginx en la misma VM:
+No hace falta comprar un dominio ni abrir puertos en el router. El despliegue actual usa Tailscale junto a los servicios existentes:
 
-```bash
-sudo apt install -y nginx
-sudo nano /etc/nginx/sites-available/amongus.jartiland.es
-```
+- Funnel HTTPS 8443 conserva la web pública;
+- Serve HTTPS 10000 ofrece a los Reporter una URL privada dentro de la tailnet; no ocupa el 443 de Nginx Proxy Manager ni el 9443 de Portainer;
+- ambos reenvían localmente a `http://127.0.0.1:3100`;
+- Express conserva `HOST=0.0.0.0`, `PORT=3100` y `TRUST_PROXY=1`.
 
-Configuración inicial HTTP:
-
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name amongus.jartiland.es;
-
-    client_max_body_size 1m;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-    }
-}
-```
-
-Activar y comprobar:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/amongus.jartiland.es \
-  /etc/nginx/sites-enabled/amongus.jartiland.es
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-En `/opt/jartiland-amongus/.env`, cambia `TRUST_PROXY=false` por `TRUST_PROXY=1` y reinicia:
-
-```bash
-sudo systemctl restart jartiland-amongus
-```
-
-`1` significa que Express confía en exactamente un proxy. Cuando todo el acceso pase por Nginx, se puede cambiar `HOST=127.0.0.1` y cerrar el puerto 3000 en el firewall; Nginx seguirá alcanzándolo localmente. Para Internet faltarán DNS, reenvío de puertos 80/443 hacia la VM, TLS y la protección de la API mencionada al principio.
+La configuración y el rollback están documentados en [deploy/tailscale/private-reporter-access.md](deploy/tailscale/private-reporter-access.md). No ejecutes `tailscale serve reset`, porque podría retirar también publicaciones que no pertenecen a este cambio.
 
 ## Desarrollo y pruebas
 
