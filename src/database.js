@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const BetterSqlite3 = require('better-sqlite3');
 const { createCompetitionStore, migrateCompetition } = require('./competition-store');
+const { fingerprintReport } = require('./services/report-fingerprint');
 const {
   DEFAULT_TOURNAMENT_INFORMATION,
   createDefaultEventInformation,
@@ -42,6 +43,12 @@ function toMatch(row) {
     hostName: row.host_name ?? null,
     report: JSON.parse(row.payload_json)
   };
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return value.map(stableJson);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableJson(value[key])]));
 }
 
 function toField(row) {
@@ -134,7 +141,8 @@ function openDatabase(dbPath) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       received_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       source_ip TEXT,
-      payload_json TEXT NOT NULL CHECK (json_valid(payload_json))
+      payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+      report_fingerprint TEXT CHECK (report_fingerprint IS NULL OR (length(report_fingerprint)=64 AND report_fingerprint NOT GLOB '*[^0-9a-f]*'))
     );
     CREATE TABLE IF NOT EXISTS tournament_information (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -324,8 +332,8 @@ function openDatabase(dbPath) {
   const getFieldsStatement = connection.prepare(`SELECT * FROM event_registration_fields WHERE event_id=? AND (?=0 OR enabled=1) ORDER BY position,id`);
   const deleteFieldsStatement = connection.prepare('DELETE FROM event_registration_fields WHERE event_id=?');
   const insertMatchStatement = connection.prepare(`INSERT INTO matches
-    (event_id,source_ip,payload_json,stage_id,group_id,host_id,match_number,played_at,match_status,origin,submitted_by)
-    VALUES (@eventId,@sourceIp,@payloadJson,@stageId,@groupId,@hostId,@matchNumber,@playedAt,'VALID',@origin,@submittedBy)`);
+    (event_id,source_ip,payload_json,report_fingerprint,stage_id,group_id,host_id,match_number,played_at,match_status,origin,submitted_by)
+    VALUES (@eventId,@sourceIp,@payloadJson,@reportFingerprint,@stageId,@groupId,@hostId,@matchNumber,@playedAt,'VALID',@origin,@submittedBy)`);
   const findMatchByReportIdStatement = connection.prepare(`SELECT m.* FROM match_report_ids r
     JOIN matches m ON m.id=r.match_id WHERE r.event_id=? AND r.report_id=?`);
   const insertMatchReportIdStatement = connection.prepare('INSERT INTO match_report_ids (event_id,report_id,match_id) VALUES (?,?,?)');
@@ -396,17 +404,35 @@ function openDatabase(dbPath) {
   });
   const insertMatchTransaction = connection.transaction((eventId, report, sourceIp, context = {}) => {
     const reportId = typeof report?.reportId === 'string' ? report.reportId.trim() : '';
+    const normalizedReport = reportId ? { ...report, reportId } : report;
+    const reportFingerprint = context.reportFingerprint || fingerprintReport(normalizedReport);
+    if (!/^[a-f0-9]{64}$/.test(reportFingerprint)) {
+      throw new EventValidationError('La huella de idempotencia no es válida.', 'REPORT_FINGERPRINT_INVALID');
+    }
     if (reportId) {
       const existing = findMatchByReportIdStatement.get(eventId, reportId);
-      if (existing) return { ...toMatch(existing), duplicate: true };
+      if (existing) {
+        const stored = toMatch(existing);
+        const sameScope = stored.stageId === (context.stageId ? Number(context.stageId) : null)
+          && stored.groupId === (context.groupId ? Number(context.groupId) : null)
+          && stored.hostId === (context.hostId ? Number(context.hostId) : null)
+          && stored.matchNumber === (context.matchNumber ? Number(context.matchNumber) : null);
+        const samePayload = existing.report_fingerprint
+          ? existing.report_fingerprint === reportFingerprint
+          : JSON.stringify(stableJson(stored.report)) === JSON.stringify(stableJson(normalizedReport));
+        if (!sameScope || !samePayload) {
+          throw new EventValidationError('reportId ya identifica un resultado diferente.', 'REPORT_ID_CONFLICT', 409);
+        }
+        return { ...stored, duplicate: true };
+      }
     }
-    const normalizedReport = reportId ? { ...report, reportId } : report;
     let result;
     try {
       result = insertMatchStatement.run({
         eventId,
         sourceIp,
         payloadJson: JSON.stringify(normalizedReport),
+        reportFingerprint,
         stageId: context.stageId || null,
         groupId: context.groupId || null,
         hostId: context.hostId || null,
@@ -494,6 +520,13 @@ function openDatabase(dbPath) {
     insertMatch(report, sourceIp = null, eventId = null, context = {}) {
       const event = requireEvent(eventId || defaultEvent().id);
       return insertMatchTransaction(event.id, report, sourceIp, context);
+    },
+    findMatchByReportId(eventId, reportId) {
+      const normalizedReportId = typeof reportId === 'string' ? reportId.trim() : '';
+      return normalizedReportId ? toMatch(findMatchByReportIdStatement.get(Number(eventId), normalizedReportId)) : null;
+    },
+    getMatchReportFingerprint(id) {
+      return getMatchStatement.get(Number(id))?.report_fingerprint ?? null;
     },
     getMatch(id) { return toMatch(getMatchStatement.get(id)); },
     listMatches(limit = 50, eventId = null) { return listMatchesStatement.all(eventId || defaultEvent().id, limit).map(toMatch); },

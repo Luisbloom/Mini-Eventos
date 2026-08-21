@@ -33,6 +33,12 @@ function hasStageContext(report) {
   return report.stageId !== undefined && report.stageId !== null && report.stageId !== '';
 }
 
+function hasCompetitiveContext(report) {
+  return ['stageId', 'groupId', 'matchNumber'].some((field) => (
+    report[field] !== undefined && report[field] !== null && report[field] !== ''
+  ));
+}
+
 function parseLimit(rawLimit) {
   if (rawLimit === undefined) return 50;
   if (!/^\d+$/.test(String(rawLimit))) return null;
@@ -148,7 +154,7 @@ function createApp({
 
   function authorizeReporter(request, event, report) {
     const suppliedToken = readBearer(request);
-    const competitive = hasStageContext(report);
+    const competitive = hasCompetitiveContext(report);
     if (!competitive && !reporterToken && !suppliedToken) {
       return { host: null, authenticationKind: 'LEGACY_UNAUTHENTICATED' };
     }
@@ -156,14 +162,14 @@ function createApp({
       eventId: event.id,
       hostId: report.hostId,
       suppliedToken,
-      requireHost: competitive
+      requireHost: hasStageContext(report)
     });
   }
 
   function ingestReporterMatch({ event, report, request }) {
     const authentication = authorizeReporter(request, event, report);
     const submittedBy = authentication.host?.identifier || 'LEGACY_REPORTER';
-    const match = hasStageContext(report)
+    const match = hasCompetitiveContext(report)
       ? matchIngestor.ingest({
         eventId: event.id,
         report,
@@ -510,7 +516,7 @@ function createApp({
     const id = parseId(request.params.id);
     if (!id) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
     if (!isReport(request.body?.report)) return sendError(response, 400, 'INVALID_REPORT', 'Falta report.');
-    try { const report=request.body.report,context=request.body.context||{};const match=(report.stageId||context.stageId)?matchIngestor.ingest({eventId:id,report,context,sourceIp:request.ip,origin:'MANUAL',submittedBy:'ADMIN'}):database.insertMatch(report,request.ip,id,{origin:'MANUAL',submittedBy:'ADMIN'});response.status(match.duplicate?200:201).json(match); }
+    try { const report=request.body.report,context=request.body.context||{};const match=hasCompetitiveContext({...report,...context})?matchIngestor.ingest({eventId:id,report,context,sourceIp:request.ip,origin:'MANUAL',submittedBy:'ADMIN'}):database.insertMatch(report,request.ip,id,{origin:'MANUAL',submittedBy:'ADMIN'});response.status(match.duplicate?200:201).json(match); }
     catch (error) { next(error); }
   });
   app.delete('/api/admin/events/:eventId/matches/:matchId', (request, response, next) => {

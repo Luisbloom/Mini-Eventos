@@ -180,8 +180,27 @@ describe('Mini Eventos API', () => {
     const first = await request(app).post('/api/matches').set('Authorization', 'Bearer reporter-secret').send({ reportId: ' authorized ' }).expect(201);
     const replay = await request(app).post('/api/matches').set('Authorization', 'Bearer reporter-secret').send({ reportId: 'authorized' }).expect(200);
     assert.equal(replay.body.id, first.body.id);
+    await request(app).post('/api/matches').set('Authorization', 'Bearer reporter-secret')
+      .send({ reportId: 'authorized', map: 'Polus' })
+      .expect(409)
+      .expect((response) => assert.equal(response.body.error.code, 'REPORT_ID_CONFLICT'));
+    const timed = await request(app).post('/api/matches').set('Authorization', 'Bearer reporter-secret')
+      .send({ reportId: 'historical-played-at', playedAt: '2026-08-21T10:00:00.000Z' })
+      .expect(201);
+    const equivalent = await request(app).post('/api/matches').set('Authorization', 'Bearer reporter-secret')
+      .send({ reportId: 'historical-played-at', playedAt: '2026-08-21T12:00:00+02:00' })
+      .expect(200);
+    assert.equal(equivalent.body.id, timed.body.id);
+    await request(app).post('/api/matches').set('Authorization', 'Bearer reporter-secret')
+      .send({ reportId: 'historical-played-at', playedAt: '2026-08-21T11:00:00.000Z' })
+      .expect(409)
+      .expect((response) => assert.equal(response.body.error.code, 'REPORT_ID_CONFLICT'));
+    await request(app).post('/api/matches').set('Authorization', 'Bearer reporter-secret')
+      .send({ reportId: 'historical-played-at' })
+      .expect(409)
+      .expect((response) => assert.equal(response.body.error.code, 'REPORT_ID_CONFLICT'));
     assert.equal(first.body.result.reportId, 'authorized');
-    assert.equal(database.countMatches(), 1);
+    assert.equal(database.countMatches(), 2);
 
     const hidden = database.createEvent({
       name: 'Sin resultados', slug: 'sin-resultados', game: 'Otro', description: '',
@@ -192,6 +211,26 @@ describe('Mini Eventos API', () => {
       .send({ eventSlug: hidden.slug, reportId: 'blocked' });
     assert.equal(rejected.status, 403);
     assert.equal(rejected.body.error.code, 'MATCHES_DISABLED');
+  });
+
+  it('never downgrades partial competitive context to a historical match', async () => {
+    app = createApp({ database, logger, adminToken: token, reporterToken: 'reporter-secret' });
+    const event = database.getDefaultEvent();
+    const group = database.competition.listGroups(database.competition.listStages(event.id)[0].id)[0];
+    const host = database.competition.listHosts(event.id)[0];
+
+    const historical = await request(app).post('/api/matches')
+      .set('Authorization', 'Bearer reporter-secret')
+      .send({ reportId: 'historical-host-attribution', hostId: host.identifier, players: [] })
+      .expect(201);
+    assert.equal(database.getMatch(historical.body.id).hostId, host.id);
+
+    await request(app).post('/api/matches')
+      .set('Authorization', 'Bearer reporter-secret')
+      .send({ reportId: 'partial-group-context', groupId: group.id, hostId: host.identifier, matchNumber: 1, players: [] })
+      .expect(400)
+      .expect((response) => assert.equal(response.body.error.code, 'STAGE_REQUIRED'));
+    assert.equal(database.countMatches(event.id), 1);
   });
 
   it('keeps only historical unauthenticated compatibility when REPORTER_TOKEN is absent', async () => {

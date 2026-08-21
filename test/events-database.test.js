@@ -52,6 +52,9 @@ describe('multi-event database', () => {
     const event = database.getEventBySlug('among-us-agosto-2026');
     const matches = database.listAllMatches(event.id);
     const migratedInformation = database.getTournamentInformation(event.id);
+    const legacyRaw = new BetterSqlite3(dbPath, { readonly: true });
+    assert.equal(legacyRaw.prepare('SELECT report_fingerprint fingerprint FROM matches WHERE id=?').get(matches[0].id).fingerprint, null);
+    legacyRaw.close();
 
     assert.equal(event.name, 'Torneo Among Us');
     assert.equal(event.minParticipants, 20);
@@ -59,6 +62,10 @@ describe('multi-event database', () => {
     assert.equal(matches.length, 1);
     assert.equal(matches[0].eventId, event.id);
     assert.equal(matches[0].report.reportId, 'legacy-1');
+    const legacyReplay=database.insertMatch({reportId:'legacy-1'},null,event.id);
+    assert.equal(legacyReplay.duplicate,true);
+    assert.throws(()=>database.insertMatch({reportId:'legacy-1',map:'Polus'},null,event.id),(error)=>error.code==='REPORT_ID_CONFLICT');
+    assert.throws(()=>database.insertMatch({reportId:'legacy-1',playedAt:'2026-08-21T10:00:00.000Z'},null,event.id),(error)=>error.code==='REPORT_ID_CONFLICT');
     assert.equal(
       migratedInformation.information.general.intro,
       'Información histórica que debe conservarse.'

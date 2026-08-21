@@ -31,6 +31,8 @@ describe('panel de hosts y auditoría', () => {
     assert.match(script, /navigator\.clipboard\.writeText\(config\)/);
     assert.match(script, /method:'DELETE'/);
     assert.match(script, /confirm\(/);
+    assert.match(script, /identifier\.disabled\s*=\s*host\.tokenConfigured/);
+    assert.match(script, /Revoca[^'"`]+cambiar[^'"`]+identificador/i);
     assert.doesNotMatch(script, /localStorage|sessionStorage/);
     assert.doesNotMatch(script, /dataset\.(?:token|reporterToken)|textContent\s*=\s*data\.token/);
   });

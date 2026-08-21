@@ -21,9 +21,11 @@ describe('competition database', () => {
 
   it('migrates twice, preserves historical rows and seeds editable Among Us competition data once', () => {
     const dbPath=temporaryPath(); let database=openDatabase(dbPath); const event=database.getDefaultEvent();
-    database.insertMatch({reportId:'legacy-preserved',players:[]},null,event.id); const stageIds=database.competition.listStages(event.id).map((stage)=>stage.id); database.close();
+    const inserted=database.insertMatch({reportId:'legacy-preserved',players:[]},null,event.id); const stageIds=database.competition.listStages(event.id).map((stage)=>stage.id); database.close();
+    let raw=new BetterSqlite3(dbPath,{readonly:true});const fingerprintBefore=raw.prepare('SELECT report_fingerprint fingerprint FROM matches WHERE id=?').get(inserted.id).fingerprint;assert.match(fingerprintBefore,/^[a-f0-9]{64}$/);raw.close();
     database=openDatabase(dbPath);
     assert.equal(database.countMatches(event.id),1);
+    assert.equal(Object.hasOwn(database.getMatch(inserted.id),'reportFingerprint'),false);
     assert.deepEqual(database.competition.listStages(event.id).map((stage)=>stage.id),stageIds);
     assert.deepEqual(database.competition.listStages(event.id).map((stage)=>[stage.name,stage.matchesPerGroup,stage.qualifiersPerGroup,stage.resetPoints]),[
       ['Fase de Clasificación',5,5,true],['Gran Final',5,0,true]
@@ -33,7 +35,7 @@ describe('competition database', () => {
     assert.equal(database.competition.listSchedule(event.id).length,5);
     assert.equal(database.competition.listPrizes(event.id).length,4);
     database.close();
-    const raw=new BetterSqlite3(dbPath,{readonly:true}); assert.equal(raw.pragma('integrity_check',{simple:true}),'ok'); raw.close();
+    raw=new BetterSqlite3(dbPath,{readonly:true}); assert.equal(raw.prepare('SELECT report_fingerprint fingerprint FROM matches WHERE id=?').get(inserted.id).fingerprint,fingerprintBefore);assert.equal(raw.pragma('integrity_check',{simple:true}),'ok'); raw.close();
   });
 
   it('migrates a legacy event_hosts table without losing host ids or historical data', () => {
@@ -160,6 +162,7 @@ describe('competition database', () => {
     const tokenHash='c'.repeat(64);const tokenCreatedAt='2026-08-21T19:00:00.000Z';database.competition.setHostReporterToken(event.id,hosts[0].id,{tokenHash,createdAt:tokenCreatedAt});const credentialBefore=database.competition.touchHostReporterToken(event.id,hosts[0].id);
     database.insertMatch({reportId:'historical-scope',players:[{participantId:player.id,name:player.displayName,role:'Crewmate',won:true}]},null,event.id,{stageId:stage.id,groupId:group.id,hostId:hosts[0].id,matchNumber:1});
     database.competition.replaceGroups(stage.id,groups.map((row)=>({id:row.id,name:`${row.name} editado`,position:row.position})));
+    assert.throws(()=>database.competition.replaceHosts(event.id,hosts.map((row)=>({id:row.id,identifier:row.id===hosts[0].id?'HOST_RENAMED':row.identifier,name:row.name,enabled:true}))),(error)=>error.code==='HOST_IDENTIFIER_LOCKED'&&error.status===409);
     database.competition.replaceHosts(event.id,hosts.map((row)=>({id:row.id,identifier:row.identifier,name:`${row.name} editado`,enabled:true})));
     assert.deepEqual(database.competition.listGroups(stage.id).map((row)=>row.id),groups.map((row)=>row.id));
     assert.deepEqual(database.competition.listHosts(event.id).map((row)=>row.id),hosts.map((row)=>row.id));

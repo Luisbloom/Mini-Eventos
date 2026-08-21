@@ -101,6 +101,77 @@ describe('competition API', () => {
     assert.equal(database.competition.getStageLeaderboard(stage.id,groups[0].id).matchCount,2);
   });
 
+  it('accepts only exact authenticated replays after a stage changes state',async()=>{
+    const [host1,host2]=database.competition.listHosts(event.id);
+    const token1=`jtr_${'F'.repeat(43)}`;
+    const token2=`jtr_${'G'.repeat(43)}`;
+    database.competition.setHostReporterToken(event.id,host1.id,{tokenHash:hashReporterToken(token1)});
+    database.competition.setHostReporterToken(event.id,host2.id,{tokenHash:hashReporterToken(token2)});
+    app=createApp({database,logger:{info(){},error(){}},adminToken,reporterToken});
+    const original={...structured('immutable-replay'),hostId:host1.identifier};
+    const created=await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`).send(original).expect(201);
+    const equivalentInstant=await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`)
+      .send({...original,playedAt:'2026-08-21T14:10:00.000Z'})
+      .expect(200);
+    assert.equal(equivalentInstant.body.id,created.body.id);
+    const missingPlayedAt={...original};delete missingPlayedAt.playedAt;
+    await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`)
+      .send(missingPlayedAt)
+      .expect(409)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORT_ID_CONFLICT'));
+
+    database.competition.updateStage(stage.id,{status:'pending'});
+    const replay=await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`).send({...original}).expect(200);
+    assert.equal(replay.body.id,created.body.id);
+    database.competition.updateStage(stage.id,{status:'active'});
+    database.competition.completeStage(stage.id,{force:true});
+    const completedReplay=await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`).send({...original}).expect(200);
+    assert.equal(completedReplay.body.id,created.body.id);
+    database.updateParticipant(participant.id,{status:'disqualified'});
+    const replayAfterParticipantChange=await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`).send({...original}).expect(200);
+    assert.equal(replayAfterParticipantChange.body.id,created.body.id);
+    const host1LastSeen=database.competition.getHost(event.id,host1.id).lastSeenAt;
+
+    await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`)
+      .send({...original,map:'Polus'})
+      .expect(409)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORT_ID_CONFLICT'));
+    assert.equal(database.competition.getHost(event.id,host1.id).lastSeenAt,host1LastSeen);
+
+    await request(app).post('/api/matches').set('Authorization',`Bearer ${token2}`)
+      .send({...original,hostId:host2.identifier})
+      .expect(409)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORT_ID_CONFLICT'));
+    assert.equal(database.competition.getHost(event.id,host2.id).lastSeenAt,null);
+
+    const otherStage=database.competition.listStages(event.id)[1];
+    await request(app).post('/api/matches').set('Authorization',`Bearer ${token1}`)
+      .send({...original,stageId:otherStage.id,groupId:null})
+      .expect(409)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORT_ID_CONFLICT'));
+    assert.equal(database.countMatches(event.id),1);
+  });
+
+  it('replays a request fingerprint without resolving a changed Friend Code again',async()=>{
+    const report={
+      ...structured('friend-code-replay'),
+      players:[{friendCode:'SECRET#1',role:'Crewmate',won:true,tasksCompleted:4,tasksTotal:4}]
+    };
+    const created=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send(report).expect(201);
+    database.updateParticipant(participant.id,{internalFriendCode:'SECRET#NEW'});
+
+    const replay=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send({...report}).expect(200);
+    assert.equal(replay.body.id,created.body.id);
+    await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`)
+      .send({...report,map:'Polus'})
+      .expect(409)
+      .expect((response)=>assert.equal(response.body.error.code,'REPORT_ID_CONFLICT'));
+    assert.equal(JSON.stringify(database.getMatch(created.body.id)).includes('SECRET#1'),false);
+    const adminHistory=await admin('get',`/api/admin/events/${event.id}/matches`).expect(200);
+    assert.equal(JSON.stringify(adminHistory.body).includes('reportFingerprint'),false);
+    assert.equal(JSON.stringify(adminHistory.body).includes('report_fingerprint'),false);
+  });
+
   it('does not attach audit names from competitive ids belonging to another event',async()=>{
     const other=database.createEvent({name:'Evento ajeno',slug:'evento-ajeno',game:'Otro',description:'',modules:{matches:true,competition:true}});
     const foreignStage=database.competition.createStage(other.id,{name:'Fase ajena',type:'group_stage',position:1,matchesPerGroup:1});
@@ -285,6 +356,12 @@ describe('competition API', () => {
     const created=await admin('post',`/api/admin/events/${event.id}/matches`).send({report:{reportId:'manual-legacy',players:[]}}).expect(201);
     assert.equal(created.body.origin,'MANUAL');
     assert.equal(created.body.submittedBy,'ADMIN');
+    await admin('post',`/api/admin/events/${event.id}/matches`)
+      .send({report:{reportId:'manual-partial-context',players:[]},context:{groupId:group.id,matchNumber:5}})
+      .expect(400)
+      .expect((response)=>assert.equal(response.body.error.code,'STAGE_REQUIRED'));
     const scoped=structured('manual-context');const context={stageId:scoped.stageId,groupId:scoped.groupId,hostId:scoped.hostId,matchNumber:4,playedAt:scoped.playedAt};delete scoped.eventId;delete scoped.stageId;delete scoped.groupId;delete scoped.hostId;delete scoped.matchNumber;delete scoped.playedAt;const competitive=await admin('post',`/api/admin/events/${event.id}/matches`).send({report:scoped,context}).expect(201);assert.equal(competitive.body.origin,'MANUAL');assert.equal(competitive.body.stageId,stage.id);assert.equal(competitive.body.groupId,group.id);assert.equal(competitive.body.matchNumber,4);
+    const equivalentContext={...context,playedAt:'2026-08-21T14:10:00.000Z'};const manualReplay=await admin('post',`/api/admin/events/${event.id}/matches`).send({report:scoped,context:equivalentContext}).expect(200);assert.equal(manualReplay.body.id,competitive.body.id);
+    const contextWithoutPlayedAt={...context};delete contextWithoutPlayedAt.playedAt;await admin('post',`/api/admin/events/${event.id}/matches`).send({report:scoped,context:contextWithoutPlayedAt}).expect(409).expect((response)=>assert.equal(response.body.error.code,'REPORT_ID_CONFLICT'));
   });
 });
