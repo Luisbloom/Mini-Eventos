@@ -39,13 +39,93 @@ describe('competition API', () => {
     assert.equal(publicList.body.matches[0].sourceIp,undefined);
     assert.equal(publicList.body.matches[0].hostId,undefined);
     assert.equal(publicList.body.matches[0].submittedBy,undefined);
+    assert.equal(publicList.body.matches[0].stageName,undefined);
+    assert.equal(publicList.body.matches[0].groupName,undefined);
+    assert.equal(publicList.body.matches[0].hostIdentifier,undefined);
+    assert.equal(publicList.body.matches[0].hostName,undefined);
     assert.equal(publicList.body.matches[0].stageId,stage.id);
     assert.equal(publicList.body.matches[0].groupId,group.id);
+    const adminList=await admin('get',`/api/admin/events/${event.id}/matches`).expect(200);
+    assert.equal(adminList.body.matches[0].stageName,stage.name);
+    assert.equal(adminList.body.matches[0].groupName,group.name);
+    assert.equal(adminList.body.matches[0].hostIdentifier,host.identifier);
+    assert.equal(adminList.body.matches[0].hostName,host.name);
     const other=database.createEvent({name:'Otro',slug:'otro',game:'Otro',description:'',modules:{matches:true,competition:true}});
     const wrong={...structured('wrong-event'),eventId:other.id};
     const rejected=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send(wrong);
     assert.equal(rejected.status,403);
     assert.equal(rejected.body.error.code,'REPORTER_HOST_MISMATCH');
+  });
+
+  it('isolates simultaneous hosts and groups while preserving idempotency and one VALID result per slot',async()=>{
+    const secondParticipant=database.createParticipant(event.id,{discord_username:'paralelo',game_name:'Jugador paralelo'});
+    database.updateParticipant(secondParticipant.id,{status:'confirmed'});
+    database.competition.distributeGroups(stage.id);
+    const groups=database.competition.listGroups(stage.id);
+    const hosts=database.competition.listHosts(event.id);
+    const token1=`jtr_${'D'.repeat(43)}`;
+    const token2=`jtr_${'E'.repeat(43)}`;
+    database.competition.setHostReporterToken(event.id,hosts[0].id,{tokenHash:hashReporterToken(token1)});
+    database.competition.setHostReporterToken(event.id,hosts[1].id,{tokenHash:hashReporterToken(token2)});
+    app=createApp({database,logger:{info(){},error(){}},adminToken,reporterToken});
+    const reports=groups.map((currentGroup,index)=>{
+      const member=database.competition.listStageParticipants(stage.id,currentGroup.id)[0];
+      return {
+        ...structured(index===0?'parallel-group-a':'parallel-group-b'),
+        groupId:currentGroup.id,
+        hostId:hosts[index].identifier,
+        players:[{participantId:member.participantId,role:'Crewmate',won:true}]
+      };
+    });
+    const first=await Promise.all(reports.map((report,index)=>request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${index===0?token1:token2}`).send(report)));
+    assert.deepEqual(first.map((response)=>response.status).sort(),[201,201]);
+    assert.equal(database.countMatches(event.id),2);
+    assert.equal(database.competition.getStageLeaderboard(stage.id,groups[0].id).matchCount,1);
+    assert.equal(database.competition.getStageLeaderboard(stage.id,groups[1].id).matchCount,1);
+
+    const replay=await Promise.all(reports.map((report,index)=>request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${index===0?token1:token2}`).send(report)));
+    assert.deepEqual(replay.map((response)=>response.status),[200,200]);
+    assert.deepEqual(replay.map((response)=>response.body.id),first.map((response)=>response.body.id));
+    assert.equal(database.countMatches(event.id),2);
+
+    const collisions=['parallel-slot-first','parallel-slot-second'].map((reportId)=>({
+      ...reports[0],reportId,matchNumber:2
+    }));
+    const collisionResponses=await Promise.all(collisions.map((report)=>request(app).post('/api/matches')
+      .set('Authorization',`Bearer ${token1}`).send(report)));
+    assert.deepEqual(collisionResponses.map((response)=>response.status).sort(),[201,409]);
+    assert.equal(collisionResponses.find((response)=>response.status===409).body.error.code,'MATCH_SLOT_OCCUPIED');
+    assert.equal(database.countMatches(event.id),3);
+    assert.equal(database.competition.getStageLeaderboard(stage.id,groups[0].id).matchCount,2);
+  });
+
+  it('does not attach audit names from competitive ids belonging to another event',async()=>{
+    const other=database.createEvent({name:'Evento ajeno',slug:'evento-ajeno',game:'Otro',description:'',modules:{matches:true,competition:true}});
+    const foreignStage=database.competition.createStage(other.id,{name:'Fase ajena',type:'group_stage',position:1,matchesPerGroup:1});
+    const foreignGroup=database.competition.replaceGroups(foreignStage.id,[{name:'Grupo ajeno',position:1}])[0];
+    const foreignHost=database.competition.replaceHosts(other.id,[{name:'Host ajeno',identifier:'FOREIGN_HOST',enabled:true}])[0];
+    database.insertMatch({reportId:'cross-event-audit',players:[]},null,event.id,{
+      stageId:foreignStage.id,
+      groupId:foreignGroup.id,
+      hostId:foreignHost.id,
+      matchNumber:1,
+      origin:'SIMULATOR'
+    });
+
+    const adminList=await admin('get',`/api/admin/events/${event.id}/matches`).expect(200);
+    const crossed=adminList.body.matches.find((match)=>match.report.reportId==='cross-event-audit');
+    assert.ok(crossed);
+    assert.equal(crossed.stageName,null);
+    assert.equal(crossed.groupName,null);
+    assert.equal(crossed.hostIdentifier,null);
+    assert.equal(crossed.hostName,null);
+    const publicList=await request(app).get(`/api/events/${event.slug}/matches`).expect(200);
+    assert.equal(JSON.stringify(publicList.body).includes('Fase ajena'),false);
+    assert.equal(JSON.stringify(publicList.body).includes('Grupo ajeno'),false);
+    assert.equal(JSON.stringify(publicList.body).includes('Host ajeno'),false);
+    assert.equal(JSON.stringify(publicList.body).includes('FOREIGN_HOST'),false);
   });
 
   it('authenticates each Reporter host independently and updates only successful activity', async()=>{

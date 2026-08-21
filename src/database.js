@@ -36,6 +36,10 @@ function toMatch(row) {
     voidReason: row.void_reason ?? null,
     origin: row.origin ?? 'REPORTER',
     submittedBy: row.submitted_by ?? null,
+    stageName: row.stage_name ?? null,
+    groupName: row.group_name ?? null,
+    hostIdentifier: row.host_identifier ?? null,
+    hostName: row.host_name ?? null,
     report: JSON.parse(row.payload_json)
   };
 }
@@ -284,7 +288,12 @@ function openDatabase(dbPath) {
   const competitionDefaultId = Number(JSON.parse(
     connection.prepare("SELECT value_json FROM app_settings WHERE setting_key='default_event_id'").get().value_json
   ));
-  migrateCompetition(connection, competitionDefaultId);
+  try {
+    migrateCompetition(connection, competitionDefaultId);
+  } catch (error) {
+    if (connection.open) connection.close();
+    throw error;
+  }
 
   const EVENT_SELECT = `SELECT e.*,
     (SELECT COUNT(*) FROM event_participants p WHERE p.event_id=e.id AND p.status IN ('pending','confirmed')) AS participant_count
@@ -321,7 +330,16 @@ function openDatabase(dbPath) {
     JOIN matches m ON m.id=r.match_id WHERE r.event_id=? AND r.report_id=?`);
   const insertMatchReportIdStatement = connection.prepare('INSERT INTO match_report_ids (event_id,report_id,match_id) VALUES (?,?,?)');
   const getMatchStatement = connection.prepare('SELECT * FROM matches WHERE id=?');
-  const listMatchesStatement = connection.prepare('SELECT * FROM matches WHERE event_id=? ORDER BY id DESC LIMIT ?');
+  const listMatchesStatement = connection.prepare(`SELECT m.*,
+    s.name AS stage_name,
+    g.name AS group_name,
+    h.identifier AS host_identifier,
+    h.name AS host_name
+    FROM matches m
+    LEFT JOIN event_stages s ON s.id=m.stage_id AND s.event_id=m.event_id
+    LEFT JOIN event_groups g ON g.id=m.group_id AND g.event_id=m.event_id AND g.stage_id=m.stage_id
+    LEFT JOIN event_hosts h ON h.id=m.host_id AND h.event_id=m.event_id
+    WHERE m.event_id=? ORDER BY m.id DESC LIMIT ?`);
   const listAllMatchesStatement = connection.prepare('SELECT * FROM matches WHERE event_id=? ORDER BY id ASC');
   const countMatchesStatement = connection.prepare('SELECT COUNT(*) total FROM matches WHERE event_id=?');
   const deleteMatchStatement = connection.prepare('DELETE FROM matches WHERE id=? AND event_id=?');
@@ -383,18 +401,31 @@ function openDatabase(dbPath) {
       if (existing) return { ...toMatch(existing), duplicate: true };
     }
     const normalizedReport = reportId ? { ...report, reportId } : report;
-    const result = insertMatchStatement.run({
-      eventId,
-      sourceIp,
-      payloadJson: JSON.stringify(normalizedReport),
-      stageId: context.stageId || null,
-      groupId: context.groupId || null,
-      hostId: context.hostId || null,
-      matchNumber: context.matchNumber || null,
-      playedAt: context.playedAt || null,
-      origin: context.origin || 'REPORTER',
-      submittedBy: context.submittedBy || null
-    });
+    let result;
+    try {
+      result = insertMatchStatement.run({
+        eventId,
+        sourceIp,
+        payloadJson: JSON.stringify(normalizedReport),
+        stageId: context.stageId || null,
+        groupId: context.groupId || null,
+        hostId: context.hostId || null,
+        matchNumber: context.matchNumber || null,
+        playedAt: context.playedAt || null,
+        origin: context.origin || 'REPORTER',
+        submittedBy: context.submittedBy || null
+      });
+    } catch (error) {
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' && String(error.message).includes('ux_matches_competitive_slot')) {
+        const occupied = new EventValidationError(
+          'Ese número de partida ya tiene un resultado válido. Anúlalo antes de reenviarlo.',
+          'MATCH_SLOT_OCCUPIED',
+          409
+        );
+        throw occupied;
+      }
+      throw error;
+    }
     const matchId = Number(result.lastInsertRowid);
     if (reportId) insertMatchReportIdStatement.run(eventId, reportId, matchId);
     return { ...toMatch(getMatchStatement.get(matchId)), duplicate: false };

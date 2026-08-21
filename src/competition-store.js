@@ -42,6 +42,41 @@ function migrateParticipantStatuses(connection) {
   `);
 }
 
+function ensureValidMatchSlotIndex(connection) {
+  const existing = connection.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='ux_matches_competitive_slot'").get();
+  if (existing) return;
+  const duplicate = connection.prepare(`
+    SELECT event_id, stage_id, group_id, match_number, COUNT(*) AS total
+    FROM matches
+    WHERE match_status='VALID' AND stage_id IS NOT NULL AND match_number IS NOT NULL
+    GROUP BY event_id, stage_id, COALESCE(group_id, 0), match_number
+    HAVING COUNT(*) > 1
+    LIMIT 1
+  `).get();
+  if (duplicate) {
+    const group = duplicate.group_id === null ? 'sin grupo' : `grupo ${duplicate.group_id}`;
+    throw new CompetitionError(
+      `No se puede crear la protección de slots: hay ${duplicate.total} resultados VALID para el evento ${duplicate.event_id}, fase ${duplicate.stage_id}, ${group}, partida ${duplicate.match_number}. Anula los duplicados antes de reiniciar.`,
+      'MATCH_SLOT_DUPLICATES_EXIST',
+      500
+    );
+  }
+  try {
+    connection.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_matches_competitive_slot
+      ON matches(event_id,stage_id,COALESCE(group_id,0),match_number)
+      WHERE stage_id IS NOT NULL AND match_status='VALID';
+    `);
+  } catch (error) {
+    if (error.code !== 'SQLITE_CONSTRAINT_UNIQUE') throw error;
+    throw new CompetitionError(
+      'No se puede crear la protección de slots porque existen resultados VALID duplicados. Anula los duplicados antes de reiniciar.',
+      'MATCH_SLOT_DUPLICATES_EXIST',
+      500
+    );
+  }
+}
+
 function migrateCompetition(connection, defaultEventId) {
   connection.transaction(() => {
     migrateParticipantStatuses(connection);
@@ -145,12 +180,12 @@ function migrateCompetition(connection, defaultEventId) {
         FOREIGN KEY(group_id) REFERENCES event_groups(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_matches_competition ON matches(event_id,stage_id,group_id,match_status,match_number);
-      CREATE UNIQUE INDEX IF NOT EXISTS ux_matches_competitive_slot ON matches(event_id,stage_id,COALESCE(group_id,0),match_number) WHERE stage_id IS NOT NULL AND match_status='VALID';
       CREATE INDEX IF NOT EXISTS idx_stage_participants_group ON stage_participants(stage_id,group_id,competitive_status);
       CREATE INDEX IF NOT EXISTS idx_schedule_event_position ON event_schedule(event_id,position);
       CREATE INDEX IF NOT EXISTS idx_prizes_event_position ON event_prizes(event_id,position);
       CREATE UNIQUE INDEX IF NOT EXISTS ux_tie_resolution_scope ON tie_resolutions(stage_id,COALESCE(group_id,0),higher_participant_id,lower_participant_id);
     `);
+    ensureValidMatchSlotIndex(connection);
     // SQLite no permite añadir con ALTER TABLE un default basado en strftime.
     // Las tablas nuevas usan el default anterior; las antiguas se rellenan justo después.
     addColumn(connection, 'event_hosts', "created_at TEXT NOT NULL DEFAULT ''");
