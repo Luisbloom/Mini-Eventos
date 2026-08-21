@@ -77,6 +77,17 @@ describe('config', () => {
     assert.equal(config.reporterPrivateUrl, 'https://mini-eventos.example.ts.net:8443');
   });
 
+  it('preserves the deployed private Reporter origin on Tailscale Serve 10000', () => {
+    const config = loadConfig({
+      REPORTER_PRIVATE_URL: 'https://mini-eventos-jartiland.tail9d0334.ts.net:10000'
+    }, projectRoot);
+
+    assert.equal(
+      config.reporterPrivateUrl,
+      'https://mini-eventos-jartiland.tail9d0334.ts.net:10000'
+    );
+  });
+
   for (const url of [
     'https://host-user@mini-eventos.example.ts.net',
     'https://host-user:host-password@mini-eventos.example.ts.net'

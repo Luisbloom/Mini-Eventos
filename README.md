@@ -200,7 +200,25 @@ Los PC `HOST_1` y `HOST_2` sí deben iniciar sesión en la tailnet autorizada. E
 - Servidor Reporter: `https://mini-eventos-jartiland.tail9d0334.ts.net:10000`
 - Receptor: `https://mini-eventos-jartiland.tail9d0334.ts.net:10000/api/matches`
 
-El puerto queda encapsulado en el `.ini` descargado desde `/admin`: HOST_1 y HOST_2 no tienen que recordarlo ni escribir la URL manualmente.
+El puerto queda incluido en el `.ini` descargado desde `/admin`: HOST_1 y HOST_2 no tienen que recordarlo ni escribir la URL manualmente.
+
+### Preparación de HOST_1 y HOST_2 en cuatro pasos
+
+El administrador repite exactamente este proceso para cada PC:
+
+1. En el PC instala Tailscale, inicia sesión en la tailnet autorizada y comprueba `tailscale status`.
+2. En la web pública abre `/admin`, entra con `ADMIN_TOKEN`, selecciona el evento y abre **PARTIDAS / REPORTER**.
+3. En la tarjeta correcta pulsa **CREAR Y DESCARGAR .INI**. Para una credencial existente el botón se llama **ROTAR Y DESCARGAR .INI** y anula inmediatamente la anterior.
+4. Entrega por un canal privado `HOST_1-reporter.ini` únicamente al primer responsable y `HOST_2-reporter.ini` únicamente al segundo. Cada uno guarda su archivo junto al futuro Tournament Reporter.
+
+La descarga es la única ocasión en la que la aplicación devuelve el token en claro. SQLite conserva solamente su hash SHA-256; las lecturas posteriores de administración tampoco pueden recuperar el secreto. No añadas `TOKEN_HOST_1`, `TOKEN_HOST_2` ni variables parecidas a `.env`: no existen. `REPORTER_PRIVATE_URL` sólo permite que el servidor escriba la URL correcta dentro de cada `.ini`.
+
+| PC | Archivo privado | Identificador incluido | Grupo inicial |
+| --- | --- | --- | --- |
+| Primer host | `HOST_1-reporter.ini` | `HOST_1` | Grupo A |
+| Segundo host | `HOST_2-reporter.ini` | `HOST_2` | Grupo B |
+
+No abras el `.ini` durante el directo, no lo muestres en pantalla y no copies su contenido en chats. Si se pierde o se comparte, pulsa **REVOCAR** o **ROTAR Y DESCARGAR .INI** sólo en la tarjeta afectada; el otro host continúa funcionando.
 
 Desde PowerShell en Windows:
 
@@ -211,55 +229,199 @@ Invoke-RestMethod -Uri 'https://mini-eventos-jartiland.tail9d0334.ts.net:10000/a
 
 Si falla, revisar en este orden: `systemd` y salud local en Debian, `tailscale serve status`, sesión de Tailscale del PC y Grants/ACL de la tailnet. No abras puertos como solución.
 
-## 10. Probar `POST /api/matches` desde Windows
+## 10. Prueba completa de cada host desde Windows
 
-PowerShell convierte el objeto a JSON y conserva estructuras anidadas:
+Esta prueba crea un resultado real y altera el leaderboard. Úsala en un evento de prueba o anula después la partida desde `/admin`. Antes de ejecutarla deben existir una fase de grupos **En curso**, grupos repartidos y bloqueados, al menos un participante confirmado en el grupo y un número de partida libre.
+
+No pegues el token en PowerShell. El bloque lee el `.ini` local sin mostrarlo y obtiene de la web los `eventId`, `stageId`, `groupId` y `participantId` reales. Sólo hay que ajustar las dos primeras líneas:
+
+- en el primer PC: `$configPath = '.\HOST_1-reporter.ini'` y `$groupName = 'Grupo A'`;
+- en el segundo PC: `$configPath = '.\HOST_2-reporter.ini'` y `$groupName = 'Grupo B'`.
 
 ```powershell
+$configPath = '.\HOST_1-reporter.ini'
+$groupName = 'Grupo A'
+$eventSlug = 'among-us-agosto-2026'
+
+$config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-StringData
+$serverUrl = $config.ServerUrl.TrimEnd('/')
+$hostId = $config.HostId
+$reporterToken = $config.ReporterToken
+
+if ($serverUrl -ne 'https://mini-eventos-jartiland.tail9d0334.ts.net:10000') {
+  throw "ServerUrl inesperada en $configPath"
+}
+if ($hostId -notin @('HOST_1', 'HOST_2') -or -not $reporterToken.StartsWith('jtr_')) {
+  throw "Configuración Reporter inválida en $configPath"
+}
+
+tailscale status
+Invoke-RestMethod -Uri "$serverUrl/api/health"
+
+$competition = Invoke-RestMethod -Uri "$serverUrl/api/events/$eventSlug/competition"
+$stage = @($competition.stages | Where-Object {
+  $_.status -eq 'active' -and $_.type -eq 'group_stage'
+}) | Select-Object -First 1
+if ($null -eq $stage) { throw 'No hay una fase de grupos En curso.' }
+
+$group = @($stage.groups | Where-Object { $_.name -eq $groupName }) | Select-Object -First 1
+if ($null -eq $group) { throw "No existe $groupName en la fase activa." }
+
+$player = @($stage.participants | Where-Object {
+  [int]$_.groupId -eq [int]$group.id -and
+  $_.registrationStatus -eq 'confirmed' -and
+  $_.competitiveStatus -ne 'disqualified'
+}) | Select-Object -First 1
+if ($null -eq $player) { throw "$groupName no tiene participantes confirmados." }
+
+$eventId = [int]$stage.eventId
+$stageId = [int]$stage.id
+$groupId = [int]$group.id
+$participantId = [int]$player.participantId
+
+$history = Invoke-RestMethod -Uri "$serverUrl/api/events/$eventSlug/matches?limit=100"
+$occupied = @($history.matches | Where-Object {
+  [int]$_.stageId -eq $stageId -and
+  [int]$_.groupId -eq $groupId -and
+  $_.status -eq 'VALID'
+} | ForEach-Object { [int]$_.matchNumber })
+$matchNumber = @(1..([int]$stage.matchesPerGroup) | Where-Object { $_ -notin $occupied }) | Select-Object -First 1
+if ($null -eq $matchNumber) { throw "$groupName no tiene números de partida libres." }
+
+$runId = [guid]::NewGuid().ToString('N')
 $report = @{
-  eventSlug = 'among-us-agosto-2026'
-  reportId = 'prueba-windows-001'
+  reportId = '{0}-STAGE-{1}-GROUP-{2}-MATCH-{3:D2}-{4}' -f $hostId, $stageId, $groupId, $matchNumber, $runId
+  eventId = $eventId
+  stageId = $stageId
+  groupId = $groupId
+  hostId = $hostId
+  matchNumber = [int]$matchNumber
+  playedAt = (Get-Date).ToString('o')
   map = 'The Skeld'
-  winner = 'crewmates'
+  winnerTeam = 'crew'
   players = @(
-    @{ name = 'Rojo'; role = 'Crewmate' },
-    @{ name = 'Azul'; role = 'Impostor' }
-  )
-} | ConvertTo-Json -Depth 10
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri 'https://mini-eventos-jartiland.tail9d0334.ts.net:10000/api/matches' `
-  -Headers @{ Authorization = 'Bearer PEGA_AQUI_REPORTER_TOKEN' } `
-  -ContentType 'application/json' `
-  -Body $report
-
-Invoke-RestMethod -Uri 'https://mini-eventos-jartiland.tail9d0334.ts.net:8443/api/matches'
-```
-
-El primer `POST` correcto responde HTTP `201` y asigna un `id`. Si se reintenta el mismo `reportId` dentro del evento, responde `200` con el mismo `id` y no duplica la clasificación. `eventSlug` selecciona el evento y no se guarda dentro del payload; si se omite, la petición se asocia al Among Us migrado por compatibilidad. También se puede publicar directamente en `POST /api/events/among-us-agosto-2026/matches`.
-
-Las lecturas públicas de partidas sólo devuelven un resumen permitido (`reportId`, mapa, modo, ganador, duración y número de jugadores); nunca incluyen IP de origen ni el payload completo. El informe original sólo se consulta con `ADMIN_TOKEN` desde administración.
-
-Para alimentar el leaderboard, cada informe puede incluir `players` con esta forma:
-
-```json
-{
-  "reportId": "ronda-001",
-  "players": [
-    {
-      "playerId": "luna",
-      "name": "Lunatica",
-      "color": "purple",
-      "points": 7,
-      "won": true,
-      "kills": 3
+    @{
+      participantId = $participantId
+      role = 'Crewmate'
+      won = $true
+      kills = 0
+      tasksCompleted = 0
+      tasksTotal = 0
+      alive = $true
     }
-  ]
+  )
+}
+
+function Send-ReporterMatch {
+  param([string]$Token, [hashtable]$MatchReport)
+  try {
+    $response = Invoke-WebRequest `
+      -UseBasicParsing `
+      -Method Post `
+      -Uri "$serverUrl/api/matches" `
+      -Headers @{ Authorization = "Bearer $Token" } `
+      -ContentType 'application/json' `
+      -Body ($MatchReport | ConvertTo-Json -Depth 10)
+    [pscustomobject]@{
+      Status = [int]$response.StatusCode
+      Body = $response.Content | ConvertFrom-Json
+    }
+  }
+  catch {
+    $errorRecord = $_
+    $errorResponse = $errorRecord.Exception.Response
+    $status = if ($null -ne $errorResponse) {
+      [int]$errorResponse.StatusCode
+    } else { 0 }
+
+    $errorText = $errorRecord.ErrorDetails.Message
+    if (-not $errorText -and $null -ne $errorResponse -and
+        $errorResponse.PSObject.Methods.Name -contains 'GetResponseStream') {
+      $errorStream = $null
+      $errorReader = $null
+      try {
+        $errorStream = $errorResponse.GetResponseStream()
+        if ($null -ne $errorStream) {
+          $errorReader = [System.IO.StreamReader]::new($errorStream)
+          $errorText = $errorReader.ReadToEnd()
+        }
+      }
+      finally {
+        if ($null -ne $errorReader) { $errorReader.Dispose() }
+        if ($null -ne $errorStream) { $errorStream.Dispose() }
+      }
+    }
+
+    if ($errorText) {
+      try {
+        $body = $errorText | ConvertFrom-Json
+      }
+      catch {
+        $body = [pscustomobject]@{
+          error = [pscustomobject]@{ code = 'UNPARSEABLE_ERROR'; message = $errorText }
+        }
+      }
+    } else {
+      $body = [pscustomobject]@{
+        error = [pscustomobject]@{ code = 'HTTP_ERROR'; message = $errorRecord.Exception.Message }
+      }
+    }
+    [pscustomobject]@{ Status = $status; Body = $body }
+  }
+}
+
+$first = Send-ReporterMatch -Token $reporterToken -MatchReport $report
+$first | Select-Object Status, @{ Name = 'MatchId'; Expression = { $_.Body.id } }, @{ Name = 'Error'; Expression = { $_.Body.error.code } }
+
+$replay = Send-ReporterMatch -Token $reporterToken -MatchReport $report
+$replay | Select-Object Status, @{ Name = 'MatchId'; Expression = { $_.Body.id } }, @{ Name = 'Error'; Expression = { $_.Body.error.code } }
+
+if ($first.Status -ne 201 -or $replay.Status -ne 200 -or $first.Body.id -ne $replay.Body.id) {
+  throw 'La creación o el replay idempotente no dieron el resultado esperado.'
 }
 ```
 
-`points` también puede llamarse `score`. Si no llega ninguno de los dos, `src/services/scoring.js` calcula el resultado con las reglas reales: victoria tripulante +4, victoria impostor +5, cada kill de impostor +1 hasta un máximo de +3 y todas las tareas +1. La derrota tiene base 0, pero conserva los bonus de acciones válidas. La clasificación se ordena por puntos, victorias, victorias como impostor y kills. `playerId` o `id` mantiene la identidad aunque cambie el nombre; si falta, se utiliza el nombre normalizado. El resultado agregado se puede consultar en:
+El primer envío debe mostrar `201` y un `MatchId`. El replay exacto debe mostrar `200` y el mismo `MatchId`: el reintento no crea otra partida ni vuelve a puntuar. Cada ejecución genera un `reportId` nuevo con un GUID, así que una prueba antigua que después quedase `VOID` no se confundirá con el replay actual. Cuando ambos PC repiten el bloque con sus propios `.ini` y grupos, HOST_1 alimenta Grupo A y HOST_2 Grupo B sin compartir token ni estado.
+
+### Comprobar una colisión de slot
+
+Conservando las variables de la prueba anterior, este bloque cambia únicamente `reportId` e intenta ocupar la misma fase, grupo y número de partida:
+
+```powershell
+$collision = $report.Clone()
+$collision.reportId = "$($report.reportId)-OTRO"
+$conflict = Send-ReporterMatch -Token $reporterToken -MatchReport $collision
+$conflict | Select-Object Status, @{ Name = 'Error'; Expression = { $_.Body.error.code } }
+```
+
+Debe responder `409` con `MATCH_SLOT_OCCUPIED`. No es un fallo de red: primero hay que anular desde `/admin` el resultado `VALID` de ese slot o escoger otro número libre.
+
+### Revocar sólo HOST_2 y verificar continuidad
+
+1. Deja abierta la consola de HOST_1 después de su prueba correcta.
+2. En `/admin`, pulsa **REVOCAR** únicamente en la tarjeta `HOST_2`.
+3. En HOST_2 ejecuta estas dos líneas. Deben mostrar `401` y `REPORTER_TOKEN_INVALID`:
+
+   ```powershell
+   $afterRevoke = Send-ReporterMatch -Token $reporterToken -MatchReport $report
+   $afterRevoke | Select-Object Status, @{ Name = 'Error'; Expression = { $_.Body.error.code } }
+   ```
+
+4. En HOST_1 repite su `$replay = Send-ReporterMatch -Token $reporterToken -MatchReport $report`. Debe seguir devolviendo `200` y el mismo `MatchId`.
+
+Si en lugar de revocar se cambia el estado de HOST_2 a **Desactivado** y se guardan los hosts, su token seguirá almacenado pero el envío devolverá `403` con `REPORTER_HOST_DISABLED`. Al reactivarlo vuelve a ser utilizable; al revocarlo deja de serlo definitivamente y hay que descargar un `.ini` nuevo.
+
+### Interpretar las respuestas
+
+| HTTP | Significado operativo |
+| --- | --- |
+| `201` | Resultado nuevo aceptado y puntuado. |
+| `200` | Replay idempotente: ya existía el mismo `reportId`; devuelve la misma partida sin duplicarla. |
+| `401` | Token ausente, incorrecto o revocado. Genera un `.ini` nuevo sólo para ese host. |
+| `403` | La credencial no corresponde al `hostId` enviado o el host está desactivado. No intercambies los `.ini`. |
+| `409` | El ámbito competitivo no admite el resultado, normalmente porque el slot ya está ocupado, la fase no está activa o existe otro conflicto de estado. Lee `Body.error.code` antes de corregir nada. |
+
+Las lecturas públicas de partidas sólo devuelven un resumen permitido; nunca incluyen el token, la IP de origen ni el payload completo. La clasificación pública puede consultarse en:
 
 ```text
 https://mini-eventos-jartiland.tail9d0334.ts.net:8443/api/events/among-us-agosto-2026/leaderboard
