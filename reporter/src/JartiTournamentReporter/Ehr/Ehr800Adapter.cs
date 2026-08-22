@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using EHR;
 using Jartiland.TournamentReporter.Logging;
 using Jartiland.TournamentReporter.Model;
@@ -37,12 +38,45 @@ namespace Jartiland.TournamentReporter.Ehr
             }
         }
 
+        /// <summary>
+        /// Único uso de reflection del proyecto, y por un motivo concreto:
+        /// <c>Main.PluginVersion</c>, <c>Main.TestBuildNumber</c> y
+        /// <c>Main.SupportedAUVersion</c> son <c>const</c>, de modo que el
+        /// compilador los incrusta en esta DLL al compilarla. Leerlos
+        /// normalmente devolvería la versión con la que se compiló el Reporter y
+        /// no la que hay instalada, que es justo lo que queremos comprobar.
+        /// <c>Main.Version</c> sí es <c>static readonly</c> y se lee directo.
+        /// </summary>
         public EhrVersionInfo GetVersionInfo() => new EhrVersionInfo
         {
-            PluginVersion = Main.PluginVersion,
-            TestBuildNumber = Main.TestBuildNumber,
-            SupportedAmongUsVersion = Main.SupportedAUVersion
+            PluginVersion = RuntimeVersion(),
+            TestBuildNumber = Convert.ToInt32(RuntimeConstant(nameof(Main.TestBuildNumber)) ?? 0),
+            SupportedAmongUsVersion = RuntimeConstant(nameof(Main.SupportedAUVersion)) as string
         };
+
+        private static string RuntimeVersion()
+        {
+            try
+            {
+                var version = Main.Version;
+                if (version != null) return $"{version.Major}.{version.Minor}.{version.Build}";
+            }
+            catch (Exception) { /* caemos a la constante incrustada */ }
+            return RuntimeConstant(nameof(Main.PluginVersion)) as string ?? Main.PluginVersion;
+        }
+
+        private static object RuntimeConstant(string name)
+        {
+            try
+            {
+                var field = typeof(Main).GetField(name, BindingFlags.Public | BindingFlags.Static);
+                return field != null && field.IsLiteral ? field.GetRawConstantValue() : field?.GetValue(null);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
 
         public bool IsGameFinished() =>
             GameStates.IsEnded && CustomWinnerHolder.WinnerTeam != CustomWinner.Default;
@@ -107,6 +141,7 @@ namespace Jartiland.TournamentReporter.Ehr
         public EhrGameSnapshot CaptureSnapshot()
         {
             var winner = GetWinner();
+            var version = GetVersionInfo();
             var winnerIds = new HashSet<byte>(winner.WinnerIds);
             var snapshot = new EhrGameSnapshot
             {
@@ -115,9 +150,9 @@ namespace Jartiland.TournamentReporter.Ehr
                 GameMode = Options.CurrentGameMode.ToString(),
                 Map = SafeMapName(),
                 DurationSeconds = Math.Max(0, (int)(DateTime.UtcNow - SessionStartedUtc).TotalSeconds),
-                EhrVersion = Main.PluginVersion,
-                EhrTestBuild = Main.TestBuildNumber,
-                AmongUsVersion = Main.SupportedAUVersion
+                EhrVersion = version.PluginVersion,
+                EhrTestBuild = version.TestBuildNumber,
+                AmongUsVersion = version.SupportedAmongUsVersion
             };
 
             foreach (var entry in Main.PlayerStates.OrderBy(pair => pair.Key))

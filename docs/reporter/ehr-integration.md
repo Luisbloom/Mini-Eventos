@@ -54,7 +54,17 @@ API de EHR, ese archivo debería ser lo único que haya que revisar.
 Todos son públicos, así que el proyecto referencia `EHR.dll` y el compilador
 verifica cada nombre. **No se usa reflection para leer datos.**
 
-La única excepción es el objetivo del parche de final: `EHR.GameEndChecker` es
+Hay dos excepciones, ambas justificadas.
+
+La primera son las versiones. `Main.PluginVersion`, `Main.TestBuildNumber` y
+`Main.SupportedAUVersion` son `const`, así que el compilador de C# las incrusta
+en nuestra DLL al compilar: leerlas de la forma normal devolvería la versión
+contra la que se compiló el Reporter, no la que el jugador tiene instalada,
+que es justamente lo que queremos comprobar. `Main.Version` sí es
+`static readonly` y se lee directo; para las otras dos se usa
+`GetRawConstantValue()` sobre el `EHR.dll` cargado.
+
+La segunda es el objetivo del parche de final: `EHR.GameEndChecker` es
 `internal static`, así que no se puede nombrar desde otro ensamblado y se
 localiza con `AccessTools.TypeByName("EHR.GameEndChecker")`. Si esa clase se
 renombra, el Reporter lo detecta al arrancar y lo dice:

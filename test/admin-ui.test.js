@@ -37,6 +37,21 @@ describe('panel de hosts y auditoría', () => {
     assert.doesNotMatch(script, /dataset\.(?:token|reporterToken)|textContent\s*=\s*data\.token/);
   });
 
+  it('permite asignar fase y grupo a cada host y muestra si podrá reportar', () => {
+    const script = fs.readFileSync(path.join(publicDirectory, 'admin-competition.js'), 'utf8');
+
+    assert.match(script, /hosts\/\$\{host\.id\}\/assignment/);
+    assert.match(script, /method:'PUT'/);
+    assert.match(script, /FASE QUE CUBRE ESTE PC/);
+    assert.match(script, /ASIGNAR FASE/);
+    assert.match(script, /host\.assignedStageId/);
+    assert.match(script, /host\.assignedGroupId/);
+    assert.match(script, /context\.reportingEnabled/);
+    // La tarjeta refleja el motivo que da el backend en vez de inventarse uno.
+    assert.match(script, /No enviará resultados: \$\{context\.message\}/);
+    assert.match(script, /renderHostAssignment\(host\)/);
+  });
+
   it('presenta la auditoría con nombres humanos y sin datos sensibles', () => {
     const script = fs.readFileSync(path.join(publicDirectory, 'admin.js'), 'utf8');
 
