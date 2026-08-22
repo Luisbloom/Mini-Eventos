@@ -1,0 +1,54 @@
+{
+  "event": {
+    "id": 1,
+    "slug": "among-us-agosto-2026",
+    "name": "Torneo Among Us"
+  },
+  "host": {
+    "id": 1,
+    "identifier": "HOST_1",
+    "name": "Host Grupo A",
+    "enabled": true
+  },
+  "stage": {
+    "id": 1,
+    "name": "Fase de Clasificación",
+    "type": "group_stage",
+    "status": "active",
+    "matchesPerGroup": 5
+  },
+  "group": {
+    "id": 1,
+    "name": "Grupo A"
+  },
+  "matchNumber": 1,
+  "occupiedMatchNumbers": [],
+  "roster": [
+    {
+      "participantId": 1,
+      "displayName": "Luis",
+      "friendCodeFingerprint": "0d816839e42c1b55c3df2d1fe1926828a75070323f6785d05a12e3696167778e"
+    },
+    {
+      "participantId": 2,
+      "displayName": "Marta",
+      "friendCodeFingerprint": "d7465218da8482b7bf76ea52d8da898051d014726ed33554776cf102ba6d29b5"
+    },
+    {
+      "participantId": 3,
+      "displayName": "Nacho",
+      "friendCodeFingerprint": "23cff33782a2251dd2b596c5077cf19134becb30c76b06b149fe98d773607ee1"
+    },
+    {
+      "participantId": 4,
+      "displayName": "Sara",
+      "friendCodeFingerprint": "9362d6a2d393ead0e1a758f4628f9182e5ec84d8709bd9a90162b547ef0c8a2b"
+    }
+  ],
+  "rosterSize": 4,
+  "rosterWithoutFriendCode": 0,
+  "submitPath": "/api/events/among-us-agosto-2026/matches",
+  "reportingEnabled": true,
+  "reason": null,
+  "message": "HOST_1 · Fase de Clasificación · Grupo A · partida 1"
+}

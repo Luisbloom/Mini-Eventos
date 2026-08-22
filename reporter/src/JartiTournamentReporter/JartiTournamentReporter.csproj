@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Rutas locales. Copia local.props.example a reporter/local.props y ajústalas:
+        AmongUsPath      carpeta de Among Us (para localizar EHR.dll y copiar el resultado)
+        EhrAssemblyPath  ruta explícita a EHR.dll si no está bajo AmongUsPath
+    -->
+    <PropertyGroup>
+        <AmongUsPath></AmongUsPath>
+        <EhrAssemblyPath></EhrAssemblyPath>
+    </PropertyGroup>
+    <Import Project="../../local.props" Condition="Exists('../../local.props')" />
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <AssemblyName>JartiTournamentReporter</AssemblyName>
+        <RootNamespace>Jartiland.TournamentReporter</RootNamespace>
+        <LangVersion>latest</LangVersion>
+        <Nullable>disable</Nullable>
+        <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+        <Version>0.1.0</Version>
+        <Description>Puente entre EHR y el backend competitivo de Mini Eventos Jartiland</Description>
+        <Authors>Jartiland</Authors>
+        <RepositoryUrl>https://github.com/Luisbloom/Mini-Eventos</RepositoryUrl>
+        <Deterministic>true</Deterministic>
+        <DebugType>portable</DebugType>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    </PropertyGroup>
+
+    <!-- La lógica pura vive en ../Core y se compila igual aquí y en los tests. -->
+    <ItemGroup>
+        <Compile Include="../Core/**/*.cs" LinkBase="Core" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AmongUs.GameLibs.Steam" Version="2026.8.18" PrivateAssets="all" />
+        <PackageReference Include="BepInEx.IL2CPP.MSBuild" Version="2.1.0-rc.1" PrivateAssets="all" />
+        <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.735" Private="false" ExcludeAssets="runtime;native" />
+    </ItemGroup>
+
+    <PropertyGroup>
+        <ResolvedEhrAssemblyPath Condition="'$(EhrAssemblyPath)' != ''">$(EhrAssemblyPath)</ResolvedEhrAssemblyPath>
+        <ResolvedEhrAssemblyPath Condition="'$(ResolvedEhrAssemblyPath)' == '' And Exists('$(MSBuildThisFileDirectory)../../lib/EHR.dll')">$(MSBuildThisFileDirectory)../../lib/EHR.dll</ResolvedEhrAssemblyPath>
+        <ResolvedEhrAssemblyPath Condition="'$(ResolvedEhrAssemblyPath)' == '' And '$(AmongUsPath)' != '' And Exists('$(AmongUsPath)/BepInEx/plugins/EHR.dll')">$(AmongUsPath)/BepInEx/plugins/EHR.dll</ResolvedEhrAssemblyPath>
+    </PropertyGroup>
+
+    <Target Name="RequireEhrAssembly" BeforeTargets="ResolveAssemblyReferences">
+        <Error Condition="'$(ResolvedEhrAssemblyPath)' == ''"
+               Text="No se encuentra EHR.dll. Copia el EHR.dll instalado a reporter/lib/EHR.dll, o define EhrAssemblyPath/AmongUsPath en reporter/local.props. Consulta reporter/README.md." />
+    </Target>
+
+    <ItemGroup>
+        <Reference Include="EHR">
+            <HintPath>$(ResolvedEhrAssemblyPath)</HintPath>
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+
+    <!-- Comodidad para desarrollo local: deja la DLL directamente en el juego. -->
+    <Target Name="CopyToAmongUs" AfterTargets="Build" Condition="'$(AmongUsPath)' != '' And Exists('$(AmongUsPath)/BepInEx/plugins')">
+        <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll" DestinationFolder="$(AmongUsPath)/BepInEx/plugins/" />
+    </Target>
+
+</Project>

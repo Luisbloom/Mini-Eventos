@@ -440,7 +440,7 @@ function createApp({
       if (!event) return sendError(response, 404, 'EVENT_NOT_FOUND', 'El evento no existe.');
       const hosts = database.competition.listHosts(id).map((host) => ({
         ...host,
-        reporterContext: reporterContextResolver.resolve({ event, host })
+        reporterContext: reporterContextResolver.resolve({ event, host, includeRoster: false })
       }));
       response.json({ hosts });
     } catch (error) { next(error); }
@@ -481,7 +481,7 @@ function createApp({
         groupId: request.body?.groupId ?? null
       });
       const event = database.getEventById(eventId);
-      response.json({ host: updated, context: reporterContextResolver.resolve({ event, host: updated }) });
+      response.json({ host: updated, context: reporterContextResolver.resolve({ event, host: updated, includeRoster: false }) });
     } catch (error) { next(error); }
   });
   app.get('/api/admin/events/:id/schedule', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({schedule:database.competition.listSchedule(id)});}catch(error){next(error);}});

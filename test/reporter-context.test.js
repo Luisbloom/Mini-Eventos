@@ -202,6 +202,30 @@ describe('Reporter competitive context', () => {
       .expect((response) => assert.equal(response.body.error.code, 'HOST_ASSIGNMENT_CONFLICT'));
   });
 
+  it('publishes only a fingerprint of each registered Friend Code', async () => {
+    const crypto = require('node:crypto');
+    const linked = confirmedParticipant('con-codigo', 'ABC:1234', groupA.id);
+    const unlinked = confirmedParticipant('sin-codigo', null, groupA.id);
+    confirmedParticipant('otro-grupo', 'ZZZ#9', groupB.id);
+
+    const body = (await context(token1, 'HOST_1').expect(200)).body;
+    assert.equal(body.rosterSize, 2);
+    assert.equal(body.rosterWithoutFriendCode, 1);
+    assert.equal(JSON.stringify(body).includes('ABC:1234'), false);
+    assert.equal(JSON.stringify(body).includes('abc#1234'), false);
+    assert.equal(JSON.stringify(body).includes('ZZZ#9'), false);
+
+    const expected = crypto.createHash('sha256').update('abc#1234', 'utf8').digest('hex');
+    const linkedEntry = body.roster.find((member) => member.participantId === linked.id);
+    assert.equal(linkedEntry.friendCodeFingerprint, expected);
+    assert.equal(linkedEntry.displayName, 'con-codigo');
+    assert.equal(body.roster.find((member) => member.participantId === unlinked.id).friendCodeFingerprint, null);
+
+    const adminHosts = await admin('get', `/api/admin/events/${event.id}/hosts`).expect(200);
+    assert.deepEqual(adminHosts.body.hosts[0].reporterContext.roster, []);
+    assert.equal(adminHosts.body.hosts[0].reporterContext.rosterWithoutFriendCode, 1);
+  });
+
   it('survives a restart and never stores the credential in clear text', async () => {
     const dbPath = database.path;
     database.close();

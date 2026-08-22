@@ -301,6 +301,10 @@ function createCompetitionStore(connection) {
       if(conflict)throw new CompetitionError(`${conflict.identifier} ya cubre esa fase y grupo. Un mismo grupo no puede tener dos hosts activos.`,'HOST_ASSIGNMENT_CONFLICT',409);
       connection.prepare('UPDATE event_hosts SET assigned_stage_id=?,assigned_group_id=? WHERE event_id=? AND id=?').run(stage.id,normalizedGroupId,eventId,host.id);
       return this.getHost(eventId,host.id);},
+    listReporterRoster(eventId,stageId,groupId=null){return connection.prepare(`SELECT sp.participant_id participantId,p.display_name displayName,p.internal_friend_code internalFriendCode
+      FROM stage_participants sp JOIN event_participants p ON p.id=sp.participant_id
+      WHERE sp.stage_id=? AND (? IS NULL OR sp.group_id=?) AND p.event_id=? AND p.status='confirmed' AND sp.competitive_status<>'disqualified'
+      ORDER BY p.display_name COLLATE NOCASE,sp.participant_id`).all(stageId,groupId,groupId,eventId);},
     listOccupiedMatchNumbers(eventId,stageId,groupId=null){return connection.prepare("SELECT DISTINCT match_number FROM matches WHERE event_id=? AND stage_id=? AND (group_id IS ? OR group_id=?) AND match_number IS NOT NULL AND match_status='VALID' ORDER BY match_number").all(eventId,stageId,groupId,groupId).map((row)=>row.match_number);},
     findHostByReporterTokenHash(eventId,tokenHash){return toHost(connection.prepare('SELECT * FROM event_hosts WHERE event_id=? AND reporter_token_hash=?').get(eventId,tokenHash));},
     setHostReporterToken(eventId,hostId,{tokenHash,createdAt}={}){if(typeof tokenHash!=='string'||!/^[a-f0-9]{64}$/.test(tokenHash))throw new CompetitionError('El hash de credencial Reporter no es válido.','REPORTER_TOKEN_HASH_INVALID');const result=connection.prepare("UPDATE event_hosts SET reporter_token_hash=?,reporter_token_created_at=COALESCE(?,strftime('%Y-%m-%dT%H:%M:%fZ','now')),reporter_last_seen_at=NULL WHERE event_id=? AND id=?").run(tokenHash,createdAt??null,eventId,hostId);if(!result.changes)throw new CompetitionError('El host no pertenece al evento.','HOST_EVENT_MISMATCH',404);return this.getHost(eventId,hostId);},

@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 // Resuelve el contexto competitivo que un Tournament Reporter debe usar para su
 // próxima partida. El Reporter nunca deduce fase, grupo ni número de partida:
 // si aquí no hay una respuesta inequívoca, `reportingEnabled` es false y el
@@ -34,6 +36,19 @@ function publicGroup(group) {
   return group ? { id: group.id, name: group.name } : null;
 }
 
+// El Reporter necesita saber a quién puede incluir en el resultado sin recibir
+// ningún Friend Code. Publicamos sólo una huella SHA-256 del código normalizado:
+// el Reporter calcula la misma huella con el código que ve en el lobby y así
+// resuelve el participantId sin que el secreto salga del servidor.
+function normalizeFriendCode(value) {
+  return String(value ?? '').replace(/:/g, '#').trim().toLocaleLowerCase('en');
+}
+
+function friendCodeFingerprint(value) {
+  const normalized = normalizeFriendCode(value);
+  return normalized ? crypto.createHash('sha256').update(normalized, 'utf8').digest('hex') : null;
+}
+
 function publicHost(host) {
   return { id: host.id, identifier: host.identifier, name: host.name, enabled: host.enabled };
 }
@@ -47,7 +62,7 @@ function createReporterContextResolver({ database }) {
   const { competition } = database;
 
   return {
-    resolve({ event, host }) {
+    resolve({ event, host, includeRoster = true }) {
       const base = {
         event: { id: event.id, slug: event.slug, name: event.name },
         host: publicHost(host),
@@ -55,6 +70,9 @@ function createReporterContextResolver({ database }) {
         group: null,
         matchNumber: null,
         occupiedMatchNumbers: [],
+        roster: [],
+        rosterSize: 0,
+        rosterWithoutFriendCode: 0,
         submitPath: `/api/events/${event.slug}/matches`,
         serverTime: new Date().toISOString()
       };
@@ -98,12 +116,27 @@ function createReporterContextResolver({ database }) {
       }
       if (matchNumber === null) return disabled(base, 'ALL_MATCHES_PLAYED');
 
+      const rosterRows = competition.listReporterRoster(event.id, stage.id, group?.id ?? null);
+      const roster = rosterRows.map((member) => ({
+        participantId: member.participantId,
+        displayName: member.displayName,
+        friendCodeFingerprint: friendCodeFingerprint(member.internalFriendCode)
+      }));
       const scope = [host.identifier, stage.name, group?.name, `partida ${matchNumber}`]
         .filter(Boolean)
         .join(' · ');
-      return { ...base, matchNumber, reportingEnabled: true, reason: null, message: scope };
+      return {
+        ...base,
+        matchNumber,
+        roster: includeRoster ? roster : [],
+        rosterSize: roster.length,
+        rosterWithoutFriendCode: roster.filter((member) => !member.friendCodeFingerprint).length,
+        reportingEnabled: true,
+        reason: null,
+        message: scope
+      };
     }
   };
 }
 
-module.exports = { DISABLED_REASONS, createReporterContextResolver };
+module.exports = { DISABLED_REASONS, createReporterContextResolver, friendCodeFingerprint, normalizeFriendCode };

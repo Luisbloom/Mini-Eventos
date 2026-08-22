@@ -1,0 +1,8 @@
+<Project>
+    <PropertyGroup>
+        <!-- Carpeta de Among Us en este PC. -->
+        <AmongUsPath>C:\Program Files (x86)\Steam\steamapps\common\Among Us</AmongUsPath>
+        <!-- Opcional: ruta explicita a EHR.dll si no esta bajo AmongUsPath. -->
+        <EhrAssemblyPath></EhrAssemblyPath>
+    </PropertyGroup>
+</Project>
