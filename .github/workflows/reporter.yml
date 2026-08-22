@@ -1,0 +1,105 @@
+name: Tournament Reporter
+
+# Sólo compila y prueba el mod de Among Us. El despliegue Node del servidor
+# Debian es independiente y no se toca desde aquí.
+on:
+  push:
+    branches: ['**']
+    tags: ['reporter-v*']
+    paths:
+      - 'reporter/**'
+      - '.github/workflows/reporter.yml'
+  pull_request:
+    paths:
+      - 'reporter/**'
+      - '.github/workflows/reporter.yml'
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  # EHR no se publica en NuGet: se compila desde su repositorio para obtener
+  # EHR.dll y usarla sólo como referencia. Ese binario nunca se redistribuye.
+  EHR_REPOSITORY: https://github.com/Gurge44/EndlessHostRoles.git
+  EHR_REF: master
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Probar la lógica del Reporter
+        working-directory: reporter
+        run: dotnet test tests/JartiTournamentReporter.Tests/JartiTournamentReporter.Tests.csproj -c Release
+
+      - name: Comprobar que el contrato no ha cambiado sin querer
+        working-directory: reporter
+        run: |
+          git diff --exit-code -- contract
+        shell: bash
+
+      - name: Obtener EHR para usarla como referencia de compilación
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$EHR_REF" "$EHR_REPOSITORY" "$RUNNER_TEMP/ehr"
+          dotnet build "$RUNNER_TEMP/ehr/EHR.csproj" -c Release -p:AmongUsPath=
+          mkdir -p reporter/lib
+          cp "$RUNNER_TEMP/ehr/bin/Release/net6.0/EHR.dll" reporter/lib/EHR.dll
+
+      - name: Compilar JartiTournamentReporter.dll
+        working-directory: reporter
+        run: dotnet build src/JartiTournamentReporter/JartiTournamentReporter.csproj -c Release -p:AmongUsPath=
+
+      - name: Preparar la carpeta de release
+        shell: bash
+        run: |
+          version="$(grep -oP '(?<=<Version>)[^<]+' reporter/src/JartiTournamentReporter/JartiTournamentReporter.csproj)"
+          echo "REPORTER_VERSION=$version" >> "$GITHUB_ENV"
+          mkdir -p reporter/artifacts
+          cp reporter/src/JartiTournamentReporter/bin/Release/net6.0/JartiTournamentReporter.dll reporter/artifacts/
+          cp reporter/README.md reporter/artifacts/
+          cd reporter/artifacts
+          sha256sum JartiTournamentReporter.dll README.md > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Comprobar que no se cuela ningún secreto en el paquete
+        shell: bash
+        run: |
+          if ls reporter/artifacts | grep -qiE 'reporter\.ini|\.env|\.db$'; then
+            echo "El paquete no puede incluir configuraciones ni bases de datos." >&2
+            exit 1
+          fi
+          if grep -aqE 'jtr_[A-Za-z0-9_-]{20}' reporter/artifacts/JartiTournamentReporter.dll; then
+            echo "La DLL contiene algo con forma de credencial." >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JartiTournamentReporter-${{ env.REPORTER_VERSION }}
+          path: reporter/artifacts/
+          if-no-files-found: error
+
+      - name: Empaquetar el ZIP de la release
+        if: startsWith(github.ref, 'refs/tags/reporter-v')
+        shell: bash
+        run: |
+          cd reporter/artifacts
+          zip -r "JartiTournamentReporter-v${REPORTER_VERSION}.zip" JartiTournamentReporter.dll README.md SHA256SUMS.txt
+
+      # Sólo llega aquí si los tests y la compilación han pasado, así que una
+      # release rota no puede publicarse.
+      - name: Publicar la release
+        if: startsWith(github.ref, 'refs/tags/reporter-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            reporter/artifacts/JartiTournamentReporter.dll
+            reporter/artifacts/SHA256SUMS.txt
+            reporter/artifacts/JartiTournamentReporter-v${{ env.REPORTER_VERSION }}.zip
+          body_path: reporter/README.md

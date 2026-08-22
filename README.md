@@ -1,6 +1,6 @@
 # Mini Eventos Jartiland
 
-Portal multi-evento para organizar torneos ocasionales, recibir por HTTP los resultados del futuro Tournament Reporter, conservarlos en SQLite y consultarlos desde cualquier equipo de la red. Está diseñado para ejecutarse permanentemente **dentro de la máquina virtual Debian**, no en macOS ni en el PC Windows del juego.
+Portal multi-evento para organizar torneos ocasionales, recibir por HTTP los resultados que envía [JartiTournamentReporter](reporter/README.md) desde los PC host, conservarlos en SQLite y consultarlos desde cualquier equipo de la red. Está diseñado para ejecutarse permanentemente **dentro de la máquina virtual Debian**, no en macOS ni en el PC Windows del juego.
 
 ```text
 VISITANTES                     VM DEBIAN
@@ -22,7 +22,9 @@ HOST_1 / HOST_2 ─ HTTPS :10000 ─> Tailscale Serve ┘
 - centro de control protegido en `/admin` para eventos, formularios, participantes, información y resultados;
 - cierre limpio ante `SIGTERM`, adecuado para `systemd`;
 - logs estructurados en stdout/stderr, recogidos por journald;
-- soporte de `TRUST_PROXY` para Nginx o Caddy.
+- soporte de `TRUST_PROXY` para Nginx o Caddy;
+- `GET /api/reporter/context` indica a cada host qué fase, grupo y número de partida le tocan, para que el mod no tenga que adivinarlo;
+- mod de Among Us en [`reporter/`](reporter/README.md) que envía el resultado automáticamente al terminar cada partida.
 
 > Cada PC Reporter usa un token `jtr_` independiente generado desde `/admin`. `REPORTER_TOKEN` queda sólo como compatibilidad heredada y nunca debe empezar por `jtr_`. La guía operativa está en [Acceso privado de los Reporter con Tailscale](deploy/tailscale/private-reporter-access.md).
 
@@ -209,7 +211,10 @@ El administrador repite exactamente este proceso para cada PC:
 1. En el PC instala Tailscale, inicia sesión en la tailnet autorizada y comprueba `tailscale status`.
 2. En la web pública abre `/admin`, entra con `ADMIN_TOKEN`, selecciona el evento y abre **PARTIDAS / REPORTER**.
 3. En la tarjeta correcta pulsa **CREAR Y DESCARGAR .INI**. Para una credencial existente el botón se llama **ROTAR Y DESCARGAR .INI** y anula inmediatamente la anterior.
-4. Entrega por un canal privado `HOST_1-reporter.ini` únicamente al primer responsable y `HOST_2-reporter.ini` únicamente al segundo. Cada uno guarda su archivo junto al futuro Tournament Reporter.
+4. En esa misma tarjeta elige **FASE QUE CUBRE ESTE PC** y su **GRUPO**, y pulsa **ASIGNAR FASE**. El texto de debajo debe quedar en `Listo: HOST_1 · Fase de Clasificación · Grupo A · partida 1`.
+5. Entrega por un canal privado `HOST_1-reporter.ini` únicamente al primer responsable y `HOST_2-reporter.ini` únicamente al segundo. Cada uno guarda su archivo junto a `JartiTournamentReporter.dll` en `BepInEx/plugins`.
+
+Sin asignación el Reporter **no envía nada** y lo dice en su log: no se permite que adivine un contexto ambiguo. Dos hosts activos no pueden cubrir la misma fase y grupo. Cuando llegue la Gran Final se reasigna un host a la fase final, con el grupo vacío.
 
 La descarga es la única ocasión en la que la aplicación devuelve el token en claro. SQLite conserva solamente su hash SHA-256; las lecturas posteriores de administración tampoco pueden recuperar el secreto. No añadas `TOKEN_HOST_1`, `TOKEN_HOST_2` ni variables parecidas a `.env`: no existen. `REPORTER_PRIVATE_URL` sólo permite que el servidor escriba la URL correcta dentro de cada `.ini`.
 
@@ -481,6 +486,35 @@ En `/admin`:
 
 Una partida `VOID` permanece en el historial con su motivo, pero no puntúa. **Recalcular** reconstruye las posiciones desde los informes brutos.
 
+### Contexto competitivo automático
+
+Antes de cada partida el mod pregunta al servidor qué le toca. La credencial por host identifica evento y host, así que el `.ini` no necesita nada más:
+
+```powershell
+$headers = @{ Authorization = 'Bearer PEGA_AQUI_TOKEN_HOST_1'; 'X-Host-Id' = 'HOST_1' }
+Invoke-RestMethod -Uri 'https://mini-eventos-jartiland.tail9d0334.ts.net:10000/api/reporter/context' -Headers $headers
+```
+
+```json
+{
+  "event":  { "id": 1, "slug": "among-us-agosto-2026", "name": "Torneo Among Us" },
+  "host":   { "id": 1, "identifier": "HOST_1", "name": "Host Grupo A", "enabled": true },
+  "stage":  { "id": 1, "name": "Fase de Clasificación", "type": "group_stage", "status": "active", "matchesPerGroup": 5 },
+  "group":  { "id": 1, "name": "Grupo A" },
+  "matchNumber": 3,
+  "occupiedMatchNumbers": [1, 2],
+  "roster": [{ "participantId": 1, "displayName": "Luis", "friendCodeFingerprint": "0d8168..." }],
+  "submitPath": "/api/events/among-us-agosto-2026/matches",
+  "reportingEnabled": true,
+  "reason": null,
+  "message": "HOST_1 · Fase de Clasificación · Grupo A · partida 3"
+}
+```
+
+`matchNumber` es el primer hueco libre de esa fase y grupo. `roster` no contiene Friend Codes: sólo su huella SHA-256, que el Reporter recalcula con el código que ve en el lobby para resolver el `participantId` sin que el dato salga de Debian. Los inscritos sin Friend Code registrado aparecen contados en `rosterWithoutFriendCode` y **nunca podrán identificarse automáticamente**: rellénalo en `/admin`.
+
+Si la asignación falta, la fase no está activa o ya se han jugado todas las partidas previstas, la respuesta llega con `reportingEnabled: false` y un `reason` legible (`HOST_NOT_ASSIGNED`, `STAGE_NOT_ACTIVE`, `ALL_MATCHES_PLAYED`…). Un token heredado recibe `401 REPORTER_HOST_TOKEN_REQUIRED`: esta ruta exige credencial por host.
+
 ### Contrato competitivo del Reporter
 
 `POST /api/matches` conserva el formato histórico. Para una partida competitiva acepta:
@@ -621,3 +655,18 @@ npm start
 ```
 
 La suite crea bases temporales y verifica configuración, validación HTTP, orden, límite, cierre/reapertura y entrega de la web.
+
+### Mod de Among Us
+
+El código del Tournament Reporter vive en [`reporter/`](reporter/README.md) y se compila aparte, con el SDK de .NET:
+
+```bash
+cd reporter
+cp "/ruta/a/Among Us/BepInEx/plugins/EHR.dll" lib/EHR.dll
+dotnet test tests/JartiTournamentReporter.Tests/JartiTournamentReporter.Tests.csproj -c Release
+dotnet build src/JartiTournamentReporter/JartiTournamentReporter.csproj -c Release
+```
+
+Los tests de C# no necesitan Among Us ni EHR: la lógica pura está aislada en `reporter/src/Core`. `reporter/contract/` guarda el contexto y el resultado exactos que intercambian las dos mitades, y `test/reporter-contract.test.js` los replica contra el backend real, así que un cambio de formato en un lado rompe el otro.
+
+Documentación técnica: [arquitectura](docs/reporter/architecture.md), [integración con EHR](docs/reporter/ehr-integration.md) y [pruebas](docs/reporter/testing.md).
