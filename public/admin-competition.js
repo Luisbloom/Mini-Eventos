@@ -51,6 +51,40 @@ function copyReporterConfig(config){
   if(!navigator.clipboard?.writeText)return;
   navigator.clipboard.writeText(config).then(()=>hostFeedback('Archivo descargado y configuración copiada. Pégala sólo en el PC de este host.')).catch(()=>{});
 }
+function renderHostAssignment(host){
+  const box=document.createElement('div');box.className='host-assignment';
+  const state=document.createElement('p');state.className='host-assignment-state';
+  if(!host.id){state.textContent='Guarda el host para poder asignarle una fase.';box.append(state);return box;}
+  const stageSelect=select([['','SIN ASIGNAR'],...stages.map((stage)=>[stage.id,`${stage.name} · ${stage.status}`])],host.assignedStageId??'');
+  const groupSelect=document.createElement('select');
+  const syncGroups=()=>{
+    const stage=stages.find((item)=>item.id===Number(stageSelect.value));
+    const options=stage&&stage.type==='group_stage'?[['','ELIGE GRUPO'],...stage.groups.map((group)=>[group.id,group.name])]:[['','SIN GRUPO']];
+    groupSelect.replaceChildren(...options.map(([key,text])=>{const option=document.createElement('option');option.value=key;option.textContent=text;return option;}));
+    groupSelect.disabled=!stage||stage.type!=='group_stage';
+    groupSelect.value=String(host.assignedStageId===Number(stageSelect.value)?(host.assignedGroupId??''):'');
+  };
+  syncGroups();stageSelect.addEventListener('change',syncGroups);
+  const describe=(context)=>{
+    if(!context){state.textContent='Sin asignar: este Reporter no enviará resultados.';return;}
+    state.textContent=context.reportingEnabled?`Listo: ${context.message}`:`No enviará resultados: ${context.message}`;
+    state.classList.toggle('ready',context.reportingEnabled);
+  };
+  describe(host.reporterContext);
+  const save=document.createElement('button');save.type='button';save.className='secondary-action';save.textContent='ASIGNAR FASE';
+  save.addEventListener('click',async()=>{
+    save.disabled=true;
+    try{
+      const result=await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/assignment`,{method:'PUT',body:JSON.stringify({stageId:stageSelect.value?Number(stageSelect.value):null,groupId:groupSelect.value?Number(groupSelect.value):null})});
+      describe(result.context);
+      hostFeedback(`${host.identifier}: ${result.context.message}`,!result.context.reportingEnabled);
+      await loadCompetition();
+    }catch(error){hostFeedback(error.message,true);}
+    save.disabled=false;
+  });
+  box.append(label('FASE QUE CUBRE ESTE PC',stageSelect),label('GRUPO',groupSelect),save,state);
+  return box;
+}
 function renderHostCard(host,index){
   const card=document.createElement('article');card.className='host-card';if(host.id)card.dataset.entityId=String(host.id);
   const header=document.createElement('header');const sequence=document.createElement('span');sequence.className='host-sequence';sequence.textContent=`HOST ${String(index+1).padStart(2,'0')}`;const title=document.createElement('h3');title.textContent=host.name||host.identifier||'Nuevo host';const badge=document.createElement('span');badge.className=`credential-badge ${host.tokenConfigured?'ready':'missing'}`;badge.textContent=host.tokenConfigured?'CONFIGURACIÓN LISTA':'SIN CONFIGURAR';header.append(sequence,title,badge);
@@ -60,7 +94,7 @@ function renderHostCard(host,index){
   const revoke=document.createElement('button');revoke.type='button';revoke.className='danger-action';revoke.textContent='REVOCAR';revoke.hidden=!host.tokenConfigured;revoke.addEventListener('click',async()=>{if(!confirm(`¿Revocar la configuración de ${host.identifier}? Ese Reporter dejará de poder enviar resultados.`))return;revoke.disabled=true;try{await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/token`,{method:'DELETE'});await loadCompetition();hostFeedback(`Acceso de ${host.identifier} revocado. Puedes crearle otro archivo cuando lo necesites.`);}catch(error){revoke.disabled=false;hostFeedback(error.message,true);}});
   const remove=document.createElement('button');remove.type='button';remove.className='host-remove-action';remove.textContent='QUITAR HOST';remove.addEventListener('click',()=>{if(host.id&&!confirm(`¿Quitar ${host.identifier} del evento? El cambio se aplicará al guardar.`))return;card.remove();hostFeedback('Cambio pendiente: pulsa GUARDAR HOSTS para aplicarlo.');});actions.append(credential,revoke,remove);
   const markDirty=()=>{card.classList.add('dirty');credential.disabled=true;credential.title='Guarda los cambios del host antes de crear su configuración';title.textContent=name.value||identifier.value||'Nuevo host';};identifier.addEventListener('input',markDirty);name.addEventListener('input',markDirty);enabled.addEventListener('change',markDirty);
-  card.append(header,fields,telemetry,actions);return card;
+  card.append(header,fields,renderHostAssignment(host),telemetry,actions);return card;
 }
 function renderEditors(schedule,hostRows,prizes){q('#admin-schedule').replaceChildren(...schedule.map((row)=>compactRow([row.time,row.title,row.description],['time','text','text'],row.id)));q('#admin-hosts').replaceChildren(...hostRows.map(renderHostCard));q('#admin-prizes').replaceChildren(...prizes.map((row)=>compactRow([row.title,row.description,row.prizeValue||'',row.statKey||'',row.enabled],['text','text','text','text','select'],row.id)));}
 

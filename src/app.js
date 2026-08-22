@@ -10,6 +10,7 @@ const { InformationValidationError } = require('./tournament-information');
 const { EventValidationError } = require('./events');
 const { CompetitionError } = require('./competition');
 const { createMatchIngestor } = require('./services/match-ingest');
+const { createReporterContextResolver } = require('./services/reporter-context');
 const {
   ReporterAuthError,
   createReporterAuthorizer,
@@ -115,6 +116,7 @@ function createApp({
     legacyToken: reporterToken,
     competition: database.competition
   });
+  const reporterContextResolver = createReporterContextResolver({ database });
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy);
   app.use(helmet({
@@ -303,6 +305,22 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  // El Reporter pregunta aquí qué fase, grupo y número de partida le tocan.
+  // La credencial por host identifica evento y host, así que no necesita
+  // ninguna información adicional en su archivo .ini.
+  app.get('/api/reporter/context', (request, response, next) => {
+    try {
+      const authentication = reporterAuthorizer.authorizeWithoutEvent({
+        hostId: request.get('x-host-id') || request.query.hostId,
+        suppliedToken: readBearer(request)
+      });
+      const event = database.getEventById(authentication.eventId);
+      if (!event) return sendError(response, 404, 'EVENT_NOT_FOUND', 'El evento no existe.');
+      const context = reporterContextResolver.resolve({ event, host: authentication.host });
+      response.set('Cache-Control', 'no-store').json(context);
+    } catch (error) { next(error); }
+  });
+
   // Compatibility API: the original Among Us event remains the default target.
   app.get('/api/tournament-information', (_request, response, next) => {
     try { response.set('Cache-Control', 'no-store').json({ ...database.getTournamentInformation(), scoring: scoringPayload() }); }
@@ -414,7 +432,19 @@ function createApp({
     const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
     try { response.status(201).json({resolutions:database.competition.resolveTie(id,request.body||{})}); } catch(error){next(error);}
   });
-  app.get('/api/admin/events/:id/hosts', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({hosts:database.competition.listHosts(id)});}catch(error){next(error);}});
+  app.get('/api/admin/events/:id/hosts', (request, response, next) => {
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
+    try {
+      const event = database.getEventById(id);
+      if (!event) return sendError(response, 404, 'EVENT_NOT_FOUND', 'El evento no existe.');
+      const hosts = database.competition.listHosts(id).map((host) => ({
+        ...host,
+        reporterContext: reporterContextResolver.resolve({ event, host })
+      }));
+      response.json({ hosts });
+    } catch (error) { next(error); }
+  });
   app.put('/api/admin/events/:id/hosts', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({hosts:database.competition.replaceHosts(id,request.body?.hosts||[])});}catch(error){next(error);}});
   app.post('/api/admin/events/:eventId/hosts/:hostId/token', (request, response, next) => {
     const eventId = parseId(request.params.eventId);
@@ -438,6 +468,20 @@ function createApp({
       const host = database.competition.getHost(eventId, /^\d+$/.test(request.params.hostId) ? Number(request.params.hostId) : request.params.hostId);
       if (!host) return sendError(response, 404, 'HOST_NOT_FOUND', 'El host no pertenece al evento.');
       response.json({ host: database.competition.revokeHostReporterToken(eventId, host.id) });
+    } catch (error) { next(error); }
+  });
+  app.put('/api/admin/events/:eventId/hosts/:hostId/assignment', (request, response, next) => {
+    const eventId = parseId(request.params.eventId);
+    if (!eventId) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
+    try {
+      const host = database.competition.getHost(eventId, /^\d+$/.test(request.params.hostId) ? Number(request.params.hostId) : request.params.hostId);
+      if (!host) return sendError(response, 404, 'HOST_NOT_FOUND', 'El host no pertenece al evento.');
+      const updated = database.competition.setHostAssignment(eventId, host.id, {
+        stageId: request.body?.stageId ?? null,
+        groupId: request.body?.groupId ?? null
+      });
+      const event = database.getEventById(eventId);
+      response.json({ host: updated, context: reporterContextResolver.resolve({ event, host: updated }) });
     } catch (error) { next(error); }
   });
   app.get('/api/admin/events/:id/schedule', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({schedule:database.competition.listSchedule(id)});}catch(error){next(error);}});

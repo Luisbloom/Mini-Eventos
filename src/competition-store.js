@@ -142,6 +142,8 @@ function migrateCompetition(connection, defaultEventId) {
         ${REPORTER_TOKEN_HASH_COLUMN},
         reporter_token_created_at TEXT,
         reporter_last_seen_at TEXT,
+        assigned_stage_id INTEGER,
+        assigned_group_id INTEGER,
         UNIQUE(event_id, identifier),
         FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE
       );
@@ -193,6 +195,8 @@ function migrateCompetition(connection, defaultEventId) {
     addColumn(connection, 'event_hosts', REPORTER_TOKEN_HASH_COLUMN);
     addColumn(connection, 'event_hosts', 'reporter_token_created_at TEXT');
     addColumn(connection, 'event_hosts', 'reporter_last_seen_at TEXT');
+    addColumn(connection, 'event_hosts', 'assigned_stage_id INTEGER');
+    addColumn(connection, 'event_hosts', 'assigned_group_id INTEGER');
     connection.prepare("UPDATE event_hosts SET created_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE created_at=''").run();
     connection.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_event_hosts_reporter_token_hash
@@ -239,6 +243,8 @@ function createCompetitionStore(connection) {
       tokenConfigured: Boolean(row.reporter_token_hash),
       tokenCreatedAt: row.reporter_token_created_at ?? null,
       lastSeenAt: row.reporter_last_seen_at ?? null,
+      assignedStageId: row.assigned_stage_id ?? null,
+      assignedGroupId: row.assigned_group_id ?? null,
       createdAt: row.created_at
     };
   }
@@ -280,6 +286,22 @@ function createCompetitionStore(connection) {
     setGroupsLocked(stageId,locked){requireStage(stageId);connection.prepare('UPDATE event_stages SET groups_locked=? WHERE id=?').run(Number(Boolean(locked)),stageId);return requireStage(stageId);},
     listHosts(eventId){return connection.prepare('SELECT * FROM event_hosts WHERE event_id=? ORDER BY id').all(eventId).map(toHost);},
     getHost(eventId,hostIdOrIdentifier){const row=Number.isInteger(hostIdOrIdentifier)?connection.prepare('SELECT * FROM event_hosts WHERE event_id=? AND id=?').get(eventId,hostIdOrIdentifier):connection.prepare('SELECT * FROM event_hosts WHERE event_id=? AND identifier=?').get(eventId,String(hostIdOrIdentifier));return toHost(row);},
+    findHostByReporterTokenHashAnywhere(tokenHash){const row=connection.prepare('SELECT * FROM event_hosts WHERE reporter_token_hash=?').get(tokenHash);return row?{host:toHost(row),eventId:row.event_id}:null;},
+    setHostAssignment(eventId,hostId,{stageId=null,groupId=null}={}){const host=this.getHost(eventId,hostId);if(!host)throw new CompetitionError('El host no pertenece al evento.','HOST_EVENT_MISMATCH',404);
+      const normalizedStageId=stageId===null||stageId===undefined||stageId===''?null:Number(stageId);
+      const normalizedGroupId=groupId===null||groupId===undefined||groupId===''?null:Number(groupId);
+      if(normalizedStageId===null){if(normalizedGroupId!==null)throw new CompetitionError('Asigna primero una fase al host.','HOST_STAGE_REQUIRED');connection.prepare('UPDATE event_hosts SET assigned_stage_id=NULL,assigned_group_id=NULL WHERE event_id=? AND id=?').run(eventId,host.id);return this.getHost(eventId,host.id);}
+      if(!Number.isInteger(normalizedStageId))throw new CompetitionError('El id de fase no es válido.','INVALID_STAGE_ID');
+      const stage=requireStage(normalizedStageId);
+      if(stage.eventId!==eventId)throw new CompetitionError('La fase no pertenece al evento.','STAGE_EVENT_MISMATCH');
+      if(stage.type==='group_stage'){if(normalizedGroupId===null)throw new CompetitionError('Una fase de grupos necesita un grupo asignado.','GROUP_REQUIRED');}
+      else if(normalizedGroupId!==null)throw new CompetitionError('Esta fase no admite grupo.','STAGE_GROUP_NOT_ALLOWED');
+      if(normalizedGroupId!==null){if(!Number.isInteger(normalizedGroupId))throw new CompetitionError('El id de grupo no es válido.','INVALID_GROUP_ID');const group=requireGroup(normalizedGroupId);if(group.stageId!==stage.id)throw new CompetitionError('El grupo no pertenece a la fase.','GROUP_STAGE_MISMATCH');}
+      const conflict=connection.prepare('SELECT identifier FROM event_hosts WHERE event_id=? AND id<>? AND enabled=1 AND assigned_stage_id=? AND (assigned_group_id IS ? OR assigned_group_id=?)').get(eventId,host.id,stage.id,normalizedGroupId,normalizedGroupId);
+      if(conflict)throw new CompetitionError(`${conflict.identifier} ya cubre esa fase y grupo. Un mismo grupo no puede tener dos hosts activos.`,'HOST_ASSIGNMENT_CONFLICT',409);
+      connection.prepare('UPDATE event_hosts SET assigned_stage_id=?,assigned_group_id=? WHERE event_id=? AND id=?').run(stage.id,normalizedGroupId,eventId,host.id);
+      return this.getHost(eventId,host.id);},
+    listOccupiedMatchNumbers(eventId,stageId,groupId=null){return connection.prepare("SELECT DISTINCT match_number FROM matches WHERE event_id=? AND stage_id=? AND (group_id IS ? OR group_id=?) AND match_number IS NOT NULL AND match_status='VALID' ORDER BY match_number").all(eventId,stageId,groupId,groupId).map((row)=>row.match_number);},
     findHostByReporterTokenHash(eventId,tokenHash){return toHost(connection.prepare('SELECT * FROM event_hosts WHERE event_id=? AND reporter_token_hash=?').get(eventId,tokenHash));},
     setHostReporterToken(eventId,hostId,{tokenHash,createdAt}={}){if(typeof tokenHash!=='string'||!/^[a-f0-9]{64}$/.test(tokenHash))throw new CompetitionError('El hash de credencial Reporter no es válido.','REPORTER_TOKEN_HASH_INVALID');const result=connection.prepare("UPDATE event_hosts SET reporter_token_hash=?,reporter_token_created_at=COALESCE(?,strftime('%Y-%m-%dT%H:%M:%fZ','now')),reporter_last_seen_at=NULL WHERE event_id=? AND id=?").run(tokenHash,createdAt??null,eventId,hostId);if(!result.changes)throw new CompetitionError('El host no pertenece al evento.','HOST_EVENT_MISMATCH',404);return this.getHost(eventId,hostId);},
     revokeHostReporterToken(eventId,hostId){const result=connection.prepare('UPDATE event_hosts SET reporter_token_hash=NULL,reporter_token_created_at=NULL,reporter_last_seen_at=NULL WHERE event_id=? AND id=?').run(eventId,hostId);if(!result.changes)throw new CompetitionError('El host no pertenece al evento.','HOST_EVENT_MISMATCH',404);return this.getHost(eventId,hostId);},

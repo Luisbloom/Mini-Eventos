@@ -76,6 +76,44 @@ function createReporterAuthorizer({ legacyToken, competition }) {
     );
   }
   return {
+    // Resuelve evento y host sólo a partir de la credencial por host. El hash de
+    // credencial es único en toda la base, por lo que un token identifica
+    // exactamente un host de exactamente un evento. Los tokens heredados no
+    // sirven aquí: no están ligados a ningún host.
+    authorizeWithoutEvent({ hostId, suppliedToken }) {
+      if (typeof suppliedToken !== 'string' || !suppliedToken.trim()) {
+        throw new ReporterAuthError(
+          'Se requiere una credencial Reporter.',
+          'REPORTER_TOKEN_REQUIRED',
+          401
+        );
+      }
+      if (!suppliedToken.startsWith(REPORTER_TOKEN_PREFIX)) {
+        throw new ReporterAuthError(
+          'Esta ruta exige la credencial por host generada desde /admin.',
+          'REPORTER_HOST_TOKEN_REQUIRED',
+          401
+        );
+      }
+      const found = competition.findHostByReporterTokenHashAnywhere(hashReporterToken(suppliedToken));
+      if (!found) {
+        throw new ReporterAuthError(
+          'La credencial Reporter no es válida.',
+          'REPORTER_TOKEN_INVALID',
+          401
+        );
+      }
+      const requestedHostId = normalizeHostId(hostId);
+      const hasHostId = requestedHostId !== undefined
+        && requestedHostId !== null
+        && requestedHostId !== '';
+      if (!hasHostId) throw hostRequiredError();
+      if (found.host.id !== requestedHostId && found.host.identifier !== requestedHostId) {
+        throw hostMismatchError();
+      }
+      if (!found.host.enabled) throw disabledHostError();
+      return { host: found.host, eventId: found.eventId, authenticationKind: 'HOST_TOKEN' };
+    },
     authorize({ eventId, hostId, suppliedToken, requireHost = false }) {
       if (typeof suppliedToken !== 'string' || !suppliedToken.trim()) {
         throw new ReporterAuthError(
