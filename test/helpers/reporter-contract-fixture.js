@@ -33,7 +33,8 @@ function seedContractDatabase(dbPath) {
   const participants = PLAYERS.map((player) => {
     const created = database.createParticipant(event.id, {
       discord_username: player.discord,
-      game_name: player.name
+      game_name: player.name,
+      friend_code: player.friendCode
     });
     database.updateParticipant(created.id, { status: 'confirmed', internalFriendCode: player.friendCode });
     database.competition.assignParticipant(stage.id, created.id, groupA.id);

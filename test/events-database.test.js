@@ -72,7 +72,7 @@ describe('multi-event database', () => {
     );
     assert.deepEqual(
       database.listRegistrationFields(event.id).map((field) => field.key),
-      ['discord_username', 'game_name', 'same_as_discord']
+      ['discord_username', 'game_name', 'friend_code', 'same_as_discord']
     );
     database.close();
   });
@@ -95,6 +95,7 @@ describe('multi-event database', () => {
     database.createParticipant(amongUs.id, {
       discord_username: 'Luis',
       game_name: 'Pelusero',
+      friend_code: 'luis#1001',
       same_as_discord: false
     });
     database.createParticipant(minecraft.id, {
@@ -111,6 +112,7 @@ describe('multi-event database', () => {
       () => database.createParticipant(amongUs.id, {
         discord_username: 'luis',
         game_name: 'Otro',
+        friend_code: 'luis#9999',
         same_as_discord: false
       }),
       (error) => error.code === 'ALREADY_REGISTERED'

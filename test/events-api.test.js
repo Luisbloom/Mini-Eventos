@@ -43,7 +43,7 @@ describe('Mini Eventos API', () => {
     assert.equal(detail.status, 200);
     assert.equal(detail.body.event.modules.leaderboard, true);
     assert.deepEqual(detail.body.registrationFields.map((field) => field.key), [
-      'discord_username', 'game_name', 'same_as_discord'
+      'discord_username', 'game_name', 'friend_code', 'same_as_discord'
     ]);
   });
 
@@ -87,14 +87,14 @@ describe('Mini Eventos API', () => {
   it('validates a fast registration and never exposes Discord or Friend Code publicly', async () => {
     const created = await request(app)
       .post('/api/events/among-us-agosto-2026/registrations')
-      .send({ values: { discord_username: 'Luis', game_name: '', same_as_discord: true } });
+      .send({ values: { discord_username: 'Luis', game_name: '', friend_code: 'luis#1001', same_as_discord: true } });
     assert.equal(created.status, 201);
     assert.equal(created.body.participant.displayName, 'Luis');
     assert.equal(created.body.participant.discordUsername, undefined);
 
     const duplicate = await request(app)
       .post('/api/events/among-us-agosto-2026/registrations')
-      .send({ values: { discord_username: 'luis', game_name: 'Pelusero' } });
+      .send({ values: { discord_username: 'luis', game_name: 'Pelusero', friend_code: 'luis#1001' } });
     assert.equal(duplicate.status, 409);
     assert.equal(duplicate.body.error.code, 'ALREADY_REGISTERED');
 
@@ -133,15 +133,15 @@ describe('Mini Eventos API', () => {
     const among = database.getDefaultEvent();
     database.updateEvent(among.id, { minParticipants: 1, maxParticipants: 1 });
     await request(app).post(`/api/events/${among.slug}/registrations`)
-      .send({ values: { discord_username: 'uno', game_name: 'Uno' } }).expect(201);
+      .send({ values: { discord_username: 'uno', game_name: 'Uno', friend_code: 'uno#1001' } }).expect(201);
     const full = await request(app).post(`/api/events/${among.slug}/registrations`)
-      .send({ values: { discord_username: 'dos', game_name: 'Dos' } });
+      .send({ values: { discord_username: 'dos', game_name: 'Dos', friend_code: 'dos#1002' } });
     assert.equal(full.status, 409);
     assert.equal(full.body.error.code, 'REGISTRATION_FULL');
 
     database.updateEvent(among.id, { maxParticipants: 2, registrationsOpen: false });
     const closed = await request(app).post(`/api/events/${among.slug}/registrations`)
-      .send({ values: { discord_username: 'dos', game_name: 'Dos' } });
+      .send({ values: { discord_username: 'dos', game_name: 'Dos', friend_code: 'dos#1002' } });
     assert.equal(closed.status, 403);
     assert.equal(closed.body.error.code, 'REGISTRATION_CLOSED');
   });
