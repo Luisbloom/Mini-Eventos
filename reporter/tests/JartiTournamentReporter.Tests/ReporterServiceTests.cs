@@ -292,6 +292,21 @@ namespace Jartiland.TournamentReporter.Tests
             Assert.True(_queue.IsPending(match.ReportId));
         }
 
+        [Fact]
+        public async Task Does_not_send_the_same_result_twice_when_two_pumps_overlap()
+        {
+            var match = SampleMatch();
+            _service.Enqueue(match);
+
+            // El bucle de fondo y el envío inmediato del final de partida.
+            await Task.WhenAll(
+                _service.PumpAsync(CancellationToken.None),
+                _service.PumpAsync(CancellationToken.None));
+
+            Assert.Single(_transport.Posts);
+            Assert.True(_queue.WasAlreadySent(match.ReportId));
+        }
+
         private static string ReadReportId(string body)
         {
             using (var document = System.Text.Json.JsonDocument.Parse(body))

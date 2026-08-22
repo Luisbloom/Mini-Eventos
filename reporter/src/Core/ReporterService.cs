@@ -30,6 +30,11 @@ namespace Jartiland.TournamentReporter
         private readonly List<PendingItem> _items = new List<PendingItem>();
         private readonly object _gate = new object();
 
+        // El bucle de reintentos de fondo y el envío inmediato de una partida
+        // recién terminada pueden coincidir. Sin esto, los dos podrían coger el
+        // mismo pendiente y enviarlo por duplicado.
+        private readonly SemaphoreSlim _pump = new SemaphoreSlim(1, 1);
+
         public ReporterService(
             ReporterSettings settings,
             PendingQueue queue,
@@ -166,17 +171,25 @@ namespace Jartiland.TournamentReporter
 
         public async Task PumpAsync(CancellationToken cancellation)
         {
-            List<PendingItem> due;
-            var now = _clock();
-            lock (_gate)
+            await _pump.WaitAsync(cancellation).ConfigureAwait(false);
+            try
             {
-                due = _items.Where(item => item.NextAttemptUtc <= now).ToList();
-            }
+                List<PendingItem> due;
+                var now = _clock();
+                lock (_gate)
+                {
+                    due = _items.Where(item => item.NextAttemptUtc <= now).ToList();
+                }
 
-            foreach (var item in due)
+                foreach (var item in due)
+                {
+                    if (cancellation.IsCancellationRequested) return;
+                    await SendAsync(item, cancellation).ConfigureAwait(false);
+                }
+            }
+            finally
             {
-                if (cancellation.IsCancellationRequested) return;
-                await SendAsync(item, cancellation).ConfigureAwait(false);
+                _pump.Release();
             }
         }
 
