@@ -1,6 +1,6 @@
 'use strict';
 
-const crypto = require('node:crypto');
+const { friendCodeFingerprint, normalizeFriendCode } = require('./friend-code');
 
 // Resuelve el contexto competitivo que un Tournament Reporter debe usar para su
 // próxima partida. El Reporter nunca deduce fase, grupo ni número de partida:
@@ -37,18 +37,7 @@ function publicGroup(group) {
 }
 
 // El Reporter necesita saber a quién puede incluir en el resultado sin recibir
-// ningún Friend Code. Publicamos sólo una huella SHA-256 del código normalizado:
-// el Reporter calcula la misma huella con el código que ve en el lobby y así
-// resuelve el participantId sin que el secreto salga del servidor.
-function normalizeFriendCode(value) {
-  return String(value ?? '').replace(/:/g, '#').trim().toLocaleLowerCase('en');
-}
-
-function friendCodeFingerprint(value) {
-  const normalized = normalizeFriendCode(value);
-  return normalized ? crypto.createHash('sha256').update(normalized, 'utf8').digest('hex') : null;
-}
-
+// ningún Friend Code: publicamos sólo la huella del código normalizado.
 function publicHost(host) {
   return { id: host.id, identifier: host.identifier, name: host.name, enabled: host.enabled };
 }

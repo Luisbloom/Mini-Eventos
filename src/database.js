@@ -5,6 +5,7 @@ const path = require('node:path');
 const BetterSqlite3 = require('better-sqlite3');
 const { createCompetitionStore, migrateCompetition } = require('./competition-store');
 const { fingerprintReport } = require('./services/report-fingerprint');
+const { normalizeFriendCode } = require('./services/friend-code');
 const {
   DEFAULT_TOURNAMENT_INFORMATION,
   createDefaultEventInformation,
@@ -18,7 +19,8 @@ const {
   EventValidationError,
   normalizeEvent,
   normalizeRegistrationFields,
-  normalizeRegistrationValues
+  normalizeRegistrationValues,
+  registrationFieldsForGame
 } = require('./events');
 
 function toMatch(row) {
@@ -293,6 +295,35 @@ function openDatabase(dbPath) {
     }
   })();
 
+  // Los eventos creados antes de que existiera el campo de Friend Code no lo
+  // tienen en su formulario, y sin él nadie puede identificarse solo. Se añade
+  // una única vez: si después el administrador decide quitarlo, no vuelve.
+  connection.transaction(() => {
+    const migrated = connection
+      .prepare("SELECT 1 FROM app_settings WHERE setting_key='friend_code_field_v1'")
+      .get();
+    if (migrated) return;
+    const field = DEFAULT_REGISTRATION_FIELDS.find((item) => item.key === 'friend_code');
+    if (field) {
+      const insert = connection.prepare(`
+        INSERT OR IGNORE INTO event_registration_fields
+          (event_id, field_key, label, field_type, required, placeholder, options_json, position, enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const lastPosition = connection.prepare(
+        'SELECT COALESCE(MAX(position),0) AS position FROM event_registration_fields WHERE event_id=?'
+      );
+      const eventos = connection.prepare('SELECT id, game FROM events').all()
+        .filter((row) => registrationFieldsForGame(row.game).some((item) => item.key === 'friend_code'));
+      for (const row of eventos) {
+        insert.run(row.id, field.key, field.label, field.type, Number(field.required),
+          field.placeholder, JSON.stringify(field.options),
+          lastPosition.get(row.id).position + 1, Number(field.enabled));
+      }
+    }
+    connection.prepare("INSERT INTO app_settings (setting_key, value_json) VALUES ('friend_code_field_v1', 'true')").run();
+  })();
+
   const competitionDefaultId = Number(JSON.parse(
     connection.prepare("SELECT value_json FROM app_settings WHERE setting_key='default_event_id'").get().value_json
   ));
@@ -354,7 +385,7 @@ function openDatabase(dbPath) {
   const voidMatchStatement = connection.prepare("UPDATE matches SET match_status='VOID',void_reason=? WHERE id=? AND event_id=?");
   const countActiveParticipantsStatement = connection.prepare(`SELECT COUNT(*) total FROM event_participants WHERE event_id=? AND status IN ('pending','confirmed')`);
   const duplicateParticipantStatement = connection.prepare('SELECT id FROM event_participants WHERE event_id=? AND discord_username=? COLLATE NOCASE');
-  const insertParticipantStatement = connection.prepare(`INSERT INTO event_participants (event_id,discord_username,display_name,field_values_json) VALUES (?,?,?,?)`);
+  const insertParticipantStatement = connection.prepare(`INSERT INTO event_participants (event_id,discord_username,display_name,field_values_json,internal_friend_code) VALUES (?,?,?,?,?)`);
   const getParticipantStatement = connection.prepare('SELECT * FROM event_participants WHERE id=?');
   const listParticipantsStatement = connection.prepare('SELECT * FROM event_participants WHERE event_id=? ORDER BY created_at,id');
   const listPublicParticipantsStatement = connection.prepare(`SELECT * FROM event_participants WHERE event_id=? AND status='confirmed' ORDER BY display_name COLLATE NOCASE,id`);
@@ -388,7 +419,7 @@ function openDatabase(dbPath) {
     }
     const id = Number(result.lastInsertRowid);
     insertInformationStatement.run(id, JSON.stringify(createDefaultEventInformation(event.game)));
-    const fields = DEFAULT_REGISTRATION_FIELDS.map((field) => ({
+    const fields = registrationFieldsForGame(event.game).map((field) => ({
       ...field,
       label: field.key === 'game_name' ? `Nombre en ${event.game}` : field.label,
       placeholder: field.key === 'game_name' ? `Tu nombre en ${event.game}` : field.placeholder
@@ -498,7 +529,10 @@ function openDatabase(dbPath) {
       }
       const preferredNameKey = Object.keys(values).find((key) => key !== 'discord_username' && key !== 'same_as_discord' && typeof values[key] === 'string' && values[key]);
       const displayName = values.game_name || (preferredNameKey ? values[preferredNameKey] : discordUsername);
-      const result = insertParticipantStatement.run(eventId, discordUsername, displayName, JSON.stringify(values));
+      // El Friend Code que escribe el jugador pasa directo a su identidad interna:
+      // así el Reporter puede reconocerlo sin que nadie lo teclee a mano en /admin.
+      const friendCode = normalizeFriendCode(values.friend_code) || null;
+      const result = insertParticipantStatement.run(eventId, discordUsername, displayName, JSON.stringify(values), friendCode);
       return toParticipant(getParticipantStatement.get(Number(result.lastInsertRowid)));
     },
     listParticipants(eventId, { publicView = false } = {}) {

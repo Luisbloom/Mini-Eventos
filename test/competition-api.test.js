@@ -14,7 +14,7 @@ describe('competition API', () => {
   let directory,database,app,event,stage,group,host,participant;
   const adminToken='admin-test',reporterToken='reporter-test';
   const admin=(method,url)=>request(app)[method](url).set('Authorization',`Bearer ${adminToken}`);
-  beforeEach(()=>{directory=fs.mkdtempSync(path.join(os.tmpdir(),'jartiland-competition-api-'));database=openDatabase(path.join(directory,'tournament.db'));app=createApp({database,logger:{info(){},error(){}},adminToken,reporterToken});event=database.getDefaultEvent();stage=database.competition.listStages(event.id)[0];database.competition.updateStage(stage.id,{status:'active'});stage=database.competition.getStage(stage.id);group=database.competition.listGroups(stage.id)[0];host=database.competition.listHosts(event.id)[0];participant=database.createParticipant(event.id,{discord_username:'privado',game_name:'Jugador'});database.updateParticipant(participant.id,{status:'confirmed',internalFriendCode:'SECRET#1'});database.competition.distributeGroups(stage.id);group=database.competition.listGroups(stage.id).find((item)=>database.competition.listStageParticipants(stage.id,item.id).length);});
+  beforeEach(()=>{directory=fs.mkdtempSync(path.join(os.tmpdir(),'jartiland-competition-api-'));database=openDatabase(path.join(directory,'tournament.db'));app=createApp({database,logger:{info(){},error(){}},adminToken,reporterToken});event=database.getDefaultEvent();stage=database.competition.listStages(event.id)[0];database.competition.updateStage(stage.id,{status:'active'});stage=database.competition.getStage(stage.id);group=database.competition.listGroups(stage.id)[0];host=database.competition.listHosts(event.id)[0];participant=database.createParticipant(event.id,{discord_username:'privado',game_name:'Jugador',friend_code:'SECRET#1'});database.updateParticipant(participant.id,{status:'confirmed',internalFriendCode:'SECRET#1'});database.competition.distributeGroups(stage.id);group=database.competition.listGroups(stage.id).find((item)=>database.competition.listStageParticipants(stage.id,item.id).length);});
   afterEach(()=>{database.close();fs.rmSync(directory,{recursive:true,force:true});});
 
   function structured(reportId='structured-1') { return {reportId,eventId:event.id,stageId:stage.id,groupId:group.id,hostId:host.identifier,matchNumber:1,playedAt:'2026-08-21T16:10:00+02:00',map:'The Skeld',winnerTeam:'crew',players:[{participantId:participant.id,role:'Crewmate',won:true,tasksCompleted:4,tasksTotal:4}]}; }
@@ -58,7 +58,7 @@ describe('competition API', () => {
   });
 
   it('isolates simultaneous hosts and groups while preserving idempotency and one VALID result per slot',async()=>{
-    const secondParticipant=database.createParticipant(event.id,{discord_username:'paralelo',game_name:'Jugador paralelo'});
+    const secondParticipant=database.createParticipant(event.id,{discord_username:'paralelo',game_name:'Jugador paralelo',friend_code:'paralelo#2'});
     database.updateParticipant(secondParticipant.id,{status:'confirmed'});
     database.competition.distributeGroups(stage.id);
     const groups=database.competition.listGroups(stage.id);

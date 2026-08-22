@@ -80,13 +80,23 @@ const DEFAULT_REGISTRATION_FIELDS = Object.freeze([
     enabled: true
   },
   {
+    key: 'friend_code',
+    label: 'Friend Code de Among Us (tu @ fijo)',
+    type: 'text',
+    required: true,
+    placeholder: 'Cuenta > Friend Code. No es tu nombre en la partida. Ejemplo: jugador#1234',
+    options: [],
+    position: 3,
+    enabled: true
+  },
+  {
     key: 'same_as_discord',
     label: 'Mi nombre de Among Us es el mismo que mi usuario de Discord',
     type: 'checkbox',
     required: false,
     placeholder: '',
     options: [],
-    position: 3,
+    position: 4,
     enabled: true
   }
 ]);
@@ -258,6 +268,15 @@ function normalizeRegistrationFields(fields) {
   return normalized.sort((first, second) => first.position - second.position || first.key.localeCompare(second.key));
 }
 
+// El Friend Code identifica una cuenta de Among Us, así que sólo se pide en
+// eventos de ese juego. Un torneo de otro juego no debe heredar el campo.
+function registrationFieldsForGame(game) {
+  const isAmongUs = String(game ?? '').trim().toLocaleLowerCase('es') === 'among us';
+  return DEFAULT_REGISTRATION_FIELDS
+    .filter((field) => field.key !== 'friend_code' || isAmongUs)
+    .map((field) => ({ ...field }));
+}
+
 function normalizeRegistrationValues(fields, input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new EventValidationError('Faltan los datos de inscripción.', 'INVALID_REGISTRATION');
@@ -305,5 +324,6 @@ module.exports = {
   normalizeEvent,
   normalizeModules,
   normalizeRegistrationFields,
-  normalizeRegistrationValues
+  normalizeRegistrationValues,
+  registrationFieldsForGame
 };
