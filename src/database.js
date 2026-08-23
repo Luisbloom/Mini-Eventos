@@ -104,6 +104,7 @@ function toEvent(row) {
     accentColor: row.accent_color,
     icon: row.icon,
     coverImage: row.cover_image,
+    bannerImage: row.banner_image ?? null,
     participantCount: Number(row.participant_count ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -175,6 +176,7 @@ function openDatabase(dbPath) {
         accent_color TEXT NOT NULL DEFAULT '#d7ff3f',
         icon TEXT NOT NULL DEFAULT 'gamepad',
         cover_image TEXT NOT NULL DEFAULT '/images/events/default-event-cover.png',
+        banner_image TEXT,
         created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       );
@@ -230,11 +232,15 @@ function openDatabase(dbPath) {
     const eventColumns = connection.pragma('table_info(events)');
     const needsMinimumMigration = !eventColumns.some((column) => column.name === 'min_participants');
     const needsCoverMigration = !eventColumns.some((column) => column.name === 'cover_image');
+    const needsBannerMigration = !eventColumns.some((column) => column.name === 'banner_image');
     if (needsMinimumMigration) {
       connection.exec('ALTER TABLE events ADD COLUMN min_participants INTEGER');
     }
     if (needsCoverMigration) {
       connection.exec("ALTER TABLE events ADD COLUMN cover_image TEXT NOT NULL DEFAULT '/images/events/default-event-cover.png'");
+    }
+    if (needsBannerMigration) {
+      connection.exec('ALTER TABLE events ADD COLUMN banner_image TEXT');
     }
     connection.exec(`
       CREATE INDEX IF NOT EXISTS idx_matches_received_at ON matches(received_at DESC, id DESC);
@@ -250,11 +256,11 @@ function openDatabase(dbPath) {
       INSERT OR IGNORE INTO events (
         slug, name, game, description, status, starts_at, registration_opens_at,
         registration_closes_at, min_participants, max_participants, registrations_open, archived,
-        modules_json, accent_color, icon, cover_image
+        modules_json, accent_color, icon, cover_image, banner_image
       ) VALUES (
         @slug, @name, @game, @description, @status, @startsAt, @registrationOpensAt,
         @registrationClosesAt, @minParticipants, @maxParticipants, @registrationsOpen, @archived,
-        @modulesJson, @accentColor, @icon, @coverImage
+        @modulesJson, @accentColor, @icon, @coverImage, @bannerImage
       )
     `);
     const defaultSetting = connection.prepare("SELECT value_json FROM app_settings WHERE setting_key = 'default_event_id'").get();
@@ -272,6 +278,10 @@ function openDatabase(dbPath) {
     if (needsCoverMigration) {
       connection.prepare('UPDATE events SET cover_image = ? WHERE id = ?')
         .run(DEFAULT_EVENT.coverImage, eventId);
+    }
+    if (needsBannerMigration) {
+      connection.prepare('UPDATE events SET banner_image = ? WHERE id = ?')
+        .run(DEFAULT_EVENT.bannerImage, eventId);
     }
     connection.prepare(`
       INSERT OR IGNORE INTO event_information (event_id, content_json, updated_at)
@@ -346,13 +356,13 @@ function openDatabase(dbPath) {
         WHEN 'Inscripciones cerradas' THEN 3 WHEN 'Finalizado' THEN 4 WHEN 'Cancelado' THEN 5 ELSE 6 END,
       CASE WHEN e.starts_at IS NULL THEN 1 ELSE 0 END, e.starts_at ASC, e.id DESC`);
   const insertEventStatement = connection.prepare(`INSERT INTO events
-    (slug,name,game,description,status,starts_at,registration_opens_at,registration_closes_at,min_participants,max_participants,registrations_open,archived,modules_json,accent_color,icon,cover_image)
-    VALUES (@slug,@name,@game,@description,@status,@startsAt,@registrationOpensAt,@registrationClosesAt,@minParticipants,@maxParticipants,@registrationsOpen,@archived,@modulesJson,@accentColor,@icon,@coverImage)`);
+    (slug,name,game,description,status,starts_at,registration_opens_at,registration_closes_at,min_participants,max_participants,registrations_open,archived,modules_json,accent_color,icon,cover_image,banner_image)
+    VALUES (@slug,@name,@game,@description,@status,@startsAt,@registrationOpensAt,@registrationClosesAt,@minParticipants,@maxParticipants,@registrationsOpen,@archived,@modulesJson,@accentColor,@icon,@coverImage,@bannerImage)`);
   const updateEventStatement = connection.prepare(`UPDATE events SET
     slug=@slug,name=@name,game=@game,description=@description,status=@status,starts_at=@startsAt,
     registration_opens_at=@registrationOpensAt,registration_closes_at=@registrationClosesAt,
     min_participants=@minParticipants,max_participants=@maxParticipants,registrations_open=@registrationsOpen,archived=@archived,
-    modules_json=@modulesJson,accent_color=@accentColor,icon=@icon,cover_image=@coverImage,
+    modules_json=@modulesJson,accent_color=@accentColor,icon=@icon,cover_image=@coverImage,banner_image=@bannerImage,
     updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=@id`);
   const insertInformationStatement = connection.prepare('INSERT OR IGNORE INTO event_information (event_id,content_json) VALUES (?,?)');
   const getInformationStatement = connection.prepare('SELECT content_json,updated_at FROM event_information WHERE event_id=?');

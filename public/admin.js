@@ -38,6 +38,7 @@ function populateEvent(event) {
   byId('event-accent').value = event?.accentColor || '#d7ff3f';
   byId('event-icon').value = event?.icon || 'gamepad';
   byId('event-cover-image').value = event?.coverImage || '/images/events/default-event-cover.png';
+  byId('event-banner-image').value = event?.bannerImage || '';
   byId('event-cover-preview').src = byId('event-cover-image').value;
   document.querySelectorAll('[data-module-input]').forEach((input) => { input.checked = event?.modules?.[input.dataset.moduleInput] ?? true; });
   byId('event-editor-title').textContent = event ? `Editar · ${event.name}` : 'Crear evento'; byId('archive-event').hidden = !event || event.archived; byId('view-event').hidden = !event;
@@ -55,6 +56,7 @@ function collectEvent() {
     registrationsOpen: byId('registrations-open').checked,
     accentColor: byId('event-accent').value, icon: byId('event-icon').value,
     coverImage: value('event-cover-image'),
+    bannerImage: byId('event-banner-image').value.trim() || null,
     modules: Object.fromEntries([...document.querySelectorAll('[data-module-input]')].map((input) => [input.dataset.moduleInput, input.checked]))
   };
 }

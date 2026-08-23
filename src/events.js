@@ -55,7 +55,8 @@ const DEFAULT_EVENT = Object.freeze({
   modules: DEFAULT_MODULES,
   accentColor: '#d7ff3f',
   icon: 'crewmate',
-  coverImage: '/images/events/among-us-cover.jpg'
+  coverImage: '/images/events/among-us-cover.jpg',
+  bannerImage: '/images/events/among-us-banner.jpg'
 });
 
 const DEFAULT_REGISTRATION_FIELDS = Object.freeze([
@@ -155,7 +156,8 @@ function normalizeEvent(input, existing = null) {
     modules: DEFAULT_MODULES,
     accentColor: '#d7ff3f',
     icon: 'gamepad',
-    coverImage: '/images/events/default-event-cover.png'
+    coverImage: '/images/events/default-event-cover.png',
+    bannerImage: null
   };
   const pick = (key) => input[key] === undefined ? base[key] : input[key];
   const slug = cleanText(pick('slug'), 'slug', { maximum: 80 }).toLowerCase();
@@ -196,6 +198,16 @@ function normalizeEvent(input, existing = null) {
     throw new EventValidationError('coverImage debe ser una ruta local como /images/events/portada.png.');
   }
 
+  // Opcional: el banner apaisado de la cabecera del evento. Sin él se usa la
+  // portada, que es vertical y se recorta mal en una franja ancha.
+  const bannerRaw = pick('bannerImage');
+  const bannerImage = bannerRaw === null || bannerRaw === undefined || String(bannerRaw).trim() === ''
+    ? null
+    : cleanText(bannerRaw, 'bannerImage', { maximum: 500 });
+  if (bannerImage !== null && !/^\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]+\.(?:png|jpe?g|webp|avif)$/i.test(bannerImage)) {
+    throw new EventValidationError('bannerImage debe ser una ruta local como /images/events/banner.jpg.');
+  }
+
   const event = {
     slug,
     name: cleanText(pick('name'), 'name', { maximum: 120 }),
@@ -212,7 +224,8 @@ function normalizeEvent(input, existing = null) {
     modules: normalizeModules(input.modules, base.modules),
     accentColor,
     icon,
-    coverImage
+    coverImage,
+    bannerImage
   };
 
   if (event.registrationOpensAt && event.registrationClosesAt

@@ -77,6 +77,39 @@ describe('multi-event database', () => {
     database.close();
   });
 
+
+  it('keeps the optional banner separate from the cover and defaults it to null', () => {
+    const database = openDatabase(temporaryPath());
+
+    // El evento semilla trae banner apaisado propio: la portada es vertical y
+    // en la franja ancha de la cabecera se recortaría casi entera.
+    const seeded = database.getDefaultEvent();
+    assert.equal(seeded.coverImage, '/images/events/among-us-cover.jpg');
+    assert.equal(seeded.bannerImage, '/images/events/among-us-banner.jpg');
+
+    // Un evento nuevo no está obligado a tener banner.
+    const created = database.createEvent({
+      slug: 'sin-banner', name: 'Sin banner', game: 'Valorant',
+      description: 'Prueba', status: 'Próximamente',
+      accentColor: '#ff4655', icon: 'crosshair',
+      coverImage: '/images/events/portada.png'
+    });
+    assert.equal(created.bannerImage, null);
+
+    const conBanner = database.updateEvent(created.id, {
+      ...created, bannerImage: '/images/events/banner.jpg'
+    });
+    assert.equal(conBanner.bannerImage, '/images/events/banner.jpg');
+    assert.equal(conBanner.coverImage, '/images/events/portada.png');
+
+    assert.throws(
+      () => database.updateEvent(created.id, { ...created, bannerImage: 'https://ajeno.example/x.jpg' }),
+      /bannerImage/
+    );
+
+    database.close();
+  });
+
   it('keeps Discord uniqueness scoped to each event', () => {
     const database = openDatabase(temporaryPath());
     const amongUs = database.getDefaultEvent();
