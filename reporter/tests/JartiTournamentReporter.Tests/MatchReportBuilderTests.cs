@@ -114,6 +114,26 @@ namespace Jartiland.TournamentReporter.Tests
         }
 
         [Fact]
+        public void Accepts_the_vanilla_remake_roles_that_EHR_really_assigns()
+        {
+            // Encontrado jugando el 2026-08-23: EHR no reparte `Crewmate` e
+            // `Impostor`, sino sus "Vanilla Remakes". Con la lista antigua se
+            // bloqueaba una partida perfectamente normal, jugador por jugador.
+            var snapshot = SampleGame.Snapshot();
+            snapshot.Players[0].MainRole = "ImpostorEHR";
+            foreach (var player in snapshot.Players.Skip(1)) player.MainRole = "CrewmateEHR";
+
+            var outcome = MatchReportBuilder.Build(
+                snapshot, SampleGame.Context(), SampleGame.Settings(),
+                SampleGame.PluginVersion, SampleGame.ReportId, SampleGame.PlayedAt);
+
+            Assert.True(outcome.Success);
+            Assert.Equal(4, outcome.Result.Players.Count);
+            Assert.Equal("ImpostorEHR", outcome.Result.Players.First().RawRole);
+            Assert.Equal("impostor", outcome.Result.Players.First().Team);
+        }
+
+        [Fact]
         public void Refuses_a_role_outside_the_tournament_even_if_its_team_is_valid()
         {
             var snapshot = SampleGame.Snapshot();

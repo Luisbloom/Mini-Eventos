@@ -18,9 +18,14 @@ namespace Jartiland.TournamentReporter.Configuration
         /// <summary>
         /// Roles de EHR admitidos por el torneo. Cualquier otro rol principal marca
         /// la partida como incompatible en lugar de convertirla en tripulante.
+        ///
+        /// EHR tiene dos familias para los roles básicos: los vanilla puros
+        /// (<c>Crewmate</c>, <c>Impostor</c>) y sus "Vanilla Remakes"
+        /// (<c>CrewmateEHR</c>, <c>ImpostorEHR</c>), que son los que reparte de
+        /// verdad en una partida normal. Hacen falta los cuatro.
         /// </summary>
         public IReadOnlyCollection<string> AllowedRoles { get; set; } =
-            new[] { "Crewmate", "Impostor" };
+            new[] { "Crewmate", "Impostor", "CrewmateEHR", "ImpostorEHR" };
 
         public string TokenFingerprint => Logging.SecretSafeLog.Fingerprint(ReporterToken);
 
