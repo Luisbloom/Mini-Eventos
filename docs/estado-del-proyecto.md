@@ -1,6 +1,6 @@
 # Estado del proyecto — 23 de agosto de 2026
 
-> Actualizado tras la primera partida que llegó a la clasificación sola.
+> Actualizado tras la primera partida real con nueve personas.
 
 Foto honesta de en qué punto está el Torneo de Among Us de Jartiland, escrita para
 retomarlo mañana sin tener que reconstruir el contexto.
@@ -14,8 +14,11 @@ la web sin que nadie tocara nada: los hooks dispararon, el mod capturó el estad
 pidió su contexto al servidor, guardó el resultado en disco, lo envió por HTTPS privado y
 recibió un `201`. La clasificación se recalculó sola.
 
-Queda **un solo hueco** por comprobar: que la lista de jugadores se construya bien cuando
-juegan varias personas. Todo lo demás del recorrido está demostrado.
+Y con gente: una partida con **9 jugadores** identificó a los 7 inscritos, excluyó con
+aviso a los 2 que no lo estaban y se envió con `201`. **El recorrido completo está
+verificado de punta a punta.**
+
+Lo que queda no es del Reporter, sino de la configuración de EHR (ver riesgos).
 
 ---
 
@@ -75,13 +78,12 @@ Aquí está el riesgo real, y conviene no engañarse:
 
 | Sin comprobar | Por qué importa |
 |---|---|
-| **La identificación con varios jugadores** | Es el único hueco que queda. Con una sola persona inscrita nunca se ha visto construir la lista completa. |
+| Kills y tareas con datos reales | Las partidas de prueba acabaron al instante: 0 kills y 0 tareas en todas. |
 | Comportamiento con desconexión real | Probado en tests con datos sintéticos. |
-| Kills y tareas con datos reales | La partida de prueba fue en solitario: 0 kills y 0 tareas. |
-| Dos hosts simultáneos | Sólo hay un PC preparado. |
+| Dos hosts simultáneos | Sólo hay un PC montado; HOST_2 tiene credencial y paquete listos. |
 
-➡️ **Traducción:** el recorrido completo funciona. Lo que falta es verlo con gente de verdad
-jugando a la vez.
+➡️ **Traducción:** el recorrido funciona de punta a punta. Falta una partida que dure lo
+suficiente para generar kills y tareas de verdad.
 
 ---
 
@@ -111,10 +113,17 @@ arrancar por falta de `.ini` y no llegó a instalar ni un hook.
 **Acción:** si vuelven, anotar **el momento exacto** (al abrir, al crear sala, al empezar,
 al terminar, al cerrar). Eso distingue EHR de BepInEx.
 
-### 3. Falta probar con gente 🟡
+### 3. EHR trae 0-4 neutrales de fábrica 🔴
 
-Un torneo con 10 personas por grupo se comporta distinto que una prueba a solas. Hace
-falta al menos una partida con 4 jugadores reales antes de dar nada por bueno.
+Es lo que hacía que las partidas acabaran nada más empezar. Los respaldos vanilla de EHR
+(`ImpostorEHR` / `CrewmateEHR`) **sólo se activan si no hay neutrales**, y su valor por
+defecto es `Team.Neutral => (0, 4)`. Con neutrales configurados pero ningún rol neutral
+activado, esas plazas no se llenan y hasta los impostores acaban de tripulante.
+
+**Acción:** pestaña *Neutral Roles* de EHR, `FactionLimits.Neutral.Max` a **0**.
+Comprobar en `BepInEx/log.html` que dice `Number of Neutrals: 0 - 0 => 0`.
+
+⚠️ EHR escribe su log en **`BepInEx/log.html`**, no en `LogOutput.log`.
 
 ### 4. Un solo PC preparado 🟡
 
