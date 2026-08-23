@@ -11,10 +11,11 @@
 .hero-side p { margin: 0 0 2.2rem; color: #b4bcba; font-size: clamp(.95rem, 1.3vw, 1.12rem); line-height: 1.65; }
 .jump-link { display: inline-flex; gap: 2rem; align-items: center; padding: 1rem 1.1rem; border: 1px solid var(--lime); color: var(--lime); text-decoration: none; font: .61rem/1 var(--mono); letter-spacing: .14em; transition: .2s ease; }
 .jump-link:hover { background: var(--lime); color: var(--void); }
-.hero-orbit { position: absolute; right: 18%; top: 6%; width: clamp(210px, 28vw, 430px); aspect-ratio: 1; border: 1px solid rgba(91,221,241,.16); border-radius: 50%; opacity: .65; animation: portal-turn 28s linear infinite; }
+.hero-orbit { position: absolute; right: 18%; top: 6%; width: clamp(250px, 33vw, 510px); aspect-ratio: 1; border: 1px solid rgba(91,221,241,.16); border-radius: 50%; animation: portal-turn 28s linear infinite; }
 .hero-orbit::before, .hero-orbit::after { content: ""; position: absolute; inset: 16%; border: 1px dashed rgba(215,255,63,.2); border-radius: 50%; }
 .hero-orbit::after { inset: 38%; border-style: solid; background: rgba(215,255,63,.03); }
-.hero-orbit span { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(240,242,233,.06); font: clamp(8rem, 19vw, 18rem)/1 var(--display); }
+.hero-orbit span { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: rgba(240,242,233,.13); font: clamp(8rem, 19vw, 18rem)/1 var(--display); }
+.orbit-logo { position: absolute; inset: 9%; width: 82%; height: 82%; z-index: 1; object-fit: contain; opacity: .88; animation: portal-turn 28s linear infinite reverse; }
 .hero-orbit i { position: absolute; left: 8%; top: 45%; width: 13px; height: 13px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 24px var(--cyan); }
 .events-board { padding: clamp(4rem, 7vw, 7rem) var(--portal-pad); }
 .board-heading { margin-bottom: clamp(2.5rem, 5vw, 4.5rem); display: flex; justify-content: space-between; align-items: end; gap: 2rem; }
@@ -55,4 +56,4 @@
 @keyframes card-arrive { from { opacity: 0; transform: translateY(18px); } }
 @media (max-width: 950px) { .portal-hero { grid-template-columns: 1fr; min-height: 620px; } .hero-side { max-width: 560px; } .event-grid { grid-template-columns: 1fr; } .portal-steps { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .portal-hero { min-height: 570px; padding-top: 4.5rem; gap: 2.5rem; } .hero-orbit { right: -25%; } .board-heading { display: block; } .board-count { margin-top: 1.5rem; } .event-card { min-height: 560px; grid-template-columns: 118px 1fr; } .event-card-content { padding: 1.35rem; } .event-card h3 { font-size: 2.35rem; } .event-meta { grid-template-columns: 1fr; } .event-meta .minimum-meta, .event-meta .registration-meta { grid-column: auto; } .portal-footer { gap: 1rem; flex-wrap: wrap; } }
-@media (prefers-reduced-motion: reduce) { .hero-orbit, .event-card { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .hero-orbit, .orbit-logo, .event-card { animation: none; } }
