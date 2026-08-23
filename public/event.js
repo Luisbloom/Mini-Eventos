@@ -209,7 +209,9 @@ async function loadPrizes(event){if(!event.modules.prizes)return;try{const respo
 async function loadEvent() {
   try {
     const response = await fetch(`/api/events/${encodeURIComponent(slug)}`, { cache: 'no-store' }); if (!response.ok) throw new Error();
-    const data = await response.json(); currentEvent = data.event; renderEvent(data.event); renderRegistration(data.event, data.registrationFields); setConnection(true, 'EVENTO ONLINE');
+    const data = await response.json();
+    if (data.event.status === 'Próximamente') { byId('event-soon').hidden = false; setConnection(false, 'PRÓXIMAMENTE'); return; }
+    currentEvent = data.event; renderEvent(data.event); renderRegistration(data.event, data.registrationFields); setConnection(true, 'EVENTO ONLINE');
     await Promise.all([loadCompetition(data.event),loadSchedule(data.event),loadParticipants(data.event),loadLeaderboard(data.event),loadMatches(data.event),loadPrizes(data.event)]);
     const section = location.pathname.split('/').filter(Boolean)[2]; if (section) document.querySelector(`#${section}`)?.scrollIntoView();
   } catch { byId('event-error').hidden = false; setConnection(false, 'NO DISPONIBLE'); }

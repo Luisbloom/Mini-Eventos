@@ -66,10 +66,21 @@ function createEventCard(event, index) {
     createMeta('MÍNIMO PARA REALIZARSE', minimum, 'minimum-meta'),
     createMeta('INSCRIPCIÓN', event.registration.label.toUpperCase(), 'registration-meta')
   );
-  const link = document.createElement('a');
-  link.className = 'event-link';
-  link.href = `/eventos/${encodeURIComponent(event.slug)}`;
-  link.innerHTML = 'VER EVENTO <span aria-hidden="true">↗</span>';
+  // Un evento anunciado pero sin abrir no lleva a ninguna parte: la tarjeta
+  // existe para reservarle sitio en la cartelera, no para entrar en ella.
+  const proximamente = event.status === 'Próximamente';
+  let link;
+  if (proximamente) {
+    article.classList.add('event-card-soon');
+    link = document.createElement('span');
+    link.className = 'event-link event-link-disabled';
+    link.textContent = 'PRÓXIMAMENTE';
+  } else {
+    link = document.createElement('a');
+    link.className = 'event-link';
+    link.href = `/eventos/${encodeURIComponent(event.slug)}`;
+    link.innerHTML = 'VER EVENTO <span aria-hidden="true">↗</span>';
+  }
   content.append(status, title, description, meta, link);
   article.append(visual, content);
   return article;
