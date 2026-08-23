@@ -1,5 +1,7 @@
 # Estado del proyecto — 23 de agosto de 2026
 
+> Actualizado tras la primera partida que llegó a la clasificación sola.
+
 Foto honesta de en qué punto está el Torneo de Among Us de Jartiland, escrita para
 retomarlo mañana sin tener que reconstruir el contexto.
 
@@ -7,12 +9,13 @@ retomarlo mañana sin tener que reconstruir el contexto.
 
 ## Resumen en un párrafo
 
-El sistema está **construido y desplegado**, pero **nunca ha completado su ciclo entero
-en una partida real**. El servidor funciona en Debian y responde por los dos canales de
-Tailscale; el mod compila, se instala y arranca dentro de Among Us sin romper el juego.
-Lo que falta es el último eslabón: colocar el `.ini` con la credencial para que el mod
-deje de apagarse solo, y jugar una partida de verdad. Eso son unos veinte minutos de
-trabajo, no días.
+**El bucle está cerrado.** Una partida jugada en Among Us acabó en la clasificación de
+la web sin que nadie tocara nada: los hooks dispararon, el mod capturó el estado de EHR,
+pidió su contexto al servidor, guardó el resultado en disco, lo envió por HTTPS privado y
+recibió un `201`. La clasificación se recalculó sola.
+
+Queda **un solo hueco** por comprobar: que la lista de jugadores se construya bien cuando
+juegan varias personas. Todo lo demás del recorrido está demostrado.
 
 ---
 
@@ -52,6 +55,18 @@ Esto no es «debería funcionar»: son cosas comprobadas con evidencia.
 - **La migración de SQLite es no destructiva**: probada sobre una copia de la base real
   antes de tocar producción.
 
+### La prueba end-to-end del 23 de agosto
+
+- **Los dos hooks disparan** en una partida real: `Partida iniciada` y `Final detectado (Impostor)`.
+- **La captura es correcta**: ganador, mapa (`Polus`), duración y sello de versiones
+  (`ehr 8.0.0 / testBuild 3 / amongUs 2026.8.18`).
+- **El envío funciona**: `Resultado aceptado HTTP 201` al primer intento, un segundo después
+  de arrancar el juego. El archivo pasó de `pending/` a `sent/` solo.
+- **El servidor lo guardó** como `Partida #1 · Fase 1 · Grupo A · partida 1 · VALID`.
+- **El scoring es del servidor**: el mod mandó `won: true` y `kills: 0`; la clasificación
+  muestra **5 puntos** (victoria de impostor). El mod no envió ni un punto.
+- **El hueco se marcó**: el contexto pasó a `partida 2 de 5` con `occupiedMatchNumbers: [1]`.
+
 ---
 
 ## Qué NO está verificado
@@ -60,15 +75,13 @@ Aquí está el riesgo real, y conviene no engañarse:
 
 | Sin comprobar | Por qué importa |
 |---|---|
-| **Que los hooks disparen en una partida real** | Es el corazón del mod. Los tests validan la lógica, no que Harmony enganche dentro del juego. |
-| Que los Friend Codes del lobby coincidan con los inscritos | Si no casan, el mod excluye a todo el mundo y no envía nada. |
-| El envío end-to-end | Nunca se ha mandado un resultado desde una partida de verdad. |
+| **La identificación con varios jugadores** | Es el único hueco que queda. Con una sola persona inscrita nunca se ha visto construir la lista completa. |
 | Comportamiento con desconexión real | Probado en tests con datos sintéticos. |
-| `HttpClient` y `Task.Run` bajo IL2CPP | Deberían ir; no se ha visto. |
+| Kills y tareas con datos reales | La partida de prueba fue en solitario: 0 kills y 0 tareas. |
 | Dos hosts simultáneos | Sólo hay un PC preparado. |
 
-➡️ **Traducción:** todo lo que se podía probar sin abrir el juego está probado. Todo lo que
-exige jugar, no.
+➡️ **Traducción:** el recorrido completo funciona. Lo que falta es verlo con gente de verdad
+jugando a la vez.
 
 ---
 
