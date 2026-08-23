@@ -37,8 +37,10 @@
         <summary>Índice de contenidos</summary>
         <nav aria-label="Índice móvil">
           <a href="#general">Información general</a><a href="#formato">Formato</a>
+          <a data-module="schedule" href="#agenda" hidden>Agenda</a>
           <a data-among-only href="#puntuacion">Puntuaciones</a><a href="#reglas">Reglas</a>
           <a data-among-only href="#automatico">Sistema automático</a><a href="#desempates">Desempates</a>
+          <a data-module="prizes" href="#premios" hidden>Premios</a>
           <a href="#faq">Preguntas frecuentes</a>
         </nav>
       </details>
@@ -48,9 +50,11 @@
           <span>EN ESTA PÁGINA</span>
           <nav aria-label="Índice de la página">
             <a href="#general">01 · General</a><a href="#formato">02 · Formato</a>
-            <a data-among-only href="#roles">03 · Roles</a><a data-among-only href="#puntuacion">04 · Puntuación</a>
-            <a data-among-only href="#automatico">05 · Sistema</a><a href="#reglas">06 · Reglas</a>
-            <a href="#desempates">07 · Desempates</a><a href="#faq">08 · FAQ</a>
+            <a data-module="schedule" href="#agenda" hidden>03 · Agenda</a>
+            <a data-among-only href="#roles">04 · Roles</a><a data-among-only href="#puntuacion">05 · Puntuación</a>
+            <a data-among-only href="#automatico">06 · Sistema</a><a href="#reglas">07 · Reglas</a>
+            <a href="#desempates">08 · Desempates</a><a data-module="prizes" href="#premios" hidden>09 · Premios</a>
+            <a href="#faq">10 · FAQ</a>
           </nav>
           <a class="admin-link" href="/admin">Administración ↗</a>
         </aside>
@@ -92,8 +96,15 @@
             </div>
           </section>
 
+          <section id="agenda" class="info-section" data-module="schedule" hidden>
+            <p class="section-index">03 / HORARIOS</p>
+            <h2>Agenda del día</h2>
+            <p class="large-copy">Conéctate a la hora de recepción: es cuando se repasan las reglas y se reparten los grupos. El torneo arranca puntual.</p>
+            <ol id="info-schedule" class="event-schedule"></ol>
+          </section>
+
           <section id="roles" class="info-section" data-among-only>
-            <p class="section-index">03 / EQUIDAD</p>
+            <p class="section-index">04 / EQUIDAD</p>
             <h2>Reparto de roles</h2>
             <div class="feature-card role-card">
               <div><span class="crew red large-crew" aria-hidden="true"></span></div>
@@ -107,7 +118,7 @@
           </section>
 
           <section id="puntuacion" class="info-section scoring-section" data-among-only>
-            <p class="section-index">04 / PUNTOS</p>
+            <p class="section-index">05 / PUNTOS</p>
             <h2>Sistema de puntuación</h2>
             <p class="large-copy">La clasificación es individual. Estos valores llegan directamente del motor que calcula el leaderboard.</p>
             <div id="scoring-cards" class="score-grid" aria-live="polite"></div>
@@ -141,7 +152,7 @@
           </section>
 
           <section id="automatico" class="info-section" data-among-only>
-            <p class="section-index">05 / TECNOLOGÍA</p>
+            <p class="section-index">06 / TECNOLOGÍA</p>
             <h2>Registro automático</h2>
             <p class="large-copy">Las puntuaciones no se introducen manualmente. El host registra la partida con EHR y el Tournament Reporter envía el resultado al servidor de Jartiland cuando termina.</p>
             <div class="data-flow" aria-label="Flujo automático de resultados">
@@ -155,7 +166,7 @@
           </section>
 
           <section id="reglas" class="info-section rules-section">
-            <p class="section-index">06 / JUEGO LIMPIO</p>
+            <p class="section-index">07 / JUEGO LIMPIO</p>
             <h2>Reglas</h2>
             <ol id="rules-list" class="official-rules"></ol>
 
@@ -168,20 +179,27 @@
           </section>
 
           <section id="desempates" class="info-section">
-            <p class="section-index">07 / ORDEN FINAL</p>
+            <p class="section-index">08 / ORDEN FINAL</p>
             <h2>Criterios de desempate</h2>
             <ol id="tiebreakers-list" class="tiebreaker-list"></ol>
           </section>
 
+          <section id="premios" class="info-section" data-module="prizes" hidden>
+            <p class="section-index">09 / RECOMPENSAS</p>
+            <h2>Premios</h2>
+            <p class="large-copy">El podio de la Gran Final se lleva premio, y hay dos bonificaciones que salen de las estadísticas de todo el torneo, grupos incluidos.</p>
+            <div id="info-prizes" class="event-prizes"></div>
+          </section>
+
           <section id="estadisticas" class="info-section">
-            <p class="section-index">08 / DATOS</p>
+            <p class="section-index">10 / DATOS</p>
             <h2>Estadísticas</h2>
             <p class="large-copy">La web puede mostrar partidas jugadas, victorias, win rate, kills, veces como impostor, tareas, muertes y supervivencia.</p>
             <div class="signal-note">Que una estadística aparezca en la web no significa necesariamente que otorgue puntos.</div>
           </section>
 
           <section id="faq" class="info-section faq-section">
-            <p class="section-index">09 / RESPUESTAS RÁPIDAS</p>
+            <p class="section-index">11 / RESPUESTAS RÁPIDAS</p>
             <h2>Preguntas frecuentes</h2>
             <div id="faq-list" class="faq-list"></div>
           </section>

@@ -159,3 +159,23 @@
   .data-flow span { min-width: 0; }
   .official-rules li { grid-template-columns: 42px minmax(0, 1fr); }
 }
+
+/* Agenda y premios: mismas piezas que la página del evento, que vive en
+   competition.css y esta página no carga. */
+.info-section[hidden] { display: none; }
+.event-schedule { margin: 2rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.event-schedule li { display: grid; grid-template-columns: 95px minmax(160px, .7fr) 1fr; gap: 1rem; padding: 1.15rem 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.event-schedule time { color: var(--event-accent); font: 1.35rem/1 var(--display); }
+.event-schedule strong { text-transform: uppercase; font: 1.25rem/1 var(--display); }
+.event-schedule p { margin: 0; color: var(--muted); line-height: 1.5; }
+.event-prizes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; margin-top: 2rem; background: var(--line); border: 1px solid var(--line); }
+.event-prizes article { min-height: 190px; padding: 1.3rem; background: var(--surface); display: flex; flex-direction: column; }
+.event-prizes span { color: var(--event-accent); font: .52rem/1 var(--mono); letter-spacing: .09em; }
+.event-prizes h3 { margin: 1.4rem 0 .7rem; font: 1.8rem/1 var(--display); text-transform: uppercase; }
+.event-prizes p { color: var(--muted); line-height: 1.5; }
+.event-prizes b { margin-top: auto; padding-top: 1rem; color: var(--paper); font: .62rem/1.4 var(--mono); }
+
+@media (max-width: 650px) {
+  .event-schedule li { grid-template-columns: 72px 1fr; }
+  .event-schedule p { grid-column: 2 / -1; }
+}

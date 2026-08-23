@@ -15,7 +15,9 @@ const elements = {
   scoring: document.querySelector('#scoring-cards'),
   rules: document.querySelector('#rules-list'),
   tiebreakers: document.querySelector('#tiebreakers-list'),
-  faqs: document.querySelector('#faq-list')
+  faqs: document.querySelector('#faq-list'),
+  schedule: document.querySelector('#info-schedule'),
+  prizes: document.querySelector('#info-prizes')
 };
 
 const eventSlug = decodeURIComponent(location.pathname.split('/').filter(Boolean)[1] || 'among-us-agosto-2026');
@@ -81,6 +83,63 @@ function renderFaqs(faqs) {
   }));
 }
 
+
+// La agenda y los premios son módulos opcionales del evento: sus secciones nacen
+// ocultas y sólo se muestran si el evento los publica y traen algo que enseñar.
+function revealModule(name) {
+  document.querySelectorAll(`[data-module="${name}"]`).forEach((element) => { element.hidden = false; });
+}
+
+async function loadSchedule(event) {
+  if (!event?.modules?.schedule) return;
+  try {
+    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/schedule`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const { schedule } = await response.json();
+    if (!schedule?.length) return;
+    elements.schedule.replaceChildren(...schedule.map((entry) => {
+      const item = document.createElement('li');
+      const time = document.createElement('time');
+      time.textContent = entry.time;
+      const title = document.createElement('strong');
+      title.textContent = entry.title;
+      const description = document.createElement('p');
+      description.textContent = entry.description;
+      item.append(time, title, description);
+      return item;
+    }));
+    revealModule('schedule');
+  } catch {
+    // Complementario al manual: si falla, la sección se queda oculta y el resto se lee igual.
+  }
+}
+
+async function loadPrizes(event) {
+  if (!event?.modules?.prizes) return;
+  try {
+    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/prizes`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const { prizes } = await response.json();
+    if (!prizes?.length) return;
+    elements.prizes.replaceChildren(...prizes.map((prize, index) => {
+      const card = document.createElement('article');
+      const tag = document.createElement('span');
+      tag.textContent = `PREMIO ${String(index + 1).padStart(2, '0')}`;
+      const title = document.createElement('h3');
+      title.textContent = prize.title;
+      const description = document.createElement('p');
+      description.textContent = prize.description;
+      const value = document.createElement('b');
+      value.textContent = prize.prizeValue || '';
+      card.append(tag, title, description, value);
+      return card;
+    }));
+    revealModule('prizes');
+  } catch {
+    // Idem: los premios oficiales están también en la página del evento.
+  }
+}
+
 function render(data) {
   if (data.event) {
     document.title = `Información · ${data.event.name}`;
@@ -105,6 +164,8 @@ function render(data) {
   renderList(elements.rules, rules);
   renderList(elements.tiebreakers, tiebreakers);
   renderFaqs(faqs);
+  loadSchedule(data.event);
+  loadPrizes(data.event);
   elements.dot.className = 'live-dot live';
   elements.status.textContent = 'INFORMACIÓN OFICIAL';
 }
