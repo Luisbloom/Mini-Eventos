@@ -115,4 +115,24 @@ describe('leaderboard', () => {
     ]);
     assert.equal(result.standings[0].impostorWins, 1);
   });
+
+  it('keeps a player as one row even if the Among Us seat changes between matches', () => {
+    // Encontrado en el torneo del 2026-08-23: el mismo jugador salía dos veces
+    // porque se agrupaba por su hueco en la partida y no por su inscripción.
+    const matches = [
+      { id: 1, receivedAt: '2026-08-23T17:09:00Z', report: { winner: 'crew', players: [
+        { participantId: 5, playerId: 3, name: 'Sella1', team: 'crew', role: 'crew', won: true, kills: 0, tasksCompleted: 5, tasksTotal: 5 }
+      ] } },
+      { id: 2, receivedAt: '2026-08-23T17:28:00Z', report: { winner: 'crew', players: [
+        { participantId: 5, playerId: 9, name: 'Sella1', team: 'crew', role: 'crew', won: true, kills: 0, tasksCompleted: 5, tasksTotal: 5 }
+      ] } }
+    ];
+
+    const { standings } = buildLeaderboard(matches);
+
+    assert.equal(standings.length, 1);
+    assert.equal(standings[0].name, 'Sella1');
+    assert.equal(standings[0].games, 2);
+    assert.equal(standings[0].points, 10);
+  });
 });

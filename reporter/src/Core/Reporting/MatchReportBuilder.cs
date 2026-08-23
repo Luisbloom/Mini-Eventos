@@ -93,12 +93,16 @@ namespace Jartiland.TournamentReporter.Reporting
                     continue;
                 }
 
+                // EHR decide quién gana en CustomWinnerHolder.WinnerIds, y lo hace con
+                // matices: a quien se desconecta o lo expulsan lo deja fuera aunque su
+                // equipo gane. Eso es correcto, así que se avisa pero no se bloquea:
+                // llevarle la contraria a EHR tiraba partidas enteras por un expulsado.
                 if (winner != null && player.Won != string.Equals(team, winner, StringComparison.Ordinal))
                 {
-                    outcome.Blocking.Add(
+                    outcome.Warnings.Add(
                         $"{rosterEntry.DisplayName} figura como {(player.Won ? "ganador" : "perdedor")} " +
-                        $"siendo {team} en una victoria de {winner}.");
-                    continue;
+                        $"siendo {team} en una victoria de {winner}" +
+                        (player.Disconnected ? " (se desconectó o lo expulsaron)." : "."));
                 }
 
                 players.Add(new PlayerResult

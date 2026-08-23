@@ -49,7 +49,10 @@ function buildLeaderboard(matches) {
         continue;
       }
 
-      const playerId = String(player.playerId ?? player.id ?? normalized(name));
+      // participantId es la identidad estable del torneo. playerId es el hueco
+      // que ocupa en la partida de Among Us y cambia de una a otra, así que un
+      // mismo jugador aparecía dos veces si le tocaba otro asiento.
+      const playerId = String(player.participantId ?? player.playerId ?? player.id ?? normalized(name));
       const won = didPlayerWin(player, report);
       const hasExplicitPoints = player.points !== undefined || player.score !== undefined;
       const points = hasExplicitPoints

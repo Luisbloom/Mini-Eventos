@@ -181,8 +181,11 @@ namespace Jartiland.TournamentReporter.Tests
         }
 
         [Fact]
-        public void Refuses_a_win_flag_that_contradicts_the_winning_team()
+        public void Warns_about_a_win_flag_that_contradicts_the_team_without_losing_the_match()
         {
+            // Encontrado en el torneo del 2026-08-23: a un tripulante lo expulsaron a
+            // mitad de partida, EHR lo dejó fuera de los ganadores (correctamente) y
+            // la validación tumbaba las catorce minutos de partida de los otros doce.
             var snapshot = SampleGame.Snapshot();
             snapshot.Players[1].Won = true;
 
@@ -190,8 +193,27 @@ namespace Jartiland.TournamentReporter.Tests
                 snapshot, SampleGame.Context(), SampleGame.Settings(),
                 SampleGame.PluginVersion, SampleGame.ReportId, SampleGame.PlayedAt);
 
-            Assert.False(outcome.Success);
-            Assert.Contains(outcome.Blocking, problem => problem.Contains("Marta"));
+            Assert.True(outcome.Success);
+            Assert.Contains(outcome.Warnings, warning => warning.Contains("Marta"));
+        }
+
+        [Fact]
+        public void Sends_the_match_when_a_kicked_player_is_left_out_of_the_winners()
+        {
+            var snapshot = SampleGame.Snapshot();
+            snapshot.WinnerTeam = "Crewmate";
+            snapshot.Players[0].Won = false;                       // el impostor pierde
+            foreach (var crew in snapshot.Players.Skip(1)) crew.Won = true;
+            snapshot.Players[3].Won = false;                       // expulsado a mitad
+            snapshot.Players[3].Disconnected = true;
+
+            var outcome = MatchReportBuilder.Build(
+                snapshot, SampleGame.Context(), SampleGame.Settings(),
+                SampleGame.PluginVersion, SampleGame.ReportId, SampleGame.PlayedAt);
+
+            Assert.True(outcome.Success);
+            Assert.Equal(4, outcome.Result.Players.Count);
+            Assert.Contains(outcome.Warnings, warning => warning.Contains("expulsaron"));
         }
 
         [Fact]
