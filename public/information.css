@@ -168,7 +168,7 @@
 .event-schedule time { color: var(--event-accent); font: 1.35rem/1 var(--display); }
 .event-schedule strong { text-transform: uppercase; font: 1.25rem/1 var(--display); }
 .event-schedule p { margin: 0; color: var(--muted); line-height: 1.5; }
-.event-prizes { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; margin-top: 2rem; background: var(--line); border: 1px solid var(--line); }
+.event-prizes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 1px; margin-top: 2rem; background: var(--line); border: 1px solid var(--line); }
 .event-prizes article { min-height: 190px; padding: 1.3rem; background: var(--surface); display: flex; flex-direction: column; }
 .event-prizes span { color: var(--event-accent); font: .52rem/1 var(--mono); letter-spacing: .09em; }
 .event-prizes h3 { margin: 1.4rem 0 .7rem; font: 1.8rem/1 var(--display); text-transform: uppercase; }
