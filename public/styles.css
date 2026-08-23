@@ -264,3 +264,5 @@ h2 { font: clamp(2.8rem, 6vw, 5.8rem)/.9 var(--display); letter-spacing: -.025em
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }
+
+.brand-logo { width: 40px; height: 40px; flex: none; display: block; object-fit: contain; }
