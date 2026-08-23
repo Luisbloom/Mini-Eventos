@@ -19,13 +19,27 @@ namespace Jartiland.TournamentReporter.Configuration
         /// Roles de EHR admitidos por el torneo. Cualquier otro rol principal marca
         /// la partida como incompatible en lugar de convertirla en tripulante.
         ///
-        /// EHR tiene dos familias para los roles básicos: los vanilla puros
-        /// (<c>Crewmate</c>, <c>Impostor</c>) y sus "Vanilla Remakes"
-        /// (<c>CrewmateEHR</c>, <c>ImpostorEHR</c>), que son los que reparte de
-        /// verdad en una partida normal. Hacen falta los cuatro.
+        /// Se admiten **todos los roles vanilla de Among Us** (ingeniero,
+        /// científico, ángel guardián, cambiaformas…) porque cada uno sigue
+        /// siendo tripulante o impostor y la puntuación no cambia. Lo que la
+        /// lista bloquea son los roles propios de EHR y los neutrales, que sí
+        /// romperían el modelo del torneo.
+        ///
+        /// De cada rol hacen falta sus dos nombres: EHR tiene el vanilla puro
+        /// (<c>Engineer</c>) y su "Vanilla Remake" (<c>EngineerEHR</c>), y el
+        /// que reparte de verdad en partida es el segundo.
         /// </summary>
-        public IReadOnlyCollection<string> AllowedRoles { get; set; } =
-            new[] { "Crewmate", "Impostor", "CrewmateEHR", "ImpostorEHR" };
+        public IReadOnlyCollection<string> AllowedRoles { get; set; } = new[]
+        {
+            // Impostores vanilla y sus remakes
+            "Impostor", "Phantom", "Shapeshifter", "Viper",
+            "ImpostorEHR", "PhantomEHR", "ShapeshifterEHR", "ViperEHR",
+            // Tripulantes vanilla y sus remakes
+            "Crewmate", "Engineer", "GuardianAngel", "Noisemaker",
+            "Scientist", "Tracker", "Detective", "Judge",
+            "CrewmateEHR", "EngineerEHR", "GuardianAngelEHR", "NoisemakerEHR",
+            "ScientistEHR", "TrackerEHR", "DetectiveEHR", "JudgeEHR"
+        };
 
         public string TokenFingerprint => Logging.SecretSafeLog.Fingerprint(ReporterToken);
 

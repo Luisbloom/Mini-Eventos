@@ -134,6 +134,25 @@ namespace Jartiland.TournamentReporter.Tests
         }
 
         [Fact]
+        public void Accepts_any_vanilla_role_because_it_is_still_crew_or_impostor()
+        {
+            var snapshot = SampleGame.Snapshot();
+            snapshot.Players[0].MainRole = "ShapeshifterEHR";
+            snapshot.Players[1].MainRole = "EngineerEHR";
+            snapshot.Players[2].MainRole = "ScientistEHR";
+            snapshot.Players[3].MainRole = "GuardianAngelEHR";
+
+            var outcome = MatchReportBuilder.Build(
+                snapshot, SampleGame.Context(), SampleGame.Settings(),
+                SampleGame.PluginVersion, SampleGame.ReportId, SampleGame.PlayedAt);
+
+            Assert.True(outcome.Success);
+            Assert.Equal(4, outcome.Result.Players.Count);
+            Assert.Equal("impostor", outcome.Result.Players.First().Team);
+            Assert.All(outcome.Result.Players.Skip(1), player => Assert.Equal("crew", player.Team));
+        }
+
+        [Fact]
         public void Refuses_a_role_outside_the_tournament_even_if_its_team_is_valid()
         {
             var snapshot = SampleGame.Snapshot();

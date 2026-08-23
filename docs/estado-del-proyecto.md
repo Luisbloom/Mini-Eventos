@@ -1,6 +1,6 @@
 # Estado del proyecto — 23 de agosto de 2026
 
-> Actualizado tras la primera partida real con nueve personas.
+> Actualizado tras la primera partida completa: 8 jugadores, 6 minutos, kills y tareas reales.
 
 Foto honesta de en qué punto está el Torneo de Among Us de Jartiland, escrita para
 retomarlo mañana sin tener que reconstruir el contexto.
@@ -14,11 +14,9 @@ la web sin que nadie tocara nada: los hooks dispararon, el mod capturó el estad
 pidió su contexto al servidor, guardó el resultado en disco, lo envió por HTTPS privado y
 recibió un `201`. La clasificación se recalculó sola.
 
-Y con gente: una partida con **9 jugadores** identificó a los 7 inscritos, excluyó con
-aviso a los 2 que no lo estaban y se envió con `201`. **El recorrido completo está
-verificado de punta a punta.**
-
-Lo que queda no es del Reporter, sino de la configuración de EHR (ver riesgos).
+Y con gente de verdad: una partida de **6 minutos con 8 jugadores** en Polus, con 5 kills
+y tareas completadas, se envió con `201` y se puntuó sola. **No queda nada del Reporter
+sin verificar.**
 
 ---
 
@@ -58,7 +56,33 @@ Esto no es «debería funcionar»: son cosas comprobadas con evidencia.
 - **La migración de SQLite es no destructiva**: probada sobre una copia de la base real
   antes de tocar producción.
 
-### La prueba end-to-end del 23 de agosto
+### La partida real del 23 de agosto
+
+```
+partida nº1 · VALID · ganador impostor · Polus · 370s
+
+Luis        impostor  ImpostorEHR   ganó    5 kills   0/0
+Alvlp10     crew      CrewmateEHR   perdió  0 kills   5/5 ✔
+ChoripanXd  crew                    perdió            4/5
+MontesOnFi  crew                    perdió            3/5
+Cris Tina · JUANXULO · chuche · Sella1   perdieron    5/5 ✔
+```
+
+Clasificación resultante, calculada por el servidor:
+
+| Jugador | Puntos | Desglose |
+|---|---|---|
+| Luis | **8** | 5 victoria impostor + **3 de kills (tope aplicado sobre 5 hechas)** |
+| Alvlp10, Cris Tina, JUANXULO, chuche, Sella1 | **1** | Derrota (0) + todas las tareas (+1) |
+| ChoripanXd, MontesOnFi | **0** | Derrota sin terminar tareas |
+
+El mod envió `won`, `kills: 5` y `5/5`. **Ni un punto.** El tope de 3 y el bonus de tareas
+los aplicó `scoring.js`.
+
+También excluyó con aviso a un jugador cuyo Friend Code estaba mal registrado, sin tumbar
+la partida.
+
+### La prueba end-to-end previa
 
 - **Los dos hooks disparan** en una partida real: `Partida iniciada` y `Final detectado (Impostor)`.
 - **La captura es correcta**: ganador, mapa (`Polus`), duración y sello de versiones
@@ -78,12 +102,12 @@ Aquí está el riesgo real, y conviene no engañarse:
 
 | Sin comprobar | Por qué importa |
 |---|---|
-| Kills y tareas con datos reales | Las partidas de prueba acabaron al instante: 0 kills y 0 tareas en todas. |
-| Comportamiento con desconexión real | Probado en tests con datos sintéticos. |
-| Dos hosts simultáneos | Sólo hay un PC montado; HOST_2 tiene credencial y paquete listos. |
+| Dos hosts simultáneos | Sólo hay un PC montado. HOST_2 tiene credencial, asignación a Grupo B y paquete de mods listos; falta instalarlo. |
+| Comportamiento con desconexión real | Probado en tests con datos sintéticos; en partida real aún no se ha dado el caso. |
+| Una fase completa (5 partidas) y el cierre de fase | El flujo de clasificados a la final no se ha ejercitado con datos reales. |
 
-➡️ **Traducción:** el recorrido funciona de punta a punta. Falta una partida que dure lo
-suficiente para generar kills y tareas de verdad.
+➡️ **Traducción:** el Reporter está verificado. Lo que queda es de escala: dos salas a la
+vez y el torneo entero de principio a fin.
 
 ---
 
@@ -113,7 +137,7 @@ arrancar por falta de `.ini` y no llegó a instalar ni un hook.
 **Acción:** si vuelven, anotar **el momento exacto** (al abrir, al crear sala, al empezar,
 al terminar, al cerrar). Eso distingue EHR de BepInEx.
 
-### 3. EHR trae 0-4 neutrales de fábrica 🔴
+### 3. EHR trae 0-4 neutrales de fábrica ✅ resuelto
 
 Es lo que hacía que las partidas acabaran nada más empezar. Los respaldos vanilla de EHR
 (`ImpostorEHR` / `CrewmateEHR`) **sólo se activan si no hay neutrales**, y su valor por
