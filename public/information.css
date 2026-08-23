@@ -158,6 +158,8 @@
   .data-flow { display: grid; grid-template-columns: 1fr; }
   .data-flow span { min-width: 0; }
   .official-rules li { grid-template-columns: 42px minmax(0, 1fr); }
+  .tiebreaker-list li { grid-template-columns: 42px minmax(0, 1fr); padding: 1rem; gap: .8rem; }
+  .tiebreaker-list li::before { font-size: 1.5rem; }
 }
 
 /* Agenda y premios: mismas piezas que la página del evento, que vive en
@@ -175,7 +177,15 @@
 .event-prizes p { color: var(--muted); line-height: 1.5; }
 .event-prizes b { margin-top: auto; padding-top: 1rem; color: var(--paper); font: .62rem/1.4 var(--mono); }
 
-@media (max-width: 650px) {
-  .event-schedule li { grid-template-columns: 72px 1fr; }
-  .event-schedule p { grid-column: 2 / -1; }
+/* Mismo corte que el resto de la página. Va después de las reglas de arriba
+   a propósito: si estuviera en el bloque de 660 lo pisarían por orden. */
+@media (max-width: 660px) {
+  .event-schedule li { grid-template-columns: 64px minmax(0, 1fr); gap: .5rem .8rem; padding: 1rem 0; }
+  .event-schedule time { font-size: 1.15rem; }
+  .event-schedule strong { font-size: 1.05rem; }
+  .event-schedule p { grid-column: 2 / -1; font-size: .92rem; }
+  .event-prizes { margin-top: 1.5rem; }
+  .event-prizes article { min-height: 0; padding: 1.15rem; }
+  .event-prizes h3 { margin: .9rem 0 .55rem; font-size: 1.5rem; overflow-wrap: anywhere; }
+  .event-prizes p { font-size: .92rem; }
 }
