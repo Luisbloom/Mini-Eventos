@@ -15,10 +15,6 @@ function displayDate(value) {
   return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).format(date).replace('.', '').toUpperCase();
 }
 
-function iconLabel(icon) {
-  return ({ crewmate: 'AU', blocks: 'MC', crosshair: 'V', trophy: '★', gamepad: 'J' })[icon] || 'J';
-}
-
 function createMeta(label, value, className = '') {
   const wrapper = document.createElement('div');
   if (className) wrapper.className = className;
@@ -46,13 +42,10 @@ function createEventCard(event, index) {
   const sequence = document.createElement('span');
   sequence.className = 'event-sequence';
   sequence.textContent = String(index + 1).padStart(2, '0');
-  const icon = document.createElement('span');
-  icon.className = 'event-icon';
-  icon.textContent = iconLabel(event.icon);
   const game = document.createElement('span');
   game.className = 'event-game';
   game.textContent = event.game;
-  visual.append(cover, sequence, icon, game);
+  visual.append(cover, sequence, game);
   const content = document.createElement('div');
   content.className = 'event-card-content';
   const status = document.createElement('span');
