@@ -37,7 +37,7 @@ describe('Mini Eventos API', () => {
     assert.equal(list.status, 200);
     assert.equal(list.body.events[0].slug, 'among-us-agosto-2026');
     assert.equal(list.body.events[0].minParticipants, 20);
-    assert.equal(list.body.events[0].coverImage, '/images/events/among-us-cover.png');
+    assert.equal(list.body.events[0].coverImage, '/images/events/among-us-cover.jpg');
 
     const detail = await request(app).get('/api/events/among-us-agosto-2026');
     assert.equal(detail.status, 200);

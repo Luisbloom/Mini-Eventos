@@ -58,7 +58,7 @@ describe('multi-event database', () => {
 
     assert.equal(event.name, 'Torneo Among Us');
     assert.equal(event.minParticipants, 20);
-    assert.equal(event.coverImage, '/images/events/among-us-cover.png');
+    assert.equal(event.coverImage, '/images/events/among-us-cover.jpg');
     assert.equal(matches.length, 1);
     assert.equal(matches[0].eventId, event.id);
     assert.equal(matches[0].report.reportId, 'legacy-1');

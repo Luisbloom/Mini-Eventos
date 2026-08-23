@@ -55,7 +55,7 @@ const DEFAULT_EVENT = Object.freeze({
   modules: DEFAULT_MODULES,
   accentColor: '#d7ff3f',
   icon: 'crewmate',
-  coverImage: '/images/events/among-us-cover.png'
+  coverImage: '/images/events/among-us-cover.jpg'
 });
 
 const DEFAULT_REGISTRATION_FIELDS = Object.freeze([
