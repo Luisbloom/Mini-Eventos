@@ -109,6 +109,8 @@ namespace Jartiland.TournamentReporter
         /// Bucle de reintentos en segundo plano. Nunca toca el hilo de Unity, así
         /// que una caída de Tailscale no congela la partida.
         /// </summary>
+        private static readonly TimeSpan[] NoWaits = new TimeSpan[0];
+
         private void StartRetryLoop(ReporterService service)
         {
             var token = _cancellation.Token;
@@ -118,6 +120,10 @@ namespace Jartiland.TournamentReporter
                 {
                     try
                     {
+                        // Sin esperas internas: el propio bucle ya reintenta cada 2s,
+                        // y asi una partida capturada se convierte en cuanto el
+                        // servidor vuelve, venga de esta sesion o de la anterior.
+                        await service.ProcessCapturedAsync(token, NoWaits).ConfigureAwait(false);
                         await service.PumpAsync(token).ConfigureAwait(false);
                         await Task.Delay(TimeSpan.FromSeconds(2), token).ConfigureAwait(false);
                     }

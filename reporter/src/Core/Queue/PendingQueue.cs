@@ -26,6 +26,13 @@ namespace Jartiland.TournamentReporter.Queue
     /// guarda los bytes exactos que se enviaron: cada reintento repite ese cuerpo
     /// y el mismo reportId, que es lo que hace idempotente el reenvío.
     /// </summary>
+    /// <summary>Una partida capturada, con la ruta para poder apartarla.</summary>
+    public sealed class CapturedEntry
+    {
+        public string File { get; set; }
+        public string Body { get; set; }
+    }
+
     public sealed class PendingQueue
     {
         public const string PendingFolder = "pending";
@@ -33,6 +40,7 @@ namespace Jartiland.TournamentReporter.Queue
         public const string ConflictFolder = "conflict";
         public const string RejectedFolder = "rejected";
         public const string BlockedFolder = "blocked";
+        public const string CapturedFolder = "captured";
         private const string PathExtension = ".path";
 
         private readonly string _root;
@@ -40,13 +48,67 @@ namespace Jartiland.TournamentReporter.Queue
         public PendingQueue(string rootDirectory)
         {
             _root = rootDirectory ?? throw new ArgumentNullException(nameof(rootDirectory));
-            foreach (var folder in new[] { PendingFolder, SentFolder, ConflictFolder, RejectedFolder, BlockedFolder })
+            foreach (var folder in new[] { PendingFolder, SentFolder, ConflictFolder, RejectedFolder, BlockedFolder, CapturedFolder })
             {
                 Directory.CreateDirectory(Path.Combine(_root, folder));
             }
         }
 
         public string Root => _root;
+        public string CapturedDirectory => Path.Combine(_root, CapturedFolder);
+
+        public bool HasCaptured(string reportId) =>
+            File.Exists(Path.Combine(CapturedDirectory, FileName(reportId)));
+
+        /// <summary>
+        /// Deja la partida en disco antes de que nadie toque la red. Es lo primero
+        /// que ocurre al terminar, porque el estado de EHR desaparece en cuanto el
+        /// juego vuelve al lobby.
+        /// </summary>
+        public string SaveCaptured(string reportId, string body)
+        {
+            var target = Path.Combine(CapturedDirectory, FileName(reportId));
+            WriteAtomic(target, body);
+            return target;
+        }
+
+        /// <summary>
+        /// Devuelve lo capturado y todavia sin procesar, con su ruta, para poder
+        /// apartar un archivo ilegible en vez de reintentarlo eternamente.
+        /// </summary>
+        public IReadOnlyList<CapturedEntry> LoadCaptured()
+        {
+            var entries = new List<CapturedEntry>();
+            foreach (var file in Directory.GetFiles(CapturedDirectory, "*.json"))
+            {
+                var body = SafeRead(file);
+                if (body == null) continue;
+                entries.Add(new CapturedEntry { File = file, Body = body });
+            }
+            return entries;
+        }
+
+        /// <summary>Aparta lo que no se puede interpretar, sin borrarlo.</summary>
+        public void QuarantineCaptured(string file)
+        {
+            try
+            {
+                var target = Path.Combine(BlockedDirectory, Path.GetFileName(file) + ".unreadable");
+                File.Move(file, target, true);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        /// <summary>Solo se llama cuando la partida ya vive en otro estado.</summary>
+        public void DiscardCaptured(string reportId)
+        {
+            var target = Path.Combine(CapturedDirectory, FileName(reportId));
+            try { if (File.Exists(target)) File.Delete(target); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
         public string PendingDirectory => Path.Combine(_root, PendingFolder);
         public string SentDirectory => Path.Combine(_root, SentFolder);
         public string ConflictDirectory => Path.Combine(_root, ConflictFolder);

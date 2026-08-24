@@ -10,6 +10,7 @@ using Jartiland.TournamentReporter.Json;
 using Jartiland.TournamentReporter.Logging;
 using Jartiland.TournamentReporter.Model;
 using Jartiland.TournamentReporter.Queue;
+using Jartiland.TournamentReporter.Reporting;
 
 namespace Jartiland.TournamentReporter
 {
@@ -94,6 +95,86 @@ namespace Jartiland.TournamentReporter
             }
 
             return context;
+        }
+
+
+        /// <summary>
+        /// Lo primero y lo unico sincrono al terminar una partida: dejarla en disco.
+        /// Sin red, sin esperas. Si el jugador cierra Among Us un segundo despues, el
+        /// resultado ya existe y se recoge en el siguiente arranque.
+        /// </summary>
+        public string Capture(CapturedMatch captured)
+        {
+            if (captured == null) throw new ArgumentNullException(nameof(captured));
+            var file = _queue.SaveCaptured(captured.ReportId, SnapshotJson.Serialize(captured));
+            _log.Info($"Partida guardada en disco antes de enviar nada: {captured.ReportId}.");
+            return file;
+        }
+
+        /// <summary>
+        /// Convierte lo capturado en resultado enviable. Se llama en segundo plano al
+        /// terminar y tambien al arrancar, para recoger lo que quedo de otra sesion.
+        ///
+        /// La distincion que importa: si el servidor no contesta, la partida se queda
+        /// capturada y se reintenta. Solo se da por no enviable cuando el torneo si
+        /// responde y lo que dice no admite espera.
+        /// </summary>
+        public async Task ProcessCapturedAsync(
+            CancellationToken cancellation,
+            IReadOnlyList<TimeSpan> retryDelays = null)
+        {
+            foreach (var entry in _queue.LoadCaptured())
+            {
+                if (cancellation.IsCancellationRequested) return;
+
+                var captured = SnapshotJson.Parse(entry.Body);
+                if (captured == null)
+                {
+                    _log.Error($"Captura ilegible, se aparta: {entry.File}");
+                    _queue.QuarantineCaptured(entry.File);
+                    continue;
+                }
+
+                // Ya vive en otro estado: una captura que sobrevivio a su propio envio.
+                if (_queue.WasAlreadySent(captured.ReportId) || _queue.IsPending(captured.ReportId))
+                {
+                    _queue.DiscardCaptured(captured.ReportId);
+                    continue;
+                }
+
+                var context = await ResolveContextAsync(cancellation, retryDelays).ConfigureAwait(false);
+                if (context == null)
+                {
+                    _log.Warning(
+                        $"Sin contexto para {captured.ReportId}; la partida sigue guardada y se reintentara.");
+                    continue;
+                }
+
+                DateTime playedAt;
+                if (!DateTime.TryParse(
+                        captured.PlayedAt, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out playedAt))
+                {
+                    playedAt = _clock();
+                }
+
+                var outcome = MatchReportBuilder.Build(
+                    captured.Snapshot, context, _settings, captured.PluginVersion, captured.ReportId, playedAt);
+
+                foreach (var warning in outcome.Warnings) _log.Warning(warning);
+
+                if (!outcome.Success)
+                {
+                    var note = string.Join(" | ", outcome.Blocking);
+                    foreach (var problem in outcome.Blocking) _log.Error(problem);
+                    _queue.SaveBlocked(captured.ReportId, MatchJson.Serialize(outcome.Result), note);
+                    _queue.DiscardCaptured(captured.ReportId);
+                    continue;
+                }
+
+                Enqueue(outcome.Result);
+                _queue.DiscardCaptured(captured.ReportId);
+            }
         }
 
         public CompetitionContext LastContext { get; private set; }

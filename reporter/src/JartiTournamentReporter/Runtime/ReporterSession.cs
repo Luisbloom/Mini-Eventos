@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Jartiland.TournamentReporter.Configuration;
@@ -100,40 +101,37 @@ namespace Jartiland.TournamentReporter.Runtime
             }
 
             Log.Info($"Final detectado ({snapshot.WinnerTeam}). {snapshot.Players.Count} jugadores capturados.");
-            Run(async () => await FinalizeAsync(snapshot).ConfigureAwait(false));
-        }
 
-        private static async Task FinalizeAsync(Model.EhrGameSnapshot snapshot)
-        {
-            var playedAt = DateTime.UtcNow;
+            // Escribir AHORA, en este hilo y antes de tocar la red. Es un archivo
+            // pequeño con flush a disco: si el jugador cierra Among Us un segundo
+            // después, el resultado ya está a salvo y se recoge al arrancar.
             var reportId = MatchReportBuilder.NewReportId(Settings.HostId, Guid.NewGuid());
-
-            var context = await Service.ResolveContextAsync(Cancellation).ConfigureAwait(false);
-            var outcome = MatchReportBuilder.Build(snapshot, context, Settings, PluginVersion, reportId, playedAt);
-
-            foreach (var warning in outcome.Warnings) Log.Warning(warning);
-
-            if (!outcome.Success)
+            try
             {
-                var note = string.Join(" | ", outcome.Blocking);
-                foreach (var problem in outcome.Blocking) Log.Error(problem);
-                try
+                Service.Capture(new Model.CapturedMatch
                 {
-                    var file = Service.SaveBlocked(reportId, outcome.Result, note);
-                    Log.Error($"Resultado no enviable guardado para revisión manual en {file}.");
-                }
-                catch (Exception error)
-                {
-                    Log.Error($"Tampoco se ha podido guardar el resultado no enviable: {error.Message}");
-                }
+                    ReportId = reportId,
+                    HostId = Settings.HostId,
+                    PlayedAt = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+                    PluginVersion = PluginVersion,
+                    Snapshot = snapshot
+                });
+            }
+            catch (Exception error)
+            {
+                Log.Error($"No se ha podido guardar la partida en disco: {error.Message}");
                 lock (Gate) _state = SessionState.Idle;
                 return;
             }
 
-            Service.Enqueue(outcome.Result);
             lock (Gate) _state = SessionState.Queued;
-            await Service.PumpAsync(Cancellation).ConfigureAwait(false);
+            Run(async () =>
+            {
+                await Service.ProcessCapturedAsync(Cancellation).ConfigureAwait(false);
+                await Service.PumpAsync(Cancellation).ConfigureAwait(false);
+            });
         }
+
 
         private static void Run(Func<Task> work)
         {
