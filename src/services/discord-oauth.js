@@ -7,9 +7,10 @@
  * arranca igual: el torneo de Among Us no depende de esto y no debe caerse
  * porque falte una variable de un evento distinto.
  *
- * El `state` no se firma ni se guarda en cookie: se guarda en la base, se marca
- * usado al consumirlo y caduca. Así un enlace de callback reenviado no sirve
- * dos veces.
+ * El `state` se guarda en la base, se marca usado al consumirlo y caduca. Y va
+ * atado al navegador que empezó: al redirigir se deja una cookie temporal con
+ * un nonce cuya huella queda junto al state. El state viaja por la URL y acaba
+ * en registros e historiales; por sí solo no basta para terminar el login.
  */
 
 const AUTHORIZE_URL = 'https://discord.com/oauth2/authorize';
@@ -51,7 +52,10 @@ function createDiscordProvider({ clientId, clientSecret, redirectUri, fetchImpl 
       url.searchParams.set('response_type', 'code');
       url.searchParams.set('scope', SCOPE);
       url.searchParams.set('state', state);
-      url.searchParams.set('prompt', 'none');
+      // Sin `prompt`: Discord enseña la pantalla de autorización a quien no ha
+      // autorizado todavía y la salta a quien sí. Con `prompt=none` el primer
+      // acceso de cualquiera se rompe, que es justo lo contrario de lo que hace
+      // falta al abrir inscripciones.
       return url.toString();
     },
 
@@ -125,13 +129,32 @@ function clearedSessionCookie({ secure } = {}) {
   return parts.join('; ');
 }
 
-function readSessionCookie(header) {
+function readCookie(header, name) {
   if (!header) return null;
   for (const piece of String(header).split(';')) {
-    const [name, ...rest] = piece.trim().split('=');
-    if (name === 'jarti_session') return rest.join('=') || null;
+    const [key, ...rest] = piece.trim().split('=');
+    if (key === name) return rest.join('=') || null;
   }
   return null;
+}
+
+const readSessionCookie = (header) => readCookie(header, 'jarti_session');
+const readOAuthNonceCookie = (header) => readCookie(header, 'jarti_oauth');
+
+/** Vive lo que dura ir a Discord y volver. Se borra en el callback. */
+function oauthNonceCookie(nonce, { secure, maxAgeSeconds = 600 } = {}) {
+  const parts = [
+    `jarti_oauth=${nonce}`, 'Path=/', 'HttpOnly', 'SameSite=Lax',
+    `Max-Age=${Math.floor(maxAgeSeconds)}`
+  ];
+  if (secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
+function clearedOAuthNonceCookie({ secure } = {}) {
+  const parts = ['jarti_oauth=', 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0'];
+  if (secure) parts.push('Secure');
+  return parts.join('; ');
 }
 
 module.exports = {
@@ -140,5 +163,8 @@ module.exports = {
   sessionCookie,
   clearedSessionCookie,
   readSessionCookie,
+  readOAuthNonceCookie,
+  oauthNonceCookie,
+  clearedOAuthNonceCookie,
   SCOPE
 };

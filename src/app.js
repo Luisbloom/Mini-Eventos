@@ -12,7 +12,8 @@ const { CompetitionError } = require('./competition');
 const { createMatchIngestor } = require('./services/match-ingest');
 const {
   createDiscordProvider, DiscordOAuthError,
-  sessionCookie, clearedSessionCookie, readSessionCookie
+  sessionCookie, clearedSessionCookie, readSessionCookie,
+  oauthNonceCookie, clearedOAuthNonceCookie, readOAuthNonceCookie
 } = require('./services/discord-oauth');
 const { ValorantError } = require('./valorant-store');
 const { createReporterContextResolver } = require('./services/reporter-context');
@@ -612,9 +613,11 @@ function createApp({
         return sendError(response, 503, 'DISCORD_NOT_CONFIGURED',
           'El acceso con Discord todavía no está configurado.');
       }
-      const state = database.valorant.createOAuthState({
+      const { state, nonce } = database.valorant.createOAuthState({
         redirectTo: typeof request.query.redirect === 'string' ? request.query.redirect : null
       });
+      // El nonce ata este intento a este navegador.
+      response.setHeader('Set-Cookie', oauthNonceCookie(nonce, { secure: secureCookies }));
       response.redirect(302, discordProvider.authorizeUrl(state));
     } catch (error) { next(error); }
   });
@@ -625,18 +628,24 @@ function createApp({
         return sendError(response, 503, 'DISCORD_NOT_CONFIGURED',
           'El acceso con Discord todavía no está configurado.');
       }
-      // El state se consume aquí: si no existe, ya se usó o caducó, se corta.
-      const state = database.valorant.consumeOAuthState(request.query.state);
+      // Se consume aquí, y sólo vale si lo termina el mismo navegador que lo
+      // empezó: hace falta el state de la URL y el nonce de la cookie.
+      const nonce = readOAuthNonceCookie(request.headers.cookie);
+      const state = database.valorant.consumeOAuthState(request.query.state, nonce);
       if (!state) {
+        response.setHeader('Set-Cookie', clearedOAuthNonceCookie({ secure: secureCookies }));
         return sendError(response, 400, 'OAUTH_STATE_INVALID',
           'La petición de acceso no es válida o ha caducado. Vuelve a intentarlo.');
       }
 
       const identity = await discordProvider.exchange(request.query.code);
       const account = database.valorant.upsertDiscordAccount(identity);
-      const sessionId = database.valorant.createSession(account.id);
+      const sessionToken = database.valorant.createSession(account.id);
 
-      response.setHeader('Set-Cookie', sessionCookie(sessionId, { secure: secureCookies }));
+      response.setHeader('Set-Cookie', [
+        clearedOAuthNonceCookie({ secure: secureCookies }),
+        sessionCookie(sessionToken, { secure: secureCookies })
+      ]);
       response.redirect(302, state.redirectTo || '/');
     } catch (error) { next(error); }
   });

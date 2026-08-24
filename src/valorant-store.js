@@ -15,6 +15,15 @@ const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
 const DRAFT_STATUSES = Object.freeze(['PENDING', 'ACTIVE', 'PAUSED', 'COMPLETED']);
 
+const hash = (value) => crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+
+/** Comparación sin filtrar por tiempo cuánto coincide. */
+function timingSafeEquals(left, right) {
+  const a = Buffer.from(String(left));
+  const b = Buffer.from(String(right));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 class ValorantError extends Error {
   constructor(message, code = 'VALORANT_ERROR', status = 400) {
     super(message);
@@ -47,6 +56,7 @@ function migrateValorant(connection) {
 
     CREATE TABLE IF NOT EXISTS oauth_states (
       state TEXT PRIMARY KEY,
+      binding_hash TEXT NOT NULL,
       redirect_to TEXT,
       created_at TEXT NOT NULL DEFAULT (${NOW}),
       expires_at TEXT NOT NULL,
@@ -242,18 +252,28 @@ function createValorantStore(connection) {
       };
     },
 
+    /**
+     * Devuelve el `state` que viaja a Discord y un `nonce` que se guarda en una
+     * cookie temporal. En la base sólo queda la huella del nonce: así el state,
+     * que va por la URL y acaba en registros y en el historial, no basta por sí
+     * solo para completar el login desde otro navegador.
+     */
     createOAuthState({ ttlSeconds = 600, redirectTo = null } = {}) {
-      // Aleatorio criptográfico, de un solo uso y con caducidad.
       const state = crypto.randomBytes(32).toString('base64url');
+      const nonce = crypto.randomBytes(32).toString('base64url');
       const segundos = Math.floor(ttlSeconds);
       connection.prepare(
-        `INSERT INTO oauth_states (state,redirect_to,expires_at) VALUES (?,?,datetime('now',?))`
-      ).run(state, redirectTo, `${segundos >= 0 ? '+' : ''}${segundos} seconds`);
-      return state;
+        `INSERT INTO oauth_states (state,binding_hash,redirect_to,expires_at)
+         VALUES (?,?,?,datetime('now',?))`
+      ).run(state, hash(nonce), redirectTo, `${segundos >= 0 ? '+' : ''}${segundos} seconds`);
+      return { state, nonce };
     },
 
-    /** Devuelve null si no existe, ya se usó o caducó. Siempre lo marca usado. */
-    consumeOAuthState(state) {
+    /**
+     * Null si no existe, ya se usó, caducó o el navegador no es el que empezó.
+     * Se marca usado pase lo que pase: un intento fallido tampoco se repite.
+     */
+    consumeOAuthState(state, nonce) {
       if (!state) return null;
       const consumir = connection.transaction((value) => {
         const row = connection.prepare('SELECT * FROM oauth_states WHERE state=?').get(value);
@@ -262,21 +282,27 @@ function createValorantStore(connection) {
         if (row.used_at) return null;
         const vencido = connection.prepare("SELECT datetime('now') > ? AS caducado").get(row.expires_at);
         if (vencido.caducado) return null;
+        if (!nonce || !timingSafeEquals(hash(nonce), row.binding_hash)) return null;
         return { state: row.state, redirectTo: row.redirect_to };
       });
       return consumir(state);
     },
 
+    /**
+     * Devuelve el testigo que va a la cookie. En la base sólo se guarda su
+     * huella: leer la tabla no entrega sesiones utilizables.
+     */
     createSession(discordAccountId, { ttlSeconds = 60 * 60 * 24 * 7 } = {}) {
-      const id = crypto.randomBytes(32).toString('base64url');
+      const token = crypto.randomBytes(32).toString('base64url');
       connection.prepare(
         `INSERT INTO discord_sessions (id,discord_account_id,expires_at) VALUES (?,?,datetime('now',?))`
-      ).run(id, discordAccountId, `+${Math.floor(ttlSeconds)} seconds`);
-      return id;
+      ).run(hash(token), discordAccountId, `+${Math.floor(ttlSeconds)} seconds`);
+      return token;
     },
 
-    getSession(sessionId) {
-      if (!sessionId) return null;
+    getSession(sessionToken) {
+      if (!sessionToken) return null;
+      const sessionId = hash(sessionToken);
       const row = connection.prepare(`
         SELECT s.id, s.expires_at, a.id accountId, a.discord_user_id discordUserId,
                a.username, a.display_name displayName, a.avatar,
@@ -285,7 +311,6 @@ function createValorantStore(connection) {
         WHERE s.id=?`).get(sessionId);
       if (!row || row.caducada) return null;
       return {
-        sessionId: row.id,
         account: {
           id: row.accountId, discordUserId: row.discordUserId,
           username: row.username, displayName: row.displayName, avatar: row.avatar
@@ -293,8 +318,10 @@ function createValorantStore(connection) {
       };
     },
 
-    destroySession(sessionId) {
-      return connection.prepare('DELETE FROM discord_sessions WHERE id=?').run(sessionId).changes > 0;
+    destroySession(sessionToken) {
+      if (!sessionToken) return false;
+      return connection.prepare('DELETE FROM discord_sessions WHERE id=?')
+        .run(hash(sessionToken)).changes > 0;
     },
 
     /** La inscripción de esa cuenta en ese evento, o null. */
@@ -452,11 +479,26 @@ function createValorantStore(connection) {
         }
       }
 
+      // La plantilla tiene que cuadrar exacta, ni uno más ni uno menos. Con
+      // "al menos los necesarios" un inscrito de sobra se quedaría fuera al
+      // acabar el draft sin que nadie lo hubiera decidido. Si algún día hay
+      // suplentes, se modelan como suplentes.
+      const confirmados = connection.prepare(
+        "SELECT COUNT(*) total FROM event_participants WHERE event_id=? AND status='confirmed'"
+      ).get(eventId).total;
+      const plantilla = draft.teamCount * draft.teamSize;
+      if (confirmados !== plantilla) {
+        throw new ValorantError(
+          `Hacen falta exactamente ${plantilla} participantes confirmados y hay ${confirmados}.`,
+          'ROSTER_SIZE_MISMATCH');
+      }
+
       const disponibles = this.listAvailableParticipants(eventId).length;
       const necesarios = totalPicks(draft.teamCount, draft.teamSize);
-      if (disponibles < necesarios) {
+      if (disponibles !== necesarios) {
         throw new ValorantError(
-          `Faltan jugadores: hacen falta ${necesarios} y hay ${disponibles}.`, 'NOT_ENOUGH_PLAYERS');
+          `Tienen que quedar exactamente ${necesarios} jugadores por elegir y quedan ${disponibles}.`,
+          'ELIGIBLE_SIZE_MISMATCH');
       }
 
       connection.prepare(

@@ -74,6 +74,23 @@ describe('draft de Valorant', () => {
     return { ...contexto, gente, capitanes };
   }
 
+  /** Login completo: arrastra la cookie temporal como haria un navegador. */
+  async function login(app) {
+    const inicio = await request(app).get('/auth/discord').expect(302);
+    const state = new URL(inicio.headers.location).searchParams.get('state');
+    const nonce = inicio.headers['set-cookie'][0].split(';')[0];
+
+    const callback = await request(app).get('/auth/discord/callback')
+      .set('Cookie', nonce).query({ code: 'ok', state }).expect(302);
+    const cookies = callback.headers['set-cookie'];
+    return {
+      state,
+      nonce,
+      cookies,
+      sesion: cookies.find((c) => c.startsWith('jarti_session=')).split(';')[0]
+    };
+  }
+
   /** Vincula una cuenta de Discord a una inscripcion y devuelve su cookie. */
   function sesionDe(database, event, participantId, discordUserId) {
     const cuenta = database.valorant.upsertDiscordAccount({
@@ -134,66 +151,116 @@ describe('draft de Valorant', () => {
       await request(app).get('/api/health').expect(200);
     });
 
-    it('da un state distinto cada vez y sólo sirve una vez', () => {
+    it('da un state y un nonce distintos cada vez', () => {
       const { database } = montar();
       const uno = database.valorant.createOAuthState();
       const otro = database.valorant.createOAuthState();
-      assert.notEqual(uno, otro);
-      assert.ok(uno.length >= 32);
-
-      assert.ok(database.valorant.consumeOAuthState(uno));
-      assert.equal(database.valorant.consumeOAuthState(uno), null, 'no se puede reutilizar');
-      assert.equal(database.valorant.consumeOAuthState('inventado'), null);
+      assert.notEqual(uno.state, otro.state);
+      assert.notEqual(uno.nonce, otro.nonce);
+      assert.ok(uno.state.length >= 32 && uno.nonce.length >= 32);
     });
 
-    it('rechaza un state caducado', () => {
+    it('el state sólo vale una vez y sólo con su nonce', () => {
       const { database } = montar();
-      const state = database.valorant.createOAuthState({ ttlSeconds: -1 });
-      assert.equal(database.valorant.consumeOAuthState(state), null);
+      const v = database.valorant;
+
+      const bueno = v.createOAuthState();
+      assert.equal(v.consumeOAuthState(bueno.state, 'inventado'), null, 'nonce que no es');
+      // Un intento fallido tampoco se puede repetir.
+      assert.equal(v.consumeOAuthState(bueno.state, bueno.nonce), null, 'ya quemado');
+
+      const otro = v.createOAuthState();
+      assert.ok(v.consumeOAuthState(otro.state, otro.nonce));
+      assert.equal(v.consumeOAuthState(otro.state, otro.nonce), null, 'no se reutiliza');
+      assert.equal(v.consumeOAuthState('inexistente', 'x'), null);
+    });
+
+    it('rechaza un state sin nonce y uno caducado', () => {
+      const { database } = montar();
+      const v = database.valorant;
+      const sinCookie = v.createOAuthState();
+      assert.equal(v.consumeOAuthState(sinCookie.state, null), null, 'sin cookie no vale');
+
+      const viejo = v.createOAuthState({ ttlSeconds: -1 });
+      assert.equal(v.consumeOAuthState(viejo.state, viejo.nonce), null, 'caducado');
+    });
+
+    it('el enlace de Discord no fuerza autorización silenciosa', () => {
+      const { createDiscordProvider } = require('../src/services/discord-oauth');
+      const provider = createDiscordProvider({
+        clientId: 'id', clientSecret: 'secreto', redirectUri: 'https://jarti.test/cb'
+      });
+      const url = new URL(provider.authorizeUrl('abc'));
+
+      // prompt=none salta la pantalla de autorizacion: el primer acceso de
+      // cualquiera se romperia justo al abrir inscripciones.
+      assert.equal(url.searchParams.get('prompt'), null);
+      assert.equal(url.searchParams.get('response_type'), 'code');
+      assert.equal(url.searchParams.get('scope'), 'identify');
+      assert.equal(url.searchParams.get('state'), 'abc');
+      assert.equal(url.searchParams.get('client_secret'), null, 'el secreto no viaja');
     });
 
     it('crea sesión en el callback y no expone nada de Discord', async () => {
       const { app } = montar({ discord: fakeDiscord({ discordUserId: '9001', username: 'luis', displayName: 'Luis' }) });
+      const { cookies, sesion } = await login(app);
 
-      const inicio = await request(app).get('/auth/discord').expect(302);
-      const state = new URL(inicio.headers.location).searchParams.get('state');
+      const galleta = cookies.find((c) => c.startsWith('jarti_session='));
+      assert.match(galleta, /HttpOnly/);
+      assert.match(galleta, /SameSite=Lax/);
+      assert.doesNotMatch(galleta, /9001/, 'la cookie no lleva el id de Discord');
+      // La cookie temporal se borra al terminar.
+      assert.ok(cookies.some((c) => c.startsWith('jarti_oauth=;') || /jarti_oauth=; .*Max-Age=0/.test(c)));
 
-      const callback = await request(app)
-        .get('/auth/discord/callback').query({ code: 'ok', state }).expect(302);
-
-      const cookie = callback.headers['set-cookie'][0];
-      assert.match(cookie, /HttpOnly/);
-      assert.match(cookie, /SameSite=Lax/);
-      assert.doesNotMatch(cookie, /9001/, 'la cookie no lleva el id de Discord');
-
-      const yo = await request(app).get('/api/me').set('Cookie', cookie).expect(200);
+      const yo = await request(app).get('/api/me').set('Cookie', sesion).expect(200);
       assert.equal(yo.body.authenticated, true);
       assert.equal(yo.body.displayName, 'Luis');
-      assert.equal(yo.body.discordUserId, undefined, 'el id de Discord no es público');
       assert.equal(JSON.stringify(yo.body).includes('9001'), false);
     });
 
-    it('rechaza un callback con state incorrecto o repetido', async () => {
+    it('no acepta un callback desde otro navegador', async () => {
+      const { app } = montar();
+      const inicio = await request(app).get('/auth/discord').expect(302);
+      const state = new URL(inicio.headers.location).searchParams.get('state');
+
+      // Alguien con el enlace pero sin la cookie del navegador que empezó.
+      await request(app).get('/auth/discord/callback').query({ code: 'x', state }).expect(400);
+
+      // Y con la cookie de OTRO intento tampoco.
+      const otroIntento = await request(app).get('/auth/discord').expect(302);
+      const otroNonce = otroIntento.headers['set-cookie'][0].split(';')[0];
+      await request(app).get('/auth/discord/callback')
+        .set('Cookie', otroNonce).query({ code: 'x', state }).expect(400);
+    });
+
+    it('rechaza un state inventado o ya usado', async () => {
       const { app } = montar();
       await request(app).get('/auth/discord/callback').query({ code: 'x', state: 'falso' }).expect(400);
 
-      const inicio = await request(app).get('/auth/discord').expect(302);
-      const state = new URL(inicio.headers.location).searchParams.get('state');
-      await request(app).get('/auth/discord/callback').query({ code: 'x', state }).expect(302);
-      // El mismo enlace reenviado no vale una segunda vez.
-      await request(app).get('/auth/discord/callback').query({ code: 'x', state }).expect(400);
+      const { state, nonce } = await login(app);
+      // El mismo enlace reenviado, con su cookie y todo, no vale otra vez.
+      await request(app).get('/auth/discord/callback')
+        .set('Cookie', nonce).query({ code: 'x', state }).expect(400);
     });
 
     it('cierra la sesión de verdad', async () => {
       const { app } = montar();
-      const inicio = await request(app).get('/auth/discord').expect(302);
-      const state = new URL(inicio.headers.location).searchParams.get('state');
-      const callback = await request(app).get('/auth/discord/callback').query({ code: 'x', state }).expect(302);
-      const cookie = callback.headers['set-cookie'][0];
-
-      await request(app).post('/api/auth/logout').set('Cookie', cookie).expect(200);
-      const despues = await request(app).get('/api/me').set('Cookie', cookie).expect(200);
+      const { sesion } = await login(app);
+      await request(app).post('/api/auth/logout').set('Cookie', sesion).expect(200);
+      const despues = await request(app).get('/api/me').set('Cookie', sesion).expect(200);
       assert.equal(despues.body.authenticated, false);
+    });
+
+    it('en la base sólo queda la huella de la sesión', () => {
+      const { database } = montar();
+      const cuenta = database.valorant.upsertDiscordAccount({ discordUserId: '42', username: 'x' });
+      const token = database.valorant.createSession(cuenta.id);
+
+      // Leer la tabla no entrega sesiones utilizables.
+      const guardado = database.valorant.getSession(token);
+      assert.ok(guardado);
+      assert.equal(JSON.stringify(guardado).includes(token), false);
+      assert.equal(database.valorant.getSession('otro-token'), null);
     });
 
     it('no deja dos inscripciones de la misma cuenta en un evento', () => {
@@ -262,14 +329,36 @@ describe('draft de Valorant', () => {
   // ============================== INICIAR ==============================
 
   describe('iniciar', () => {
-    it('no muta nada si falta gente', () => {
-      const { database, event } = montar();
-      const gente = inscribir(database, event, 10);
-      database.valorant.configureDraft(event.id, { captains: gente.slice(0, 4).map((p) => p.id), teamCount: 4, teamSize: 5 });
+    it('exige la plantilla exacta: ni uno de menos ni uno de más', () => {
+      // Con "al menos los necesarios", un inscrito de sobra se quedaría fuera
+      // al acabar el draft sin que nadie lo hubiera decidido.
+      const prueba = (cuantos) => {
+        const { database, event } = montar();
+        const gente = inscribir(database, event, cuantos);
+        database.valorant.configureDraft(event.id, {
+          captains: gente.slice(0, 4).map((p) => p.id), teamCount: 4, teamSize: 5
+        });
+        try {
+          database.valorant.startDraft(event.id);
+          return { arranca: true, estado: database.valorant.getDraft(event.id).status };
+        } catch (error) {
+          return { arranca: false, code: error.code, estado: database.valorant.getDraft(event.id).status };
+        }
+      };
 
-      assert.throws(() => database.valorant.startDraft(event.id), (e) => e.code === 'NOT_ENOUGH_PLAYERS');
-      assert.equal(database.valorant.getDraft(event.id).status, 'PENDING', 'sigue pendiente');
-      assert.equal(database.valorant.getDraft(event.id).startedAt, null);
+      const diecinueve = prueba(19);
+      assert.equal(diecinueve.arranca, false);
+      assert.equal(diecinueve.code, 'ROSTER_SIZE_MISMATCH');
+      assert.equal(diecinueve.estado, 'PENDING', 'un fallo no muta el draft');
+
+      const veinte = prueba(20);
+      assert.equal(veinte.arranca, true);
+      assert.equal(veinte.estado, 'ACTIVE');
+
+      const veintiuno = prueba(21);
+      assert.equal(veintiuno.arranca, false);
+      assert.equal(veintiuno.code, 'ROSTER_SIZE_MISMATCH');
+      assert.equal(veintiuno.estado, 'PENDING');
     });
 
     it('arranca en la primera elección del primer capitán', () => {
