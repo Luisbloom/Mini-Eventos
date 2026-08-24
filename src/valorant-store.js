@@ -139,6 +139,40 @@ function migrateValorant(connection) {
     CREATE INDEX IF NOT EXISTS idx_audit_event ON admin_audit(event_id, created_at DESC);
   `);
 
+  // CREATE TABLE IF NOT EXISTS no toca una tabla que ya existe. Una base creada
+  // antes de atar el state al navegador tiene oauth_states sin binding_hash, y
+  // el INSERT fallaria. Los states son efimeros -viven los segundos que dura ir
+  // a Discord y volver-, asi que se rehace la tabla en vez de complicar un
+  // ALTER con NOT NULL sin valor por defecto.
+  const estadosOAuth = connection.pragma('table_info(oauth_states)').map((c) => c.name);
+  if (estadosOAuth.length > 0 && !estadosOAuth.includes('binding_hash')) {
+    connection.exec(`
+      DROP TABLE oauth_states;
+      CREATE TABLE oauth_states (
+        state TEXT PRIMARY KEY,
+        binding_hash TEXT NOT NULL,
+        redirect_to TEXT,
+        created_at TEXT NOT NULL DEFAULT (${NOW}),
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      );
+    `);
+  }
+
+  // La sesion paso de guardarse literal a guardarse hasheada. Un id antiguo ya
+  // no coincidiria con nada, pero se borran de forma deliberada en vez de
+  // dejarlos ahi pareciendo validos.
+  if (connection.pragma('table_info(discord_sessions)').length > 0) {
+    const marca = connection.prepare(
+      "SELECT 1 FROM app_settings WHERE setting_key='discord_sessions_hashed_v1'").get();
+    if (!marca) {
+      connection.exec('DELETE FROM discord_sessions');
+      connection.prepare(
+        "INSERT OR IGNORE INTO app_settings (setting_key,value_json) VALUES ('discord_sessions_hashed_v1','true')"
+      ).run();
+    }
+  }
+
   // Columnas nuevas sobre una tabla con datos reales: sólo ADD COLUMN.
   const columns = connection.pragma('table_info(event_participants)').map((c) => c.name);
   const añadir = [

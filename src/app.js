@@ -12,7 +12,7 @@ const { CompetitionError } = require('./competition');
 const { createMatchIngestor } = require('./services/match-ingest');
 const {
   createDiscordProvider, DiscordOAuthError,
-  sessionCookie, clearedSessionCookie, readSessionCookie,
+  sessionCookie, clearedSessionCookie, readSessionCookie, safeReturnPath,
   oauthNonceCookie, clearedOAuthNonceCookie, readOAuthNonceCookie
 } = require('./services/discord-oauth');
 const { ValorantError } = require('./valorant-store');
@@ -613,8 +613,10 @@ function createApp({
         return sendError(response, 503, 'DISCORD_NOT_CONFIGURED',
           'El acceso con Discord todavía no está configurado.');
       }
+      // Se valida antes de guardarlo, no al usarlo: lo que entra en la base
+      // ya es una ruta interna.
       const { state, nonce } = database.valorant.createOAuthState({
-        redirectTo: typeof request.query.redirect === 'string' ? request.query.redirect : null
+        redirectTo: safeReturnPath(request.query.redirect, '/')
       });
       // El nonce ata este intento a este navegador.
       response.setHeader('Set-Cookie', oauthNonceCookie(nonce, { secure: secureCookies }));

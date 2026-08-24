@@ -110,6 +110,38 @@ function createDiscordProvider({ clientId, clientSecret, redirectUri, fetchImpl 
   };
 }
 
+/**
+ * Sólo rutas de esta web. Un `?redirect=` que acepte cualquier cosa convierte
+ * el login en un trampolín: el enlace parece de Jartiland, pasa por Discord y
+ * acaba en otro sitio.
+ *
+ * Se comprueba la forma, no una lista de dominios, porque las variantes que se
+ * escapan son siempre de forma: `//host`, `/\host`, `\\host`, `javascript:`…
+ */
+function safeReturnPath(value, fallback = '/') {
+  if (typeof value !== 'string') return fallback;
+  const candidate = value.trim();
+  if (!candidate) return fallback;
+
+  // Tiene que empezar por una sola barra: nada de esquemas ni de host.
+  if (!candidate.startsWith('/')) return fallback;
+  // `//host` lo interpreta el navegador como otro origen.
+  if (candidate.startsWith('//')) return fallback;
+  // Cualquier barra invertida: cubre `/\host` y `\\host`.
+  if (candidate.includes('\\')) return fallback;
+  // Caracteres de control: intentos de partir la cabecera de respuesta.
+  if (/[\u0000-\u001f\u007f]/.test(candidate)) return fallback;
+
+  // Y que se interprete igual visto como URL absoluta contra un origen falso.
+  try {
+    const resolved = new URL(candidate, 'https://jartiland.invalid');
+    if (resolved.origin !== 'https://jartiland.invalid') return fallback;
+    return resolved.pathname + resolved.search + resolved.hash;
+  } catch {
+    return fallback;
+  }
+}
+
 /** Cookie de sesión: opaca, HttpOnly y sin nada legible desde el navegador. */
 function sessionCookie(sessionId, { secure, maxAgeSeconds = 60 * 60 * 24 * 7 } = {}) {
   const parts = [
@@ -163,6 +195,7 @@ module.exports = {
   sessionCookie,
   clearedSessionCookie,
   readSessionCookie,
+  safeReturnPath,
   readOAuthNonceCookie,
   oauthNonceCookie,
   clearedOAuthNonceCookie,

@@ -6,9 +6,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const request = require('supertest');
+const BetterSqlite3 = require('better-sqlite3');
 const { openDatabase } = require('../src/database');
 const { createApp } = require('../src/app');
 const { snakeTurn, totalPicks } = require('../src/valorant-store');
+const { safeReturnPath } = require('../src/services/discord-oauth');
 
 describe('draft de Valorant', () => {
   const directories = [];
@@ -650,6 +652,135 @@ describe('draft de Valorant', () => {
       assert.equal(segunda.getDefaultEvent().slug, antes.slug, 'el evento por defecto no cambia');
       assert.notEqual(valorant.id, among.id);
       segunda.close();
+    });
+  });
+
+  // ====================== REDIRECCIÓN SEGURA ======================
+
+  describe('vuelta después del login', () => {
+    it('acepta rutas de esta web', () => {
+      assert.equal(safeReturnPath('/'), '/');
+      assert.equal(safeReturnPath('/eventos/torneo-valorant'), '/eventos/torneo-valorant');
+      assert.equal(safeReturnPath('/eventos/torneo-valorant?tab=inscripcion'),
+        '/eventos/torneo-valorant?tab=inscripcion');
+      assert.equal(safeReturnPath('  /con/espacios  '), '/con/espacios');
+    });
+
+    it('rechaza cualquier cosa que pueda salir del sitio', () => {
+      // Un ?redirect= permisivo convierte el login en un trampolin: el enlace
+      // parece de Jartiland, pasa por Discord y acaba en otro sitio.
+      const fuera = [
+        'https://evil.example', 'http://evil.example', '//evil.example',
+        '\\evil.example', '/\\evil.example', 'javascript:alert(1)',
+        'data:text/html,x', 'ftp://evil.example', 'evil.example'
+      ];
+      for (const valor of fuera) {
+        assert.equal(safeReturnPath(valor), '/', `debería rechazar ${JSON.stringify(valor)}`);
+      }
+    });
+
+    it('usa el respaldo con lo vacío o lo que no es texto', () => {
+      assert.equal(safeReturnPath(''), '/');
+      assert.equal(safeReturnPath('   '), '/');
+      assert.equal(safeReturnPath(null), '/');
+      assert.equal(safeReturnPath(undefined), '/');
+      assert.equal(safeReturnPath(42), '/');
+      assert.equal(safeReturnPath('/x', '/eventos/torneo-valorant'), '/x');
+      assert.equal(safeReturnPath('http://x', '/eventos/torneo-valorant'), '/eventos/torneo-valorant');
+    });
+
+    it('no deja partir la cabecera de respuesta', () => {
+      assert.equal(safeReturnPath('/ruta\nLocation: https://evil.example'), '/');
+      assert.equal(safeReturnPath('/ruta\r\nSet-Cookie: x=1'), '/');
+    });
+
+    it('un redirect externo no sobrevive al login', async () => {
+      // Se valida al guardarlo, no al usarlo: lo externo nunca entra en la base.
+      const { app } = montar();
+      const inicio = await request(app).get('/auth/discord')
+        .query({ redirect: 'https://evil.example/robar' }).expect(302);
+      const state = new URL(inicio.headers.location).searchParams.get('state');
+      const nonce = inicio.headers['set-cookie'][0].split(';')[0];
+
+      const callback = await request(app).get('/auth/discord/callback')
+        .set('Cookie', nonce).query({ code: 'x', state }).expect(302);
+      assert.equal(callback.headers.location, '/');
+
+      // Y una ruta interna sí se respeta.
+      const bueno = await request(app).get('/auth/discord')
+        .query({ redirect: '/eventos/torneo-valorant' }).expect(302);
+      const s2 = new URL(bueno.headers.location).searchParams.get('state');
+      const n2 = bueno.headers['set-cookie'][0].split(';')[0];
+      const vuelta = await request(app).get('/auth/discord/callback')
+        .set('Cookie', n2).query({ code: 'x', state: s2 }).expect(302);
+      assert.equal(vuelta.headers.location, '/eventos/torneo-valorant');
+    });
+  });
+
+  // ================= MIGRACIÓN DESDE EL ESQUEMA ANTERIOR =================
+
+  describe('migración desde una base anterior al endurecimiento', () => {
+    it('añade binding_hash, invalida sesiones viejas y no pierde el torneo', () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-oauth-viejo-'));
+      directories.push(directory);
+      const ruta = path.join(directory, 'tournament.db');
+
+      // --- base con el esquema de antes: oauth_states SIN binding_hash y
+      //     discord_sessions con el testigo guardado literal ---
+      const primera = openDatabase(ruta);
+      const among = primera.getDefaultEvent();
+      const inscrito = primera.createParticipant(among.id, {
+        discord_username: 'historico#discord', game_name: 'Histórico', friend_code: 'historico#1234'
+      });
+      primera.updateParticipant(inscrito.id, { status: 'confirmed' });
+      primera.close();
+
+      const cruda = new BetterSqlite3(ruta);
+      cruda.exec(`
+        DROP TABLE oauth_states;
+        CREATE TABLE oauth_states (
+          state TEXT PRIMARY KEY,
+          redirect_to TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          expires_at TEXT NOT NULL,
+          used_at TEXT
+        );
+        DELETE FROM app_settings WHERE setting_key='discord_sessions_hashed_v1';
+      `);
+      cruda.prepare("INSERT INTO oauth_states (state,expires_at) VALUES ('viejo', datetime('now','+1 hour'))").run();
+      cruda.prepare("INSERT INTO discord_accounts (discord_user_id,username) VALUES ('7','siete')").run();
+      const cuentaId = cruda.prepare("SELECT id FROM discord_accounts WHERE discord_user_id='7'").get().id;
+      // Un testigo guardado literal, como se hacía antes.
+      cruda.prepare("INSERT INTO discord_sessions (id,discord_account_id,expires_at) VALUES (?,?,datetime('now','+7 days'))")
+        .run('testigo-en-claro', cuentaId);
+      assert.equal(cruda.pragma('table_info(oauth_states)').some((c) => c.name === 'binding_hash'), false);
+      cruda.close();
+
+      // --- se abre con el código actual: aquí corre la migración ---
+      const segunda = openDatabase(ruta);
+      const columnas = segunda.valorant.listTeams(among.id); // fuerza uso del store
+      assert.deepEqual(columnas, []);
+
+      // La columna existe y se puede iniciar un login nuevo.
+      const nuevo = segunda.valorant.createOAuthState();
+      assert.ok(nuevo.state && nuevo.nonce);
+      assert.ok(segunda.valorant.consumeOAuthState(nuevo.state, nuevo.nonce));
+
+      // La sesión antigua no vale, ni con su valor literal.
+      assert.equal(segunda.valorant.getSession('testigo-en-claro'), null);
+
+      // Y el torneo sigue entero.
+      assert.equal(segunda.getDefaultEvent().slug, among.slug);
+      assert.equal(segunda.listParticipants(among.id).length, 1);
+      assert.equal(segunda.listParticipants(among.id)[0].internalFriendCode, 'historico#1234');
+      segunda.close();
+
+      // --- y volver a abrir es inofensivo ---
+      const tercera = openDatabase(ruta);
+      const otro = tercera.valorant.createOAuthState();
+      assert.ok(tercera.valorant.consumeOAuthState(otro.state, otro.nonce));
+      assert.equal(tercera.listParticipants(among.id).length, 1);
+      tercera.close();
     });
   });
 });
