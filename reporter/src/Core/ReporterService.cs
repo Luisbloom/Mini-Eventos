@@ -37,6 +37,13 @@ namespace Jartiland.TournamentReporter
         // mismo pendiente y enviarlo por duplicado.
         private readonly SemaphoreSlim _pump = new SemaphoreSlim(1, 1);
 
+        // El trabajo lanzado al terminar la partida y el bucle periodico del plugin
+        // pueden llamar a ProcessCapturedAsync a la vez. Sin esto, los dos leerian
+        // el mismo archivo capturado y lo procesarian por duplicado. Es un semaforo
+        // aparte del de envio a proposito: convertir capturas y mandar pendientes no
+        // compiten entre si, y compartirlo solo haria esperar de mas.
+        private readonly SemaphoreSlim _capture = new SemaphoreSlim(1, 1);
+
         public ReporterService(
             ReporterSettings settings,
             PendingQueue queue,
@@ -122,6 +129,21 @@ namespace Jartiland.TournamentReporter
         public async Task ProcessCapturedAsync(
             CancellationToken cancellation,
             IReadOnlyList<TimeSpan> retryDelays = null)
+        {
+            await _capture.WaitAsync(cancellation).ConfigureAwait(false);
+            try
+            {
+                await ProcessCapturedCoreAsync(cancellation, retryDelays).ConfigureAwait(false);
+            }
+            finally
+            {
+                _capture.Release();
+            }
+        }
+
+        private async Task ProcessCapturedCoreAsync(
+            CancellationToken cancellation,
+            IReadOnlyList<TimeSpan> retryDelays)
         {
             foreach (var entry in _queue.LoadCaptured())
             {

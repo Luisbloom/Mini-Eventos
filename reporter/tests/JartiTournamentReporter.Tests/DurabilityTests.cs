@@ -269,5 +269,32 @@ namespace Jartiland.TournamentReporter.Tests
                 Assert.Equal(esperado.DeathReason, real.DeathReason);
             }
         }
+
+        [Fact]
+        public async Task Two_simultaneous_conversions_do_not_process_the_same_capture_twice()
+        {
+            // El trabajo del fin de partida y el bucle periodico del plugin pueden
+            // coincidir. Sin serializar, los dos leen el mismo archivo capturado.
+            var queue = Queue();
+            var service = Service(queue);
+            _transport.ContextResponse = TransportResponse.Http(200, ValidContext());
+            _transport.DefaultPostResponse = TransportResponse.Http(201, "{}");
+
+            service.Capture(Captured());
+
+            await Task.WhenAll(
+                service.ProcessCapturedAsync(CancellationToken.None, NoWaits),
+                service.ProcessCapturedAsync(CancellationToken.None, NoWaits));
+
+            Assert.False(queue.HasCaptured(SampleGame.ReportId));
+            Assert.Single(Directory.GetFiles(queue.PendingDirectory, "*.json"));
+
+            await service.PumpAsync(CancellationToken.None);
+
+            var enviados = _transport.Posts.ToList();
+            Assert.Single(enviados);
+            Assert.Contains(SampleGame.ReportId, enviados[0].Body);
+            Assert.True(queue.WasAlreadySent(SampleGame.ReportId));
+        }
     }
 }
