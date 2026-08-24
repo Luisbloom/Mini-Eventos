@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const BetterSqlite3 = require('better-sqlite3');
 const { createCompetitionStore, migrateCompetition } = require('./competition-store');
+const { createValorantStore, migrateValorant } = require('./valorant-store');
 const { fingerprintReport } = require('./services/report-fingerprint');
 const { normalizeFriendCode, describeFriendCode, friendCodeError } = require('./services/friend-code');
 const {
@@ -339,6 +340,7 @@ function openDatabase(dbPath) {
   ));
   try {
     migrateCompetition(connection, competitionDefaultId);
+    migrateValorant(connection);
   } catch (error) {
     if (connection.open) connection.close();
     throw error;
@@ -501,6 +503,7 @@ function openDatabase(dbPath) {
   });
 
   const competition = createCompetitionStore(connection);
+  const valorant = createValorantStore(connection);
   return {
     path: dbPath,
     getDefaultEvent: defaultEvent,
@@ -623,6 +626,7 @@ function openDatabase(dbPath) {
       return this.getTournamentInformation(id);
     },
     competition,
+    valorant,
     ping() { return pingStatement.get().ok === 1; },
     close() { if (connection.open) connection.close(); }
   };

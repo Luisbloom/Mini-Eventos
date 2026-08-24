@@ -3,6 +3,7 @@
 require('dotenv').config({ quiet: true });
 
 const { createApp } = require('./app');
+const { createDiscordProvider } = require('./services/discord-oauth');
 const { loadConfig } = require('./config');
 const { openDatabase } = require('./database');
 
@@ -57,7 +58,10 @@ try {
     logger,
     adminToken: config.adminToken,
     reporterToken: config.reporterToken,
-    reporterPrivateUrl: config.reporterPrivateUrl
+    reporterPrivateUrl: config.reporterPrivateUrl,
+    discord: createDiscordProvider(config.discord),
+    // Detrás del Funnel de Tailscale todo va por HTTPS.
+    secureCookies: process.env.NODE_ENV === 'production'
   });
 
   server = app.listen(config.port, config.host, () => {

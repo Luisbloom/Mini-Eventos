@@ -74,6 +74,11 @@ function loadConfig(env = process.env, projectRoot = PROJECT_ROOT) {
     dbPath,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     adminToken: env.ADMIN_TOKEN?.trim() || null,
+    discord: {
+      clientId: env.DISCORD_CLIENT_ID?.trim() || null,
+      clientSecret: env.DISCORD_CLIENT_SECRET?.trim() || null,
+      redirectUri: env.DISCORD_REDIRECT_URI?.trim() || null
+    },
     reporterToken: env.REPORTER_TOKEN?.trim() || null,
     reporterPrivateUrl: parseReporterPrivateUrl(env.REPORTER_PRIVATE_URL),
     nodeEnv: env.NODE_ENV || 'development'

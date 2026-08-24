@@ -10,6 +10,11 @@ const { InformationValidationError } = require('./tournament-information');
 const { EventValidationError } = require('./events');
 const { CompetitionError } = require('./competition');
 const { createMatchIngestor } = require('./services/match-ingest');
+const {
+  createDiscordProvider, DiscordOAuthError,
+  sessionCookie, clearedSessionCookie, readSessionCookie
+} = require('./services/discord-oauth');
+const { ValorantError } = require('./valorant-store');
 const { createReporterContextResolver } = require('./services/reporter-context');
 const {
   ReporterAuthError,
@@ -106,7 +111,9 @@ function createApp({
   logger = console,
   adminToken = null,
   reporterToken = null,
-  reporterPrivateUrl = null
+  reporterPrivateUrl = null,
+  discord = null,
+  secureCookies = false
 }) {
   if (!database) throw new TypeError('createApp necesita una base de datos');
 
@@ -117,6 +124,8 @@ function createApp({
     competition: database.competition
   });
   const reporterContextResolver = createReporterContextResolver({ database });
+  // Sin credenciales el proveedor queda desactivado, pero el servidor arranca.
+  const discordProvider = discord || createDiscordProvider();
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy);
   app.use(helmet({
@@ -584,6 +593,190 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  // ---------------------------------------------------------------- Discord
+  // Identidad del participante. Es un dominio de autenticación distinto del
+  // token de administración y no se mezclan.
+
+  function currentSession(request) {
+    const id = readSessionCookie(request.headers.cookie);
+    return id ? database.valorant.getSession(id) : null;
+  }
+
+  app.get('/api/auth/discord/status', (_request, response) => {
+    response.json(discordProvider.describe());
+  });
+
+  app.get('/auth/discord', (request, response, next) => {
+    try {
+      if (!discordProvider.configured) {
+        return sendError(response, 503, 'DISCORD_NOT_CONFIGURED',
+          'El acceso con Discord todavía no está configurado.');
+      }
+      const state = database.valorant.createOAuthState({
+        redirectTo: typeof request.query.redirect === 'string' ? request.query.redirect : null
+      });
+      response.redirect(302, discordProvider.authorizeUrl(state));
+    } catch (error) { next(error); }
+  });
+
+  app.get('/auth/discord/callback', async (request, response, next) => {
+    try {
+      if (!discordProvider.configured) {
+        return sendError(response, 503, 'DISCORD_NOT_CONFIGURED',
+          'El acceso con Discord todavía no está configurado.');
+      }
+      // El state se consume aquí: si no existe, ya se usó o caducó, se corta.
+      const state = database.valorant.consumeOAuthState(request.query.state);
+      if (!state) {
+        return sendError(response, 400, 'OAUTH_STATE_INVALID',
+          'La petición de acceso no es válida o ha caducado. Vuelve a intentarlo.');
+      }
+
+      const identity = await discordProvider.exchange(request.query.code);
+      const account = database.valorant.upsertDiscordAccount(identity);
+      const sessionId = database.valorant.createSession(account.id);
+
+      response.setHeader('Set-Cookie', sessionCookie(sessionId, { secure: secureCookies }));
+      response.redirect(302, state.redirectTo || '/');
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/auth/logout', (request, response, next) => {
+    try {
+      const id = readSessionCookie(request.headers.cookie);
+      if (id) database.valorant.destroySession(id);
+      response.setHeader('Set-Cookie', clearedSessionCookie({ secure: secureCookies }));
+      response.json({ loggedOut: true });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/me', (request, response, next) => {
+    try {
+      const session = currentSession(request);
+      if (!session) return response.json({ authenticated: false });
+      // Nunca se devuelve el id de Discord ni el de sesión.
+      response.json({
+        authenticated: true,
+        displayName: session.account.displayName || session.account.username,
+        avatar: session.account.avatar
+      });
+    } catch (error) { next(error); }
+  });
+
+  // ---------------------------------------------------------------- draft
+  app.get('/api/events/:slug/draft', (request, response, next) => {
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+      const state = database.valorant.publicDraftState(event.id);
+      if (!state) return sendError(response, 404, 'DRAFT_NOT_FOUND', 'Este evento no tiene draft.');
+      response.json(state);
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/events/:slug/teams', (request, response, next) => {
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+      response.json({ teams: database.valorant.listTeams(event.id) });
+    } catch (error) { next(error); }
+  });
+
+  /**
+   * La elección. Sólo se acepta a quién eliges: quién eres sale de la sesión.
+   * Nada que venga del navegador decide si eres capitán o si es tu turno.
+   */
+  app.post('/api/events/:slug/draft/pick', (request, response, next) => {
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+
+      const session = currentSession(request);
+      if (!session) {
+        return sendError(response, 401, 'AUTH_REQUIRED', 'Entra con Discord para participar en el draft.');
+      }
+      const participant = database.valorant.findParticipantByDiscord(event.id, session.account.id);
+      if (!participant) {
+        return sendError(response, 403, 'NOT_A_PARTICIPANT', 'Tu cuenta no está inscrita en este evento.');
+      }
+
+      const result = database.valorant.pick(event.id, {
+        captainParticipantId: participant.id,
+        selectedParticipantId: request.body?.selectedParticipantId
+      });
+      response.status(201).json({
+        pick: {
+          pickNumber: result.pickNumber, roundNumber: result.roundNumber,
+          teamId: result.teamId, participantId: result.participantId, displayName: result.displayName
+        },
+        draft: database.valorant.publicDraftState(event.id)
+      });
+    } catch (error) { next(error); }
+  });
+
+  // ---------------------------------------------------- draft: administración
+  app.put('/api/admin/events/:id/draft', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        draft: database.valorant.configureDraft(id, {
+          captains: request.body?.captains,
+          teamCount: request.body?.teamCount,
+          teamSize: request.body?.teamSize,
+          actor: 'admin'
+        }),
+        teams: database.valorant.listTeams(id)
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/admin/events/:id/draft/start', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try { response.json({ draft: database.valorant.startDraft(id) }); }
+    catch (error) { next(error); }
+  });
+
+  app.post('/api/admin/events/:id/draft/status', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        draft: database.valorant.setDraftStatus(id, request.body?.status, { reason: request.body?.reason })
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/admin/events/:id/teams/move', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        team: database.valorant.moveParticipant(id, {
+          participantId: request.body?.participantId,
+          toTeamId: request.body?.toTeamId,
+          reason: request.body?.reason
+        })
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/admin/events/:id/teams/captain', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        team: database.valorant.changeCaptain(id, {
+          teamId: request.body?.teamId,
+          participantId: request.body?.participantId,
+          reason: request.body?.reason
+        })
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/admin/events/:id/audit', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try { response.json({ audit: database.valorant.listAudit(id) }); }
+    catch (error) { next(error); }
+  });
+
   app.use('/api', (_request, response) => sendError(response, 404, 'API_NOT_FOUND', 'La ruta de API no existe.'));
 
   app.get('/informacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/informacion`));
@@ -594,12 +787,15 @@ function createApp({
   app.use(express.static(PUBLIC_DIRECTORY, { extensions: ['html'] }));
   app.use((_request, response) => response.status(404).type('text').send('Pagina no encontrada'));
 
+
   app.use((error, request, response, _next) => {
     if (error?.type === 'entity.parse.failed') return sendError(response, 400, 'INVALID_JSON', 'El cuerpo no contiene JSON valido.');
     if (error?.type === 'entity.too.large') return sendError(response, 413, 'REPORT_TOO_LARGE', 'El informe supera el limite de 1 MB.');
     if (error instanceof EventValidationError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof CompetitionError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof ReporterAuthError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof ValorantError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof DiscordOAuthError) return sendError(response, error.status || 502, error.code, error.message);
     if (error instanceof InformationValidationError) return sendError(response, 400, 'INVALID_TOURNAMENT_INFORMATION', error.message);
     logger.error({ event: 'request_error', method: request.method, path: request.originalUrl, message: error?.message || String(error) });
     return sendError(response, 500, 'INTERNAL_ERROR', 'Error interno del servidor.');
