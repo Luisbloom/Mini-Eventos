@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { parseRiotId, riotIdError } = require('./services/riot-id');
 
 /**
  * Equipos, draft e identidad de Discord. Convive con la competición individual
@@ -381,6 +382,83 @@ function createValorantStore(connection) {
     },
 
     // ---------------- equipos ----------------
+
+
+    /**
+     * Inscribe a quien ya se ha identificado con Discord. La cuenta NO llega
+     * por parámetro desde fuera del servidor: la resuelve la ruta a partir de
+     * la cookie de sesión y la pasa aquí ya comprobada.
+     *
+     * Nadie elige a qué inscripción se asocia. Por eso no existe un endpoint de
+     * vinculación manual: se crea la inscripción ya atada, o no se crea.
+     */
+    registerWithDiscord(eventId, { discordAccountId, riotId, values = {} }, createParticipant) {
+      const riot = parseRiotId(riotId);
+      if (!riot.ok) throw new ValorantError(riotIdError(riot.code), 'INVALID_RIOT_ID');
+
+      const cuenta = connection.prepare('SELECT * FROM discord_accounts WHERE id=?').get(discordAccountId);
+      if (!cuenta) throw new ValorantError('La sesión no es válida.', 'SESSION_INVALID', 401);
+
+      const inscribir = connection.transaction(() => {
+        const yaEsta = this.findParticipantByDiscord(eventId, discordAccountId);
+        if (yaEsta) {
+          throw new ValorantError('Ya estás inscrito en este torneo.', 'ALREADY_REGISTERED', 409);
+        }
+
+        // El nombre visible sale de Discord: no se le pide que lo escriba otra vez.
+        const participant = createParticipant(eventId, {
+          ...values,
+          discord_username: cuenta.username,
+          game_name: cuenta.display_name || cuenta.username
+        });
+
+        connection.prepare(`
+          UPDATE event_participants
+          SET discord_account_id=?, riot_game_name=?, riot_tag_line=?, riot_id_normalized=?
+          WHERE id=?`).run(discordAccountId, riot.gameName, riot.tagLine, riot.normalized, participant.id);
+
+        return participant.id;
+      });
+
+      let participantId;
+      try {
+        participantId = inscribir();
+      } catch (error) {
+        if (error instanceof ValorantError) throw error;
+        // Dos peticiones a la vez: la segunda choca contra el índice único.
+        if (String(error.message).includes('UNIQUE')) {
+          throw new ValorantError('Ya estás inscrito en este torneo.', 'ALREADY_REGISTERED', 409);
+        }
+        throw error;
+      }
+
+      return this.publicRegistration(eventId, discordAccountId) ?? { participantId };
+    },
+
+    /** Lo que se le puede enseñar a su dueño: sin identidades internas. */
+    publicRegistration(eventId, discordAccountId) {
+      const row = connection.prepare(`
+        SELECT p.id, p.display_name, p.status, p.riot_game_name, p.riot_tag_line
+        FROM event_participants p WHERE p.event_id=? AND p.discord_account_id=?`)
+        .get(eventId, discordAccountId);
+      if (!row) return null;
+      return {
+        participantId: row.id,
+        displayName: row.display_name,
+        status: row.status,
+        riotId: row.riot_game_name ? `${row.riot_game_name}#${row.riot_tag_line}` : null
+      };
+    },
+
+    /** Qué papel tiene en el draft: para que la interfaz sepa qué enseñar. */
+    draftRole(eventId, participantId) {
+      if (!participantId) return 'none';
+      const equipo = connection.prepare(
+        "SELECT role FROM team_members WHERE event_id=? AND participant_id=?"
+      ).get(eventId, participantId);
+      if (!equipo) return 'participant';
+      return equipo.role === 'captain' ? 'captain' : 'participant';
+    },
 
     listTeams(eventId) {
       const teams = connection.prepare('SELECT * FROM teams WHERE event_id=? ORDER BY seed, id')

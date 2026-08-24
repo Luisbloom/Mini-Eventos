@@ -11,6 +11,7 @@ const { openDatabase } = require('../src/database');
 const { createApp } = require('../src/app');
 const { snakeTurn, totalPicks } = require('../src/valorant-store');
 const { safeReturnPath } = require('../src/services/discord-oauth');
+const { parseRiotId } = require('../src/services/riot-id');
 
 describe('draft de Valorant', () => {
   const directories = [];
@@ -781,6 +782,170 @@ describe('draft de Valorant', () => {
       assert.ok(tercera.valorant.consumeOAuthState(otro.state, otro.nonce));
       assert.equal(tercera.listParticipants(among.id).length, 1);
       tercera.close();
+    });
+  });
+
+  // ======================= INSCRIPCIÓN VALORANT =======================
+
+  describe('Riot ID', () => {
+    it('acepta lo que Riot admite de verdad', () => {
+      // Reglas oficiales: nombre 3-16, etiqueta 3-5, y cualquier letra Unicode.
+      for (const valor of ['Luisbloom#NANO', '  Luisbloom#NANO  ', 'Ñandú#ÑÑÑ', 'Jugador 01#EUW', 'abc#123']) {
+        assert.equal(parseRiotId(valor).ok, true, valor);
+      }
+      const uno = parseRiotId('  Luisbloom#NANO  ');
+      assert.equal(uno.gameName, 'Luisbloom');
+      assert.equal(uno.tagLine, 'NANO');
+      assert.equal(uno.normalized, 'luisbloom#nano');
+      assert.equal(uno.display, 'Luisbloom#NANO', 'se conserva como lo escribió su dueño');
+    });
+
+    it('rechaza lo que no puede ser un Riot ID', () => {
+      const casos = {
+        '': 'EMPTY', '   ': 'EMPTY',
+        Luisbloom: 'MISSING_HASH',
+        'a#b#c': 'TOO_MANY_HASHES',
+        'ab#NANO': 'GAME_NAME_LENGTH',
+        '#NANO': 'GAME_NAME_LENGTH',
+        'Luisbloom#NA': 'TAG_LINE_LENGTH',
+        'Luisbloom#': 'TAG_LINE_LENGTH',
+        'Luisbloom#DEMASIADO': 'TAG_LINE_LENGTH'
+      };
+      for (const [valor, code] of Object.entries(casos)) {
+        const r = parseRiotId(valor);
+        assert.equal(r.ok, false, valor);
+        assert.equal(r.code, code, valor);
+      }
+    });
+  });
+
+  describe('inscripción con Discord', () => {
+    const slug = 'torneo-valorant';
+
+    it('exige sesión y no acepta identidades del navegador', async () => {
+      const { app } = montar();
+      const anonimo = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .send({ riotId: 'Luisbloom#NANO' });
+      assert.equal(anonimo.status, 401);
+      assert.equal(anonimo.body.error.code, 'AUTH_REQUIRED');
+    });
+
+    it('inscribe y deja la cuenta ligada, sin pedirle el nombre', async () => {
+      const { app, database, event } = montar({
+        discord: fakeDiscord({ discordUserId: '9001', username: 'luisbloom', displayName: 'Luis' })
+      });
+      const { sesion } = await login(app);
+
+      const alta = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      assert.equal(alta.body.registration.riotId, 'Luisbloom#NANO');
+      assert.equal(alta.body.registration.displayName, 'Luis', 'el nombre sale de Discord');
+
+      // Queda atada de verdad, sin que nadie eligiera a qué inscripción.
+      const cuenta = database.valorant.getDiscordAccountByUserId('9001');
+      const ligada = database.valorant.findParticipantByDiscord(event.id, cuenta.id);
+      assert.ok(ligada);
+      assert.equal(ligada.riot_game_name, 'Luisbloom');
+      assert.equal(ligada.riot_tag_line, 'NANO');
+      assert.equal(ligada.riot_puuid, null, 'sin Riot API todavía');
+    });
+
+    it('ignora lo que el navegador diga sobre quién es', async () => {
+      const { app, database, event } = montar({
+        discord: fakeDiscord({ discordUserId: '9001', username: 'real', displayName: 'Real' })
+      });
+      // Una inscripción ajena que alguien pudiera querer adoptar.
+      const ajena = database.createParticipant(event.id, {
+        discord_username: 'otro#discord', game_name: 'Otro'
+      });
+      const { sesion } = await login(app);
+
+      const alta = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion)
+        .send({
+          riotId: 'Luisbloom#NANO',
+          participantId: ajena.id,
+          discordAccountId: 999,
+          discordUserId: '1',
+          discord_username: 'suplantado',
+          game_name: 'Suplantado'
+        })
+        .expect(201);
+
+      assert.notEqual(alta.body.registration.participantId, ajena.id, 'no adopta la ajena');
+      assert.equal(alta.body.registration.displayName, 'Real', 'el nombre sigue saliendo de Discord');
+      assert.equal(database.valorant.findParticipantByDiscord(event.id, 999), null);
+    });
+
+    it('no deja inscribirse dos veces', async () => {
+      const { app } = montar();
+      const { sesion } = await login(app);
+      await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      const segunda = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Otro#NAME' });
+      assert.equal(segunda.status, 409);
+      assert.equal(segunda.body.error.code, 'ALREADY_REGISTERED');
+    });
+
+    it('rechaza un Riot ID inválido con un motivo entendible', async () => {
+      const { app } = montar();
+      const { sesion } = await login(app);
+      const malo = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom' });
+      assert.equal(malo.status, 400);
+      assert.equal(malo.body.error.code, 'INVALID_RIOT_ID');
+      assert.match(malo.body.error.message, /almohadilla/);
+    });
+
+    it('no deja inscribirse si el evento no las tiene abiertas', async () => {
+      const { app, database, event } = montar();
+      database.updateEvent(event.id, { ...event, status: 'Próximamente', registrationsOpen: false });
+      const { sesion } = await login(app);
+
+      const cerrado = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' });
+      assert.equal(cerrado.status >= 400, true, 'con el evento cerrado no se inscribe nadie');
+    });
+  });
+
+  describe('/api/me', () => {
+    it('cuenta lo justo para pintar la pantalla, y nada más', async () => {
+      const { app } = montar({
+        discord: fakeDiscord({ discordUserId: '9001', username: 'luis', displayName: 'Luis', avatar: 'abc123' })
+      });
+      const { sesion } = await login(app);
+
+      const antes = await request(app).get('/api/me').query({ event: 'torneo-valorant' })
+        .set('Cookie', sesion).expect(200);
+      assert.equal(antes.body.authenticated, true);
+      assert.equal(antes.body.event.registered, false);
+      assert.equal(antes.body.event.draftRole, 'none');
+      assert.equal(antes.body.event.registrationsOpen, true);
+
+      await request(app).post('/api/events/torneo-valorant/valorant/registrations')
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      const despues = await request(app).get('/api/me').query({ event: 'torneo-valorant' })
+        .set('Cookie', sesion).expect(200);
+      assert.equal(despues.body.event.registered, true);
+      assert.equal(despues.body.event.riotId, 'Luisbloom#NANO');
+      assert.equal(despues.body.event.draftRole, 'participant');
+      // El avatar viene ya montado: el id de Discord no se publica.
+      assert.match(despues.body.avatar, /^https:\/\/cdn\.discordapp\.com\//);
+
+      const texto = JSON.stringify(despues.body);
+      for (const prohibido of ['discordUserId', 'discordAccountId', 'sessionId', 'riot_puuid', 'binding']) {
+        assert.equal(texto.includes(prohibido), false, `no debe salir ${prohibido}`);
+      }
+    });
+
+    it('sin sesión no dice nada de nadie', async () => {
+      const { app } = montar();
+      const anonimo = await request(app).get('/api/me').query({ event: 'torneo-valorant' }).expect(200);
+      assert.deepEqual(anonimo.body, { authenticated: false });
     });
   });
 });

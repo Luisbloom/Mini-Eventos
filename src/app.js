@@ -598,6 +598,15 @@ function createApp({
   // Identidad del participante. Es un dominio de autenticación distinto del
   // token de administración y no se mezclan.
 
+  /**
+   * La URL del avatar necesita el id de Discord, que no queremos publicar. Se
+   * arma aquí y sale ya montada; si no hay avatar, no hay URL.
+   */
+  function discordAvatarUrl(account) {
+    if (!account?.avatar || !account?.discordUserId) return null;
+    return `https://cdn.discordapp.com/avatars/${account.discordUserId}/${account.avatar}.png?size=128`;
+  }
+
   function currentSession(request) {
     const id = readSessionCookie(request.headers.cookie);
     return id ? database.valorant.getSession(id) : null;
@@ -661,16 +670,67 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  /**
+   * Lo que el navegador necesita para decidir qué enseñar. Con `?event=slug`
+   * añade el estado en ese evento. Nunca sale de aquí el id de Discord, el de
+   * cuenta, la sesión ni nada interno.
+   */
   app.get('/api/me', (request, response, next) => {
     try {
       const session = currentSession(request);
       if (!session) return response.json({ authenticated: false });
-      // Nunca se devuelve el id de Discord ni el de sesión.
-      response.json({
+
+      const payload = {
         authenticated: true,
         displayName: session.account.displayName || session.account.username,
-        avatar: session.account.avatar
-      });
+        avatar: discordAvatarUrl(session.account)
+      };
+
+      const slug = typeof request.query.event === 'string' ? request.query.event : null;
+      if (slug) {
+        const event = database.getEventBySlug(slug);
+        if (event) {
+          const registro = database.valorant.publicRegistration(event.id, session.account.id);
+          payload.event = {
+            slug: event.slug,
+            registrationsOpen: event.registration.available,
+            registrationLabel: event.registration.label,
+            registered: Boolean(registro),
+            participantId: registro?.participantId ?? null,
+            registrationStatus: registro?.status ?? null,
+            riotId: registro?.riotId ?? null,
+            draftRole: database.valorant.draftRole(event.id, registro?.participantId)
+          };
+        }
+      }
+
+      response.json(payload);
+    } catch (error) { next(error); }
+  });
+
+  /**
+   * Inscripción de Valorant. El cuerpo sólo trae lo que escribe la persona: la
+   * cuenta sale de la cookie, así que nadie puede adjudicarse una inscripción
+   * ajena mandando un id.
+   */
+  app.post('/api/events/:slug/valorant/registrations', (request, response, next) => {
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+
+      const session = currentSession(request);
+      if (!session) {
+        return sendError(response, 401, 'AUTH_REQUIRED', 'Entra con Discord para inscribirte.');
+      }
+
+      const registro = database.valorant.registerWithDiscord(event.id, {
+        discordAccountId: session.account.id,
+        riotId: request.body?.riotId,
+        // Lo que el navegador diga sobre identidad se ignora por completo.
+        values: {}
+      }, (eventId, values) => database.createParticipant(eventId, values));
+
+      response.status(201).json({ registration: registro });
     } catch (error) { next(error); }
   });
 
