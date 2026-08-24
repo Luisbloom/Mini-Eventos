@@ -75,3 +75,39 @@
 [hidden] { display: none !important; }
 @media (max-width: 900px) { .event-hero, .event-overview, .registration-section { grid-template-columns: 1fr; } .event-hero { min-height: 760px; } .event-hero::before { background: linear-gradient(0deg, rgba(8,11,13,.98) 8%, rgba(8,11,13,.73) 72%, rgba(8,11,13,.38)); } .event-facts { display: grid; grid-template-columns: repeat(4, 1fr); } .event-facts div { display: block; padding: 1rem; border-right: 1px solid var(--line); } .event-facts dd { margin-top: 1rem; text-align: left; } .participant-list, .match-list { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .event-hero { min-height: 790px; gap: 2rem; } .event-hero-cover { object-position: 62% center; } .event-quorum { grid-template-columns: 1fr; } .event-quorum > div:first-child { align-items: flex-start; flex-direction: column; } .event-quorum p { text-align: left; } .event-facts { grid-template-columns: 1fr 1fr; } .event-facts div:last-child { grid-column: auto; } .event-subnav { top: 0; } .participant-list li, .match-list article { grid-template-columns: 42px 1fr; } .participant-list small, .match-list b { grid-column: 2; } }
+
+/* --- Inscripción por Discord (torneos por equipos) --------------------- */
+.discord-registration { display: grid; gap: 1.4rem; }
+.discord-identity { display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; align-items: center; padding: 1rem; border: 1px solid var(--line); background: rgba(255,255,255,.02); }
+.discord-initials { display: grid; place-items: center; width: 46px; height: 46px; background: var(--event-accent, var(--lime)); color: var(--void); font: 1rem/1 var(--mono); letter-spacing: .04em; }
+.discord-identity strong { display: block; font: 1.35rem/1 var(--display); text-transform: uppercase; }
+.discord-identity small { color: var(--muted); font: .58rem/1.4 var(--mono); letter-spacing: .06em; }
+.discord-logout { padding: .6rem .8rem; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font: .52rem/1 var(--mono); letter-spacing: .08em; }
+.discord-logout:hover { color: var(--paper); border-color: var(--paper); }
+.discord-note { padding: 1.1rem; border-left: 2px solid var(--event-accent, var(--lime)); background: rgba(255,255,255,.02); }
+.discord-note strong { display: block; margin-bottom: .5rem; font: 1.1rem/1 var(--display); text-transform: uppercase; }
+.discord-note p { margin: 0; color: var(--muted); line-height: 1.6; }
+.discord-button { display: inline-flex; gap: 1.4rem; align-items: center; justify-self: start; padding: 1rem 1.2rem; border: 0; background: var(--event-accent, var(--lime)); color: var(--void); text-decoration: none; font: .62rem/1 var(--mono); letter-spacing: .12em; transition: filter .2s ease; }
+.discord-button:hover { filter: brightness(1.12); }
+.riot-form { display: grid; gap: .7rem; max-width: 460px; }
+.riot-form label { color: var(--muted); font: .55rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.riot-form input { min-height: 48px; padding: .8rem; border: 1px solid var(--line); background: #090d0f; color: var(--paper); font: 1rem/1 var(--body); }
+.riot-form input:focus { outline: 1px solid var(--event-accent, var(--lime)); border-color: var(--event-accent, var(--lime)); }
+.riot-form small { color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.riot-form button { min-height: 48px; margin-top: .4rem; border: 0; background: var(--event-accent, var(--lime)); color: var(--void); cursor: pointer; font: .62rem/1 var(--mono); letter-spacing: .12em; }
+.riot-form button:disabled { opacity: .45; cursor: progress; }
+.riot-form p { margin: 0; min-height: 1.2rem; color: var(--coral); font-size: .88rem; line-height: 1.5; }
+.discord-done { display: grid; grid-template-columns: auto 1fr; gap: 1rem; padding: 1.2rem; border: 1px solid var(--event-accent, var(--lime)); background: rgba(255,255,255,.02); }
+.discord-done > span { color: var(--event-accent, var(--lime)); font: 1.6rem/1 var(--display); }
+.discord-done strong { display: block; margin-bottom: .8rem; font: 1.2rem/1 var(--display); letter-spacing: .04em; }
+.discord-done dl { display: grid; gap: .55rem; margin: 0; }
+.discord-done dl > div { display: grid; grid-template-columns: 90px 1fr; gap: .8rem; }
+.discord-done dt { color: var(--muted); font: .55rem/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.discord-done dd { margin: 0; color: var(--paper); }
+
+@media (max-width: 620px) {
+  .discord-identity { grid-template-columns: auto 1fr; }
+  .discord-logout { grid-column: 1 / -1; justify-self: start; }
+  .discord-done { grid-template-columns: 1fr; }
+  .discord-done dl > div { grid-template-columns: 1fr; gap: .2rem; }
+}

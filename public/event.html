@@ -104,6 +104,14 @@
         <div class="registration-panel">
           <div id="registration-closed" class="registration-closed" hidden><strong id="registration-closed-title">INSCRIPCIONES CERRADAS</strong><p id="registration-closed-copy">Ahora mismo no se admiten nuevas inscripciones.</p></div>
           <form id="registration-form" novalidate><div id="registration-fields" class="registration-fields"></div><label class="privacy-note"><span>✓</span> Tus datos sólo se usan para organizar este evento.</label><button id="registration-submit" type="submit">CONFIRMAR INSCRIPCIÓN <span>→</span></button><p id="registration-feedback" role="status"></p></form>
+          <div id="discord-registration" class="discord-registration" hidden>
+            <div id="discord-identity" class="discord-identity" hidden>
+              <span id="discord-initials" class="discord-initials" aria-hidden="true"></span>
+              <div><strong id="discord-name">—</strong><small id="discord-state">Discord conectado</small></div>
+              <button id="discord-logout" type="button" class="discord-logout">Cerrar sesión</button>
+            </div>
+            <div id="discord-step" class="discord-step"></div>
+          </div>
           <div id="registration-success" class="registration-success" hidden><span>✓</span><div><strong>INSCRIPCIÓN RECIBIDA</strong><p>El equipo de Jartiland la revisará y te confirmará por Discord.</p></div></div>
         </div>
       </section>

@@ -86,6 +86,9 @@ function fieldControl(field) {
 }
 
 function renderRegistration(event, fields) {
+  // Los torneos por equipos usan otro camino: la identidad la pone Discord.
+  if (event.modules?.draft) { renderDiscordRegistration(event); return; }
+
   const form = byId('registration-form');
   const closed = byId('registration-closed');
   form.hidden = !event.registration.available;
@@ -221,3 +224,159 @@ byId('registration-form').addEventListener('submit', (event) => { event.preventD
 byId('refresh-leaderboard').addEventListener('click', () => loadLeaderboard(currentEvent));
 loadEvent();
 setInterval(() => { if (currentEvent?.modules.leaderboard&&!currentEvent?.modules.competition) loadLeaderboard(currentEvent); }, 20000);
+
+/* ------------------------------------------------------------------ Discord
+ * Inscripción de los torneos por equipos. Sustituye al formulario genérico
+ * cuando el evento lleva el módulo de draft: aquí la identidad la pone Discord
+ * y lo único que escribe la persona es su Riot ID.
+ */
+
+const ERRORES_INSCRIPCION = {
+  AUTH_REQUIRED: 'Entra con Discord antes de inscribirte.',
+  INVALID_RIOT_ID: null,                    // el backend ya explica cuál es el fallo
+  ALREADY_REGISTERED: 'Ya estás inscrito en este torneo.',
+  RIOT_ID_ALREADY_REGISTERED: 'Ese Riot ID ya está inscrito en este torneo.',
+  MODULE_DISABLED: 'Este torneo no admite inscripción por equipos.',
+  REGISTRATION_CLOSED: 'Las inscripciones todavía no están abiertas.'
+};
+
+function mensajeDeError(cuerpo, porDefecto) {
+  const code = cuerpo?.error?.code;
+  if (code && ERRORES_INSCRIPCION[code] === null) return cuerpo.error.message;
+  return (code && ERRORES_INSCRIPCION[code]) || cuerpo?.error?.message || porDefecto;
+}
+
+/** Iniciales del nombre: evita traer el avatar, cuya URL lleva el id de Discord. */
+function iniciales(nombre) {
+  return String(nombre || '?').trim().split(/\s+/).slice(0, 2)
+    .map((parte) => parte[0] || '').join('').toUpperCase() || '?';
+}
+
+async function cargarEstadoDiscord(event) {
+  const [estado, yo] = await Promise.all([
+    fetch('/api/auth/discord/status', { cache: 'no-store' }).then((r) => r.json()).catch(() => ({ configured: false })),
+    fetch(`/api/me?event=${encodeURIComponent(event.slug)}`, { cache: 'no-store' })
+      .then((r) => r.json()).catch(() => ({ authenticated: false }))
+  ]);
+  return { estado, yo };
+}
+
+function pintarIdentidad(yo) {
+  const caja = byId('discord-identity');
+  if (!yo.authenticated) { caja.hidden = true; return; }
+  caja.hidden = false;
+  byId('discord-initials').textContent = iniciales(yo.displayName);
+  byId('discord-name').textContent = yo.displayName;
+}
+
+function volverAqui(event) {
+  return encodeURIComponent(`/eventos/${event.slug}`);
+}
+
+function pasoNoConfigurado() {
+  return `<div class="discord-note">
+      <strong>Acceso con Discord</strong>
+      <p>Todavía no disponible. En cuanto esté listo podrás inscribirte desde aquí.</p>
+    </div>`;
+}
+
+function pasoEntrar(event) {
+  return `<div class="discord-note">
+      <p>Para participar tienes que identificarte con Discord. Así no hace falta que escribas
+         tu usuario y no hay forma de equivocarse.</p>
+    </div>
+    <a class="discord-button" href="/auth/discord?redirect=${volverAqui(event)}">
+      CONTINUAR CON DISCORD <span aria-hidden="true">→</span>
+    </a>`;
+}
+
+function pasoCerrado(etiqueta) {
+  return `<div class="discord-note">
+      <strong>${etiqueta || 'Inscripciones cerradas'}</strong>
+      <p>Las inscripciones todavía no están abiertas. Tu cuenta ya está conectada:
+         cuando abran, sólo tendrás que poner tu Riot ID.</p>
+    </div>`;
+}
+
+function pasoFormulario() {
+  return `<form id="riot-form" class="riot-form" novalidate>
+      <label for="riot-id">Riot ID</label>
+      <input id="riot-id" name="riotId" autocomplete="off" spellcheck="false"
+             placeholder="Luisbloom#NANO" required>
+      <small>Lo tienes arriba a la derecha en el cliente de Riot. Lleva almohadilla.</small>
+      <button type="submit">INSCRIBIRME <span aria-hidden="true">→</span></button>
+      <p id="riot-feedback" role="status"></p>
+    </form>`;
+}
+
+function pasoInscrito(datos) {
+  const estados = { pending: 'Pendiente de confirmación', confirmed: 'Confirmada', cancelled: 'Cancelada' };
+  return `<div class="discord-done">
+      <span aria-hidden="true">✓</span>
+      <div>
+        <strong>INSCRIPCIÓN REALIZADA</strong>
+        <dl>
+          <div><dt>Riot ID</dt><dd>${escaparTexto(datos.riotId || '—')}</dd></div>
+          <div><dt>Estado</dt><dd>${estados[datos.registrationStatus] || datos.registrationStatus || '—'}</dd></div>
+        </dl>
+      </div>
+    </div>`;
+}
+
+/** El nombre y el Riot ID los escribe una persona: nunca se inyectan como HTML. */
+function escaparTexto(valor) {
+  const div = document.createElement('div');
+  div.textContent = String(valor ?? '');
+  return div.innerHTML;
+}
+
+async function renderDiscordRegistration(event) {
+  const caja = byId('discord-registration');
+  caja.hidden = false;
+  byId('registration-form').hidden = true;
+  byId('registration-closed').hidden = true;
+
+  const { estado, yo } = await cargarEstadoDiscord(event);
+  pintarIdentidad(yo);
+
+  const paso = byId('discord-step');
+  const datos = yo.event || {};
+
+  if (!estado.configured && !yo.authenticated) { paso.innerHTML = pasoNoConfigurado(); return; }
+  if (!yo.authenticated) { paso.innerHTML = pasoEntrar(event); return; }
+  if (datos.registered) { paso.innerHTML = pasoInscrito(datos); return; }
+  if (!datos.registrationsOpen) { paso.innerHTML = pasoCerrado(datos.registrationLabel); return; }
+
+  paso.innerHTML = pasoFormulario();
+  byId('riot-form').addEventListener('submit', async (submit) => {
+    submit.preventDefault();
+    const boton = byId('riot-form').querySelector('button');
+    const aviso = byId('riot-feedback');
+    boton.disabled = true;
+    aviso.textContent = '';
+    try {
+      const respuesta = await fetch(`/api/events/${encodeURIComponent(event.slug)}/valorant/registrations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Sólo el Riot ID: quién eres lo resuelve el servidor con la sesión.
+        body: JSON.stringify({ riotId: byId('riot-id').value })
+      });
+      const cuerpo = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) {
+        aviso.textContent = mensajeDeError(cuerpo, 'No se ha podido completar la inscripción.');
+        boton.disabled = false;
+        return;
+      }
+      await renderDiscordRegistration(event);
+    } catch {
+      aviso.textContent = 'No se ha podido conectar. Inténtalo otra vez.';
+      boton.disabled = false;
+    }
+  });
+}
+
+document.addEventListener('click', async (click) => {
+  if (click.target?.id !== 'discord-logout') return;
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  location.reload();
+});
