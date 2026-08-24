@@ -194,6 +194,14 @@ function migrateValorant(connection) {
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_participant_discord_event ' +
     'ON event_participants(event_id, discord_account_id) WHERE discord_account_id IS NOT NULL'
   );
+
+  // Y un mismo jugador de Riot tampoco, aunque use dos cuentas de Discord. El
+  // indice es parcial para no chocar con los eventos que no usan Riot ID, y va
+  // por evento: el mismo jugador si puede estar en torneos distintos.
+  connection.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_participant_riot_event ' +
+    'ON event_participants(event_id, riot_id_normalized) WHERE riot_id_normalized IS NOT NULL'
+  );
 }
 
 /**
@@ -405,6 +413,14 @@ function createValorantStore(connection) {
           throw new ValorantError('Ya estás inscrito en este torneo.', 'ALREADY_REGISTERED', 409);
         }
 
+        const riotOcupado = connection.prepare(
+          'SELECT 1 FROM event_participants WHERE event_id=? AND riot_id_normalized=?'
+        ).get(eventId, riot.normalized);
+        if (riotOcupado) {
+          throw new ValorantError(
+            'Ese Riot ID ya está inscrito en este torneo.', 'RIOT_ID_ALREADY_REGISTERED', 409);
+        }
+
         // El nombre visible sale de Discord: no se le pide que lo escriba otra vez.
         const participant = createParticipant(eventId, {
           ...values,
@@ -426,6 +442,12 @@ function createValorantStore(connection) {
       } catch (error) {
         if (error instanceof ValorantError) throw error;
         // Dos peticiones a la vez: la segunda choca contra el índice único.
+        // Dos peticiones a la vez: gana una y la otra choca con el índice. Se
+        // distingue cuál, porque no es lo mismo repetir cuenta que repetir jugador.
+        if (String(error.message).includes('idx_participant_riot_event')) {
+          throw new ValorantError(
+            'Ese Riot ID ya está inscrito en este torneo.', 'RIOT_ID_ALREADY_REGISTERED', 409);
+        }
         if (String(error.message).includes('UNIQUE')) {
           throw new ValorantError('Ya estás inscrito en este torneo.', 'ALREADY_REGISTERED', 409);
         }

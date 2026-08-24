@@ -599,12 +599,18 @@ function createApp({
   // token de administración y no se mezclan.
 
   /**
-   * La URL del avatar necesita el id de Discord, que no queremos publicar. Se
-   * arma aquí y sale ya montada; si no hay avatar, no hay URL.
+   * Un evento sólo admite draft y equipos si lleva ese módulo activado. Sin
+   * esto, `/api/events/torneo-among-us/valorant/registrations` crearía una
+   * inscripción con Riot ID dentro de un torneo individual.
    */
-  function discordAvatarUrl(account) {
-    if (!account?.avatar || !account?.discordUserId) return null;
-    return `https://cdn.discordapp.com/avatars/${account.discordUserId}/${account.avatar}.png?size=128`;
+  function draftEventFromSlug(request, response) {
+    const event = eventFromSlug(request, response);
+    if (!event) return null;
+    if (!event.modules.draft) {
+      sendError(response, 404, 'MODULE_DISABLED', 'Este evento no utiliza draft por equipos.');
+      return null;
+    }
+    return event;
   }
 
   function currentSession(request) {
@@ -683,7 +689,11 @@ function createApp({
       const payload = {
         authenticated: true,
         displayName: session.account.displayName || session.account.username,
-        avatar: discordAvatarUrl(session.account)
+        // Sin avatar: la URL del CDN de Discord lleva el id dentro, así que
+        // publicarla es publicar el id por mucho que no exista el campo. Servirlo
+        // sin filtrarlo exigiría copiar la imagen a nuestro lado, y eso no toca
+        // en este bloque. La interfaz usa las iniciales del nombre.
+        avatar: null
       };
 
       const slug = typeof request.query.event === 'string' ? request.query.event : null;
@@ -699,7 +709,10 @@ function createApp({
             participantId: registro?.participantId ?? null,
             registrationStatus: registro?.status ?? null,
             riotId: registro?.riotId ?? null,
-            draftRole: database.valorant.draftRole(event.id, registro?.participantId)
+            // En un evento sin draft no se inventa un papel que no existe.
+            draftRole: event.modules.draft
+              ? database.valorant.draftRole(event.id, registro?.participantId)
+              : null
           };
         }
       }
@@ -715,7 +728,7 @@ function createApp({
    */
   app.post('/api/events/:slug/valorant/registrations', (request, response, next) => {
     try {
-      const event = eventFromSlug(request, response);
+      const event = draftEventFromSlug(request, response);
       if (!event) return;
 
       const session = currentSession(request);
@@ -737,7 +750,7 @@ function createApp({
   // ---------------------------------------------------------------- draft
   app.get('/api/events/:slug/draft', (request, response, next) => {
     try {
-      const event = eventFromSlug(request, response);
+      const event = draftEventFromSlug(request, response);
       if (!event) return;
       const state = database.valorant.publicDraftState(event.id);
       if (!state) return sendError(response, 404, 'DRAFT_NOT_FOUND', 'Este evento no tiene draft.');
@@ -747,7 +760,7 @@ function createApp({
 
   app.get('/api/events/:slug/teams', (request, response, next) => {
     try {
-      const event = eventFromSlug(request, response);
+      const event = draftEventFromSlug(request, response);
       if (!event) return;
       response.json({ teams: database.valorant.listTeams(event.id) });
     } catch (error) { next(error); }
@@ -759,7 +772,7 @@ function createApp({
    */
   app.post('/api/events/:slug/draft/pick', (request, response, next) => {
     try {
-      const event = eventFromSlug(request, response);
+      const event = draftEventFromSlug(request, response);
       if (!event) return;
 
       const session = currentSession(request);

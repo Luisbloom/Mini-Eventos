@@ -21,8 +21,7 @@ const {
   normalizeEvent,
   normalizeRegistrationFields,
   normalizeRegistrationValues,
-  registrationFieldsForGame
-} = require('./events');
+  registrationFieldsForGame, normalizeModules } = require('./events');
 
 function toMatch(row) {
   if (!row) return null;
@@ -101,7 +100,7 @@ function toEvent(row) {
     maxParticipants: row.max_participants,
     registrationsOpen: Boolean(row.registrations_open),
     archived: Boolean(row.archived),
-    modules: JSON.parse(row.modules_json),
+    modules: normalizeModules(JSON.parse(row.modules_json)),
     accentColor: row.accent_color,
     icon: row.icon,
     coverImage: row.cover_image,

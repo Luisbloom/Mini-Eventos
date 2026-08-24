@@ -25,7 +25,8 @@ const MODULE_KEYS = Object.freeze([
   'registration',
   'competition',
   'schedule',
-  'prizes'
+  'prizes',
+  'draft'
 ]);
 
 const DEFAULT_MODULES = Object.freeze({
@@ -36,7 +37,10 @@ const DEFAULT_MODULES = Object.freeze({
   registration: true,
   competition: true,
   schedule: true,
-  prizes: true
+  prizes: true,
+  // Sólo para torneos por equipos con draft. Los eventos existentes lo reciben
+  // apagado, así que Among Us no cambia.
+  draft: false
 });
 
 const DEFAULT_EVENT = Object.freeze({

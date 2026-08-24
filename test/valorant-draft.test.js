@@ -48,6 +48,7 @@ describe('draft de Valorant', () => {
       // El evento real sigue en Próximamente. Aquí se abren las inscripciones
       // porque lo que se prueba es el draft, no la puerta de entrada.
       status: 'Inscripciones abiertas', registrationsOpen: true,
+      modules: { draft: true },
       accentColor: '#ff4655', icon: 'crosshair', coverImage: '/images/events/x.png'
     });
     return { database, app, event, discord };
@@ -933,8 +934,9 @@ describe('draft de Valorant', () => {
       assert.equal(despues.body.event.registered, true);
       assert.equal(despues.body.event.riotId, 'Luisbloom#NANO');
       assert.equal(despues.body.event.draftRole, 'participant');
-      // El avatar viene ya montado: el id de Discord no se publica.
-      assert.match(despues.body.avatar, /^https:\/\/cdn\.discordapp\.com\//);
+      // No hay avatar: su URL lleva el id de Discord dentro, así que publicarla
+      // sería publicar el id. La interfaz usa las iniciales del nombre.
+      assert.equal(despues.body.avatar, null);
 
       const texto = JSON.stringify(despues.body);
       for (const prohibido of ['discordUserId', 'discordAccountId', 'sessionId', 'riot_puuid', 'binding']) {
@@ -946,6 +948,178 @@ describe('draft de Valorant', () => {
       const { app } = montar();
       const anonimo = await request(app).get('/api/me').query({ event: 'torneo-valorant' }).expect(200);
       assert.deepEqual(anonimo.body, { authenticated: false });
+    });
+  });
+
+  // =============== AISLAMIENTO, PRIVACIDAD Y DUPLICADOS ===============
+
+  describe('el módulo de draft aísla los eventos', () => {
+    it('un torneo sin draft rechaza las rutas de Valorant', async () => {
+      const { app, database } = montar();
+      const among = database.getDefaultEvent();
+      assert.equal(among.modules.draft, false, 'Among Us no lleva draft');
+
+      // Sin esto se podría crear una inscripción con Riot ID dentro del torneo
+      // individual de Among Us.
+      for (const ruta of [
+        `/api/events/${among.slug}/draft`,
+        `/api/events/${among.slug}/teams`
+      ]) {
+        const respuesta = await request(app).get(ruta);
+        assert.equal(respuesta.status, 404, ruta);
+        assert.equal(respuesta.body.error.code, 'MODULE_DISABLED');
+      }
+
+      const { sesion } = await login(app);
+      const intento = await request(app)
+        .post(`/api/events/${among.slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' });
+      assert.equal(intento.status, 404);
+      assert.equal(intento.body.error.code, 'MODULE_DISABLED');
+
+      // Y el torneo de Among Us sigue sin nadie de Valorant dentro.
+      assert.equal(database.listParticipants(among.id).length, 0);
+    });
+
+    it('un evento que no existe sigue dando 404', async () => {
+      const { app } = montar();
+      await request(app).get('/api/events/no-existe/draft').expect(404);
+    });
+
+    it('no inventa papel de draft en un evento que no lo tiene', async () => {
+      const { app, database } = montar();
+      const among = database.getDefaultEvent();
+      const { sesion } = await login(app);
+
+      const yo = await request(app).get('/api/me').query({ event: among.slug })
+        .set('Cookie', sesion).expect(200);
+      assert.equal(yo.body.event.slug, among.slug);
+      assert.equal(yo.body.event.draftRole, null);
+    });
+  });
+
+  describe('el mismo jugador de Riot no se inscribe dos veces', () => {
+    const slug = 'torneo-valorant';
+
+    /** Un login con una cuenta de Discord concreta. */
+    async function loginComo(app, discordUserId) {
+      const inicio = await request(app).get('/auth/discord').expect(302);
+      const state = new URL(inicio.headers.location).searchParams.get('state');
+      const nonce = inicio.headers['set-cookie'][0].split(';')[0];
+      const callback = await request(app).get('/auth/discord/callback')
+        .set('Cookie', nonce).query({ code: String(discordUserId), state }).expect(302);
+      return callback.headers['set-cookie']
+        .find((c) => c.startsWith('jarti_session=')).split(';')[0];
+    }
+
+    function conVariasCuentas() {
+      // El doble devuelve una identidad distinta segun el codigo, para poder
+      // simular dos personas diferentes.
+      const provider = {
+        configured: true,
+        describe: () => ({ configured: true, scope: 'identify', redirectUri: 'http://x/cb' }),
+        authorizeUrl: (state) => `https://discord.test/authorize?state=${state}`,
+        exchange: async (code) => ({
+          discordUserId: String(code), username: `u${code}`, displayName: `Usuario ${code}`
+        })
+      };
+      return montar({ discord: provider });
+    }
+
+    it('dos cuentas de Discord no pueden traer el mismo Riot ID', async () => {
+      const { app } = conVariasCuentas();
+
+      const uno = await loginComo(app, '111');
+      await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      const dos = await loginComo(app, '222');
+      const repetido = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', dos).send({ riotId: 'Luisbloom#NANO' });
+
+      assert.equal(repetido.status, 409);
+      assert.equal(repetido.body.error.code, 'RIOT_ID_ALREADY_REGISTERED',
+        'el problema es el Riot ID, no la cuenta de Discord');
+    });
+
+    it('las mayúsculas no sirven para colarse', async () => {
+      const { app } = conVariasCuentas();
+      const uno = await loginComo(app, '111');
+      await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      const dos = await loginComo(app, '222');
+      const disfrazado = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', dos).send({ riotId: 'luisbloom#nano' });
+      assert.equal(disfrazado.status, 409);
+      assert.equal(disfrazado.body.error.code, 'RIOT_ID_ALREADY_REGISTERED');
+    });
+
+    it('Riot IDs distintos entran sin problema', async () => {
+      const { app } = conVariasCuentas();
+      const uno = await loginComo(app, '111');
+      await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      const dos = await loginComo(app, '222');
+      await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', dos).send({ riotId: 'Otrojugador#EUW' }).expect(201);
+    });
+
+    it('la misma cuenta repetida sigue siendo otro error distinto', async () => {
+      const { app } = conVariasCuentas();
+      const uno = await loginComo(app, '111');
+      await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      const otra = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', uno).send({ riotId: 'Distinto#EUW' });
+      assert.equal(otra.status, 409);
+      assert.equal(otra.body.error.code, 'ALREADY_REGISTERED');
+    });
+  });
+
+  describe('el identificador de Discord no sale nunca', () => {
+    const DISCORD_ID = '9001123456789';
+
+    it('no aparece en ninguna respuesta pública, ni dentro de una URL', async () => {
+      const { app, database, event } = montar({
+        discord: fakeDiscord({
+          discordUserId: DISCORD_ID, username: 'luis', displayName: 'Luis', avatar: 'hash-de-avatar'
+        })
+      });
+      const { sesion } = await login(app);
+
+      await request(app).post('/api/events/torneo-valorant/valorant/registrations')
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+
+      // Un draft en marcha, para que el estado publico tenga contenido.
+      const resto = inscribir(database, event, 19);
+      const mio = database.valorant.findParticipantByDiscord(
+        event.id, database.valorant.getDiscordAccountByUserId(DISCORD_ID).id);
+      // La inscripcion nace pendiente; administracion la confirma.
+      database.updateParticipant(mio.id, { status: 'confirmed' });
+      const capitanes = [mio.id, ...resto.slice(0, 3).map((p) => p.id)];
+      database.valorant.configureDraft(event.id, { captains: capitanes, teamCount: 4, teamSize: 5 });
+      database.valorant.startDraft(event.id);
+
+      const respuestas = await Promise.all([
+        request(app).get('/api/me').query({ event: 'torneo-valorant' }).set('Cookie', sesion),
+        request(app).get('/api/events/torneo-valorant/draft'),
+        request(app).get('/api/events/torneo-valorant/teams'),
+        request(app).get('/api/events/torneo-valorant/participants')
+      ]);
+
+      for (const respuesta of respuestas) {
+        const texto = JSON.stringify(respuesta.body);
+        assert.equal(texto.includes(DISCORD_ID), false,
+          `el id de Discord aparece en ${respuesta.request.url}`);
+        assert.equal(texto.includes('cdn.discordapp.com'), false,
+          'ninguna URL del CDN, que lleva el id dentro');
+        for (const prohibido of ['discordUserId', 'discordAccountId', 'sessionId', 'riot_puuid', 'binding_hash']) {
+          assert.equal(texto.includes(prohibido), false, `${prohibido} en ${respuesta.request.url}`);
+        }
+      }
     });
   });
 });
