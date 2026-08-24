@@ -16,6 +16,7 @@ const {
   oauthNonceCookie, clearedOAuthNonceCookie, readOAuthNonceCookie
 } = require('./services/discord-oauth');
 const { ValorantError } = require('./valorant-store');
+const { createDraftStream } = require('./services/draft-stream');
 const { createReporterContextResolver } = require('./services/reporter-context');
 const {
   ReporterAuthError,
@@ -127,6 +128,7 @@ function createApp({
   const reporterContextResolver = createReporterContextResolver({ database });
   // Sin credenciales el proveedor queda desactivado, pero el servidor arranca.
   const discordProvider = discord || createDiscordProvider();
+  const draftStream = createDraftStream();
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy);
   app.use(helmet({
@@ -788,6 +790,8 @@ function createApp({
         captainParticipantId: participant.id,
         selectedParticipantId: request.body?.selectedParticipantId
       });
+      // Primero está guardado; sólo entonces se avisa.
+      draftStream.publish(event.id, result.draft.status === 'COMPLETED' ? 'draft_completed' : 'pick_made');
       response.status(201).json({
         pick: {
           pickNumber: result.pickNumber, roundNumber: result.roundNumber,
@@ -798,60 +802,73 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  /**
+   * Avisos en directo. Sólo lleva el tipo de cambio y una revisión: el estado
+   * se pide por la ruta pública, así que por aquí no puede escaparse nada
+   * privado aunque alguien añada un campo sin darse cuenta.
+   */
+  app.get('/api/events/:slug/draft/stream', (request, response) => {
+    const event = draftEventFromSlug(request, response);
+    if (!event) return;
+    draftStream.attach(event.id, request, response);
+  });
+
   // ---------------------------------------------------- draft: administración
   app.put('/api/admin/events/:id/draft', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
-      response.json({
-        draft: database.valorant.configureDraft(id, {
-          captains: request.body?.captains,
-          teamCount: request.body?.teamCount,
-          teamSize: request.body?.teamSize,
-          actor: 'admin'
-        }),
-        teams: database.valorant.listTeams(id)
+      const draft = database.valorant.configureDraft(id, {
+        captains: request.body?.captains,
+        teamCount: request.body?.teamCount,
+        teamSize: request.body?.teamSize,
+        actor: 'admin'
       });
+      draftStream.publish(id, 'draft_configured');
+      response.json({ draft, teams: database.valorant.listTeams(id) });
     } catch (error) { next(error); }
   });
 
   app.post('/api/admin/events/:id/draft/start', (request, response, next) => {
     const id = parseId(request.params.id);
-    try { response.json({ draft: database.valorant.startDraft(id) }); }
-    catch (error) { next(error); }
+    try {
+      const draft = database.valorant.startDraft(id);
+      draftStream.publish(id, 'draft_started');
+      response.json({ draft });
+    } catch (error) { next(error); }
   });
 
   app.post('/api/admin/events/:id/draft/status', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
-      response.json({
-        draft: database.valorant.setDraftStatus(id, request.body?.status, { reason: request.body?.reason })
-      });
+      const draft = database.valorant.setDraftStatus(id, request.body?.status, { reason: request.body?.reason });
+      draftStream.publish(id, draft.status === 'PAUSED' ? 'draft_paused' : 'draft_resumed');
+      response.json({ draft });
     } catch (error) { next(error); }
   });
 
   app.post('/api/admin/events/:id/teams/move', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
-      response.json({
-        team: database.valorant.moveParticipant(id, {
-          participantId: request.body?.participantId,
-          toTeamId: request.body?.toTeamId,
-          reason: request.body?.reason
-        })
+      const team = database.valorant.moveParticipant(id, {
+        participantId: request.body?.participantId,
+        toTeamId: request.body?.toTeamId,
+        reason: request.body?.reason
       });
+      draftStream.publish(id, 'team_updated');
+      response.json({ team });
     } catch (error) { next(error); }
   });
 
   app.post('/api/admin/events/:id/teams/captain', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
-      response.json({
-        team: database.valorant.changeCaptain(id, {
-          teamId: request.body?.teamId,
-          participantId: request.body?.participantId,
-          reason: request.body?.reason
-        })
+      const team = database.valorant.changeCaptain(id, {
+        teamId: request.body?.teamId,
+        participantId: request.body?.participantId,
+        reason: request.body?.reason
       });
+      draftStream.publish(id, 'team_updated');
+      response.json({ team });
     } catch (error) { next(error); }
   });
 
@@ -884,6 +901,7 @@ function createApp({
     logger.error({ event: 'request_error', method: request.method, path: request.originalUrl, message: error?.message || String(error) });
     return sendError(response, 500, 'INTERNAL_ERROR', 'Error interno del servidor.');
   });
+  app.locals.draftStream = draftStream;
   return app;
 }
 
