@@ -158,7 +158,7 @@ describe('competition API', () => {
       players:[{friendCode:'SECRET#1',role:'Crewmate',won:true,tasksCompleted:4,tasksTotal:4}]
     };
     const created=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send(report).expect(201);
-    database.updateParticipant(participant.id,{internalFriendCode:'SECRET#NEW'});
+    database.updateParticipant(participant.id,{internalFriendCode:'secret#4321'});
 
     const replay=await request(app).post('/api/matches').set('Authorization',`Bearer ${reporterToken}`).send({...report}).expect(200);
     assert.equal(replay.body.id,created.body.id);

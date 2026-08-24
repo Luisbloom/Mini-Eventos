@@ -44,7 +44,7 @@ describe('Reporter competitive context', () => {
   });
 
   function confirmedParticipant(name, friendCode, groupId) {
-    const participant = database.createParticipant(event.id, { discord_username: name, game_name: name, friend_code: friendCode || `${name}#sin` });
+    const participant = database.createParticipant(event.id, { discord_username: name, game_name: name, friend_code: friendCode || `${name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g,'')}#1001` });
     database.updateParticipant(participant.id, { status: 'confirmed', internalFriendCode: friendCode });
     database.competition.assignParticipant(stage.id, participant.id, groupId);
     return participant;

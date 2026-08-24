@@ -5,7 +5,7 @@ const path = require('node:path');
 const BetterSqlite3 = require('better-sqlite3');
 const { createCompetitionStore, migrateCompetition } = require('./competition-store');
 const { fingerprintReport } = require('./services/report-fingerprint');
-const { normalizeFriendCode } = require('./services/friend-code');
+const { normalizeFriendCode, describeFriendCode, friendCodeError } = require('./services/friend-code');
 const {
   DEFAULT_TOURNAMENT_INFORMATION,
   createDefaultEventInformation,
@@ -395,6 +395,8 @@ function openDatabase(dbPath) {
   const voidMatchStatement = connection.prepare("UPDATE matches SET match_status='VOID',void_reason=? WHERE id=? AND event_id=?");
   const countActiveParticipantsStatement = connection.prepare(`SELECT COUNT(*) total FROM event_participants WHERE event_id=? AND status IN ('pending','confirmed')`);
   const duplicateParticipantStatement = connection.prepare('SELECT id FROM event_participants WHERE event_id=? AND discord_username=? COLLATE NOCASE');
+  const duplicateFriendCodeStatement = connection.prepare(
+    "SELECT id FROM event_participants WHERE event_id=? AND internal_friend_code=? AND status!='cancelled' AND id IS NOT ?");
   const insertParticipantStatement = connection.prepare(`INSERT INTO event_participants (event_id,discord_username,display_name,field_values_json,internal_friend_code) VALUES (?,?,?,?,?)`);
   const getParticipantStatement = connection.prepare('SELECT * FROM event_participants WHERE id=?');
   const listParticipantsStatement = connection.prepare('SELECT * FROM event_participants WHERE event_id=? ORDER BY created_at,id');
@@ -541,7 +543,18 @@ function openDatabase(dbPath) {
       const displayName = values.game_name || (preferredNameKey ? values[preferredNameKey] : discordUsername);
       // El Friend Code que escribe el jugador pasa directo a su identidad interna:
       // así el Reporter puede reconocerlo sin que nadie lo teclee a mano en /admin.
-      const friendCode = normalizeFriendCode(values.friend_code) || null;
+      // El Friend Code sólo se exige donde el evento lo pide (Among Us). Un
+      // código mal escrito no falla en ninguna parte: la persona juega y sus
+      // partidas no se le cuentan, así que se rechaza aquí y no más tarde.
+      let friendCode = null;
+      if (Object.prototype.hasOwnProperty.call(values, 'friend_code')) {
+        const check = describeFriendCode(values.friend_code);
+        if (!check.ok) throw new EventValidationError(friendCodeError(check.code), 'INVALID_FRIEND_CODE');
+        friendCode = check.normalized;
+        if (duplicateFriendCodeStatement.get(eventId, friendCode, null)) {
+          throw new EventValidationError('Ese Friend Code ya está inscrito en este evento.', 'FRIEND_CODE_TAKEN', 409);
+        }
+      }
       const result = insertParticipantStatement.run(eventId, discordUsername, displayName, JSON.stringify(values), friendCode);
       return toParticipant(getParticipantStatement.get(Number(result.lastInsertRowid)));
     },
@@ -555,7 +568,21 @@ function openDatabase(dbPath) {
       if (!row) throw new EventValidationError('La inscripción no existe.', 'PARTICIPANT_NOT_FOUND', 404);
       const status = changes.status ?? row.status;
       if (!PARTICIPANT_STATUSES.includes(status)) throw new EventValidationError('El estado del participante no es válido.', 'INVALID_PARTICIPANT');
-      const friendCode = changes.internalFriendCode === undefined ? row.internal_friend_code : String(changes.internalFriendCode ?? '').trim() || null;
+      // Se valida sólo cuando cambia: si no, confirmar o descalificar a alguien
+      // que ya tenía un código antiguo mal escrito quedaría bloqueado.
+      let friendCode = row.internal_friend_code;
+      if (changes.internalFriendCode !== undefined) {
+        const raw = String(changes.internalFriendCode ?? '').trim();
+        if (!raw) friendCode = null;
+        else {
+          const check = describeFriendCode(raw);
+          if (!check.ok) throw new EventValidationError(friendCodeError(check.code), 'INVALID_FRIEND_CODE');
+          if (duplicateFriendCodeStatement.get(row.event_id, check.normalized, id)) {
+            throw new EventValidationError('Ese Friend Code ya está inscrito en este evento.', 'FRIEND_CODE_TAKEN', 409);
+          }
+          friendCode = check.normalized;
+        }
+      }
       if (friendCode && friendCode.length > 120) throw new EventValidationError('El Friend Code es demasiado largo.', 'INVALID_PARTICIPANT');
       connection.transaction(()=>{updateParticipantStatement.run(status,friendCode,id);if(status==='disqualified')connection.prepare("UPDATE stage_participants SET competitive_status='disqualified' WHERE participant_id=? AND stage_id IN (SELECT id FROM event_stages WHERE status!='completed')").run(id);else if(status==='confirmed'&&row.status==='disqualified')connection.prepare("UPDATE stage_participants SET competitive_status=CASE WHEN advanced_from_stage_id IS NULL THEN 'competing' ELSE 'finalist' END WHERE participant_id=? AND competitive_status='disqualified' AND stage_id IN (SELECT id FROM event_stages WHERE status!='completed')").run(id);})();
       return toParticipant(getParticipantStatement.get(id));

@@ -15,7 +15,7 @@ describe('competition database', () => {
   afterEach(()=>directories.splice(0).forEach((directory)=>fs.rmSync(directory,{recursive:true,force:true})));
 
   function participant(database, eventId, name, status = 'confirmed') {
-    const created=database.createParticipant(eventId,{discord_username:`${name}@qa`,game_name:name,friend_code:`${name}#qa`});
+    const created=database.createParticipant(eventId,{discord_username:`${name}@qa`,game_name:name,friend_code:`${name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g,'')}#1001`});
     return database.updateParticipant(created.id,{status});
   }
 
