@@ -19,6 +19,7 @@ namespace Jartiland.TournamentReporter.Tests
     internal sealed class FakeTransport : IReporterTransport
     {
         private readonly Queue<TransportResponse> _postResponses = new Queue<TransportResponse>();
+        private readonly Queue<TransportResponse> _contextResponses = new Queue<TransportResponse>();
 
         public List<RecordedRequest> Requests { get; } = new List<RecordedRequest>();
         public TransportResponse ContextResponse { get; set; }
@@ -31,9 +32,16 @@ namespace Jartiland.TournamentReporter.Tests
             foreach (var response in responses) _postResponses.Enqueue(response);
         }
 
+        /// <summary>Para probar un servidor que falla y luego se recupera.</summary>
+        public void EnqueueContext(params TransportResponse[] responses)
+        {
+            foreach (var response in responses) _contextResponses.Enqueue(response);
+        }
+
         public Task<TransportResponse> GetAsync(Uri uri, IDictionary<string, string> headers, CancellationToken cancellation)
         {
             Requests.Add(new RecordedRequest { Method = "GET", Uri = uri, Headers = headers });
+            if (_contextResponses.Count > 0) return Task.FromResult(_contextResponses.Dequeue());
             return Task.FromResult(ContextResponse ?? TransportResponse.Failure("sin respuesta configurada"));
         }
 

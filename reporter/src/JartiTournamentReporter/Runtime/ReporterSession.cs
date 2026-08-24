@@ -108,7 +108,7 @@ namespace Jartiland.TournamentReporter.Runtime
             var playedAt = DateTime.UtcNow;
             var reportId = MatchReportBuilder.NewReportId(Settings.HostId, Guid.NewGuid());
 
-            var context = await Service.RefreshContextAsync(Cancellation).ConfigureAwait(false);
+            var context = await Service.ResolveContextAsync(Cancellation).ConfigureAwait(false);
             var outcome = MatchReportBuilder.Build(snapshot, context, Settings, PluginVersion, reportId, playedAt);
 
             foreach (var warning in outcome.Warnings) Log.Warning(warning);

@@ -27,6 +27,7 @@ namespace Jartiland.TournamentReporter
         private readonly IReporterTransport _transport;
         private readonly SecretSafeLog _log;
         private readonly Func<DateTime> _clock;
+        private readonly Func<TimeSpan, CancellationToken, Task> _delay;
         private readonly List<PendingItem> _items = new List<PendingItem>();
         private readonly object _gate = new object();
 
@@ -40,14 +41,59 @@ namespace Jartiland.TournamentReporter
             PendingQueue queue,
             IReporterTransport transport,
             SecretSafeLog log,
-            Func<DateTime> clock = null)
+            Func<DateTime> clock = null,
+            Func<TimeSpan, CancellationToken, Task> delay = null)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _log = log ?? throw new ArgumentNullException(nameof(log));
             _clock = clock ?? (() => DateTime.UtcNow);
+            _delay = delay ?? Task.Delay;
             _log.ProtectSecret(_settings.ReporterToken);
+        }
+
+
+        /// <summary>
+        /// Espera entre intentos cuando el servidor no contesta. Son segundos, no
+        /// minutos: la partida ya ha terminado y esto corre fuera del hilo del juego.
+        /// </summary>
+        public static readonly IReadOnlyList<TimeSpan> DefaultContextRetries = new[]
+        {
+            TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)
+        };
+
+        /// <summary>
+        /// Resuelve el contexto reintentando mientras no haya ninguno. Sin esto, una
+        /// caída pasajera del backend justo al terminar la partida convertía un
+        /// resultado perfectamente válido en uno bloqueado, que hay que rescatar a
+        /// mano. Si el torneo sí responde y dice que no se puede reportar, eso no se
+        /// reintenta: es una respuesta, no un fallo.
+        /// </summary>
+        public async Task<CompetitionContext> ResolveContextAsync(
+            CancellationToken cancellation,
+            IReadOnlyList<TimeSpan> retryDelays = null)
+        {
+            var delays = retryDelays ?? DefaultContextRetries;
+            var context = await RefreshContextAsync(cancellation).ConfigureAwait(false);
+
+            for (var attempt = 0; context == null && attempt < delays.Count; attempt++)
+            {
+                _log.Warning(
+                    $"Sin contexto competitivo todavía; reintento {attempt + 1} de {delays.Count}.");
+                try
+                {
+                    await _delay(delays[attempt], cancellation).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                context = await RefreshContextAsync(cancellation).ConfigureAwait(false);
+            }
+
+            return context;
         }
 
         public CompetitionContext LastContext { get; private set; }

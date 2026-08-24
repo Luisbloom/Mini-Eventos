@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -313,6 +314,66 @@ namespace Jartiland.TournamentReporter.Tests
             {
                 return document.RootElement.GetProperty("reportId").GetString();
             }
+        }
+
+        [Fact]
+        public async Task Retries_the_context_when_the_server_is_briefly_unreachable()
+        {
+            // Una caída pasajera justo al terminar la partida convertía un resultado
+            // válido en uno bloqueado, que hay que rescatar a mano desde /admin.
+            var esperas = new List<TimeSpan>();
+            var service = ServiceWithDelay(esperas);
+
+            _transport.EnqueueContext(
+                TransportResponse.Failure("tailscale reiniciando"),
+                TransportResponse.Failure("todavía no"),
+                TransportResponse.Http(200, File.ReadAllText(TestPaths.Contract("reporter-context.json"))));
+
+            var context = await service.ResolveContextAsync(CancellationToken.None, ShortRetries);
+
+            Assert.NotNull(context);
+            Assert.True(context.ReportingEnabled);
+            Assert.Equal(2, esperas.Count);
+        }
+
+        [Fact]
+        public async Task Gives_up_on_the_context_after_the_configured_attempts()
+        {
+            var esperas = new List<TimeSpan>();
+            var service = ServiceWithDelay(esperas);
+            _transport.ContextResponse = TransportResponse.Failure("servidor caído");
+
+            var context = await service.ResolveContextAsync(CancellationToken.None, ShortRetries);
+
+            Assert.Null(context);
+            Assert.Equal(ShortRetries.Count, esperas.Count);
+        }
+
+        [Fact]
+        public async Task Does_not_retry_a_server_that_answers_that_reporting_is_disabled()
+        {
+            // Que el torneo conteste "este host no tiene fase asignada" es una
+            // respuesta, no un fallo de red: reintentarla sólo retrasa el aviso.
+            var esperas = new List<TimeSpan>();
+            var service = ServiceWithDelay(esperas);
+            _transport.ContextResponse = TransportResponse.Http(
+                200, "{\"reportingEnabled\":false,\"reason\":\"HOST_NOT_ASSIGNED\",\"message\":\"Sin fase.\"}");
+
+            var context = await service.ResolveContextAsync(CancellationToken.None, ShortRetries);
+
+            Assert.NotNull(context);
+            Assert.False(context.ReportingEnabled);
+            Assert.Empty(esperas);
+        }
+
+        private static readonly IReadOnlyList<TimeSpan> ShortRetries =
+            new[] { TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(1) };
+
+        private ReporterService ServiceWithDelay(List<TimeSpan> esperas)
+        {
+            return new ReporterService(
+                SampleGame.Settings(), _queue, _transport, _log, _clock.Read,
+                (espera, _) => { esperas.Add(espera); return Task.CompletedTask; });
         }
     }
 }
