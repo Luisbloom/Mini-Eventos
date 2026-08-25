@@ -6,6 +6,7 @@ const BetterSqlite3 = require('better-sqlite3');
 const { createCompetitionStore, migrateCompetition } = require('./competition-store');
 const { createValorantStore, migrateValorant } = require('./valorant-store');
 const { createValorantCompetitionStore, migrateValorantCompetition } = require('./valorant-competition');
+const { createValorantCaptureStore } = require('./valorant-captures');
 const { fingerprintReport } = require('./services/report-fingerprint');
 const { normalizeFriendCode, describeFriendCode, friendCodeError } = require('./services/friend-code');
 const {
@@ -509,6 +510,9 @@ function openDatabase(dbPath) {
   const valorantCompetition = createValorantCompetitionStore(connection, {
     audit: (...args) => valorant.recordAudit(...args)
   });
+  const valorantCaptures = createValorantCaptureStore(connection, {
+    audit: (...args) => valorant.recordAudit(...args)
+  });
   return {
     path: dbPath,
     getDefaultEvent: defaultEvent,
@@ -633,6 +637,7 @@ function openDatabase(dbPath) {
     competition,
     valorant,
     valorantCompetition,
+    valorantCaptures,
     ping() { return pingStatement.get().ok === 1; },
     close() { if (connection.open) connection.close(); }
   };

@@ -603,6 +603,93 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       }
     },
 
+    /**
+     * Estadísticas de todo el torneo, por jugador.
+     *
+     * ⚠️ Los promedios se calculan SÓLO entre las partidas donde el dato está.
+     * Si una captura no traía ADR, esa partida no cuenta para la media de ADR;
+     * meterla como 0 hundiría el promedio de alguien por un fallo de lectura.
+     */
+    tournamentPlayerStats(eventId, { stage = 'REGULAR' } = {}) {
+      const filas = connection.prepare(`
+        SELECT st.*, g.series_id
+        FROM valorant_player_game_stats st
+        JOIN valorant_games g ON g.id = st.game_id
+        JOIN valorant_series s ON s.id = g.series_id
+        WHERE s.event_id=? AND s.stage=? AND g.status='COMPLETED'`).all(eventId, stage);
+
+      const porJugador = new Map();
+      for (const fila of filas) {
+        if (!porJugador.has(fila.participant_id)) {
+          porJugador.set(fila.participant_id, {
+            participantId: fila.participant_id,
+            teamId: fila.team_id,
+            games: 0,
+            kills: 0, deaths: 0, assists: 0,
+            firstKills: 0, firstDeaths: 0,
+            agents: new Map(),
+            // Cada promedio lleva su propio contador: no todas las partidas
+            // aportan todos los datos.
+            promedios: { acs: [], adr: [], hsPercent: [], kastPercent: [] },
+            counted: { kills: 0, deaths: 0, assists: 0, firstKills: 0, firstDeaths: 0 }
+          });
+        }
+        const acumulado = porJugador.get(fila.participant_id);
+        acumulado.games += 1;
+
+        for (const campo of ['kills', 'deaths', 'assists']) {
+          const valor = fila[campo];
+          if (valor !== null) { acumulado[campo] += valor; acumulado.counted[campo] += 1; }
+        }
+        if (fila.first_kills !== null) { acumulado.firstKills += fila.first_kills; acumulado.counted.firstKills += 1; }
+        if (fila.first_deaths !== null) { acumulado.firstDeaths += fila.first_deaths; acumulado.counted.firstDeaths += 1; }
+
+        for (const [campo, columna] of [['acs', 'acs'], ['adr', 'adr'],
+          ['hsPercent', 'hs_percent'], ['kastPercent', 'kast_percent']]) {
+          if (fila[columna] !== null) acumulado.promedios[campo].push(fila[columna]);
+        }
+        if (fila.agent) {
+          acumulado.agents.set(fila.agent, (acumulado.agents.get(fila.agent) ?? 0) + 1);
+        }
+      }
+
+      const media = (valores) => valores.length
+        ? Math.round((valores.reduce((total, v) => total + v, 0) / valores.length) * 10) / 10
+        : null;
+
+      return [...porJugador.values()].map((acumulado) => {
+        const agentes = [...acumulado.agents.entries()].sort((uno, otro) => otro[1] - uno[1]);
+        return {
+          participantId: acumulado.participantId,
+          teamId: acumulado.teamId,
+          games: acumulado.games,
+          kills: acumulado.counted.kills ? acumulado.kills : null,
+          deaths: acumulado.counted.deaths ? acumulado.deaths : null,
+          assists: acumulado.counted.assists ? acumulado.assists : null,
+          firstKills: acumulado.counted.firstKills ? acumulado.firstKills : null,
+          firstDeaths: acumulado.counted.firstDeaths ? acumulado.firstDeaths : null,
+          // Sin muertes registradas no hay K/D que calcular; y con cero muertes
+          // se enseña el número de kills, no una división por cero.
+          kd: acumulado.counted.deaths
+            ? Math.round((acumulado.kills / Math.max(1, acumulado.deaths)) * 100) / 100
+            : null,
+          acs: media(acumulado.promedios.acs),
+          adr: media(acumulado.promedios.adr),
+          hsPercent: media(acumulado.promedios.hsPercent),
+          kastPercent: media(acumulado.promedios.kastPercent),
+          // Cuántas partidas respaldan cada promedio, para no comparar peras
+          // con manzanas cuando unas capturas traían la columna y otras no.
+          sampleSizes: {
+            acs: acumulado.promedios.acs.length,
+            adr: acumulado.promedios.adr.length,
+            hsPercent: acumulado.promedios.hsPercent.length,
+            kastPercent: acumulado.promedios.kastPercent.length
+          },
+          topAgent: agentes.length ? agentes[0][0] : null
+        };
+      }).sort((uno, otro) => (otro.kills ?? -1) - (uno.kills ?? -1));
+    },
+
     listGameStats(gameId) {
       return connection.prepare(
         'SELECT * FROM valorant_player_game_stats WHERE game_id=? ORDER BY team_id, acs DESC, kills DESC'
@@ -869,7 +956,20 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             mapKey: juego.mapKey,
             teamARounds: juego.teamARounds,
             teamBRounds: juego.teamBRounds,
-            status: juego.status
+            status: juego.status,
+            // Sólo lo confirmado. Nada de confianza, texto del OCR ni rutas de
+            // archivo: eso es material de administración.
+            stats: juego.status === 'COMPLETED'
+              ? this.listGameStats(juego.id).map((fila) => ({
+                participantId: fila.participantId,
+                teamId: fila.teamId,
+                agent: fila.agent,
+                acs: fila.acs, kills: fila.kills, deaths: fila.deaths, assists: fila.assists,
+                plusMinus: fila.plusMinus, adr: fila.adr,
+                hsPercent: fila.hsPercent, kastPercent: fila.kastPercent,
+                firstKills: fila.firstKills, firstDeaths: fila.firstDeaths
+              }))
+              : []
           }))
         }))
       }));
@@ -884,7 +984,8 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         complete: tabla.complete,
         tieRequiresAdmin: tabla.tieRequiresAdmin,
         qualifiers: tabla.settings.qualifiers,
-        maps: this.listMaps(eventId)
+        maps: this.listMaps(eventId),
+        playerStats: this.tournamentPlayerStats(eventId)
       };
     }
   };

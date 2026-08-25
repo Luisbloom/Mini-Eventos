@@ -3,6 +3,7 @@
 const path = require('node:path');
 const crypto = require('node:crypto');
 const express = require('express');
+const multer = require('multer');
 const helmet = require('helmet');
 const { buildLeaderboard } = require('./leaderboard');
 const { getPublicScoringRules, SCORING_CONFIG } = require('./services/scoring');
@@ -18,6 +19,12 @@ const {
 const { ValorantError } = require('./valorant-store');
 const { createDraftStream } = require('./services/draft-stream');
 const { CompetitionError: ValorantCompetitionError } = require('./valorant-competition');
+const { CaptureError } = require('./valorant-captures');
+const {
+  createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
+} = require('./services/captures/storage');
+const { readCapture, buildPreview } = require('./services/captures/ingest');
+const { createTesseractProvider } = require('./services/ocr');
 const { createReporterContextResolver } = require('./services/reporter-context');
 const {
   ReporterAuthError,
@@ -116,7 +123,11 @@ function createApp({
   reporterToken = null,
   reporterPrivateUrl = null,
   discord = null,
-  secureCookies = false
+  secureCookies = false,
+  // El OCR se puede sustituir por uno falso en las pruebas: lo que hay que
+  // probar es el parser y la confirmación, no que Tesseract acierte.
+  ocrProvider = null,
+  captureStorageRoot = null
 }) {
   if (!database) throw new TypeError('createApp necesita una base de datos');
 
@@ -130,6 +141,12 @@ function createApp({
   // Sin credenciales el proveedor queda desactivado, pero el servidor arranca.
   const discordProvider = discord || createDiscordProvider();
   const draftStream = createDraftStream();
+  const captureStorage = createCaptureStorage({
+    root: captureStorageRoot || path.resolve(__dirname, '..', 'data', 'uploads', 'valorant')
+  });
+  // Se crea sin arrancar: el worker de Tesseract sólo se levanta con la primera
+  // captura, así el servidor no paga ese arranque si nadie sube nada.
+  const ocr = ocrProvider || createTesseractProvider();
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy);
   app.use(helmet({
@@ -1039,6 +1056,363 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+
+  // ================================================== capturas de resultados
+
+  /**
+   * Las imágenes se quedan en memoria hasta que se validan. Nada llega al disco
+   * con un nombre que haya elegido el cliente: multer no escribe archivos aquí,
+   * y la clave de disco la genera el servidor después de comprobar la imagen.
+   */
+  const subida = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      files: UPLOAD_LIMITS.maxFiles,
+      fileSize: UPLOAD_LIMITS.maxBytesPerFile,
+      fields: 8,
+      parts: UPLOAD_LIMITS.maxFiles + 8
+    },
+    fileFilter(_request, file, done) {
+      // Primer filtro barato por lo que dice el cliente; el que cuenta es el
+      // de los magic bytes, que va después de leer los datos.
+      if (!ALLOWED_MIME.includes(String(file.mimetype || '').toLowerCase())) {
+        return done(new UploadError(
+          'Sólo se admiten imágenes PNG, JPEG o WebP.', 'UNSUPPORTED_TYPE', 415));
+      }
+      done(null, true);
+    }
+  });
+
+  /** El plantel de los dos equipos: los únicos candidatos posibles. */
+  function rosterForSeries(eventId, serie) {
+    const equipos = database.valorant.listTeams(eventId)
+      .filter((equipo) => equipo.id === serie.teamAId || equipo.id === serie.teamBId);
+    return equipos.flatMap((equipo) => equipo.members.map((miembro) => ({
+      participantId: miembro.participantId,
+      teamId: equipo.id,
+      teamName: equipo.name,
+      displayName: miembro.displayName,
+      riotId: miembro.riotId ?? null
+    })));
+  }
+
+  /** Vuelve a leer el lote entero y guarda la previsualización. */
+  async function reprocesarLote(eventId, lote) {
+    const serie = database.valorantCompetition.getSeries(eventId, lote.seriesId);
+    const juego = serie?.games.find((g) => g.gameNumber === lote.gameNumber);
+
+    const lecturas = [];
+    for (const captura of lote.captures) {
+      const imagen = await captureStorage.read(captura.storageKey);
+      const leido = await readCapture(imagen, { ocrProvider: ocr, key: captura.sha256 });
+      lecturas.push({ ...leido, captureId: captura.id });
+    }
+
+    const preview = buildPreview(lecturas, {
+      roster: rosterForSeries(eventId, serie),
+      expectedMap: juego?.mapKey ?? null,
+      teamAId: serie.teamAId,
+      teamBId: serie.teamBId
+    });
+
+    return { preview, serie, juego };
+  }
+
+  app.post('/api/admin/events/:id/competition/captures',
+    subida.array('captures', UPLOAD_LIMITS.maxFiles),
+    async (request, response, next) => {
+      const id = parseId(request.params.id);
+      let lote = null;
+      try {
+        const archivos = request.files || [];
+        if (archivos.length === 0) {
+          return sendError(response, 400, 'NO_FILES', 'No has adjuntado ninguna imagen.');
+        }
+        const total = archivos.reduce((suma, archivo) => suma + archivo.size, 0);
+        if (total > UPLOAD_LIMITS.maxBytesPerBatch) {
+          return sendError(response, 413, 'BATCH_TOO_LARGE', 'Las imágenes suman demasiado.');
+        }
+
+        lote = database.valorantCaptures.createBatch(id, {
+          seriesId: Number(request.body?.seriesId),
+          gameNumber: Number(request.body?.gameNumber ?? 1)
+        });
+
+        for (const archivo of archivos) {
+          // Aquí se decide de verdad si es una imagen: firma y decodificación.
+          const info = await inspectImage(archivo.buffer, { declaredMime: archivo.mimetype });
+          const storageKey = await captureStorage.save(archivo.buffer, {
+            eventId: id, batchId: lote.id, format: info.format
+          });
+          const leido = await readCapture(archivo.buffer, { ocrProvider: ocr, key: info.sha256 });
+
+          database.valorantCaptures.addCapture(lote.id, {
+            storageKey,
+            originalFilename: String(archivo.originalname || '').slice(0, 200),
+            mimeType: info.mime,
+            width: info.width,
+            height: info.height,
+            bytes: info.bytes,
+            sha256: info.sha256,
+            sourceKind: leido.sourceKind,
+            ocrText: leido.ocr.text,
+            ocrJson: { words: leido.ocr.words.slice(0, 800) },
+            confidence: leido.confidence
+          });
+        }
+
+        lote = database.valorantCaptures.getBatch(id, lote.id);
+        const { preview } = await reprocesarLote(id, lote);
+        const guardado = database.valorantCaptures.savePreview(id, lote.id, preview);
+
+        response.status(201).json({ batch: guardado, preview });
+      } catch (error) {
+        // Si algo falla a mitad no se deja un lote a medias con archivos sueltos.
+        if (lote) {
+          try {
+            await captureStorage.removeBatch(id, lote.id);
+            database.valorantCaptures.discardBatch(id, lote.id, { reason: 'subida fallida' });
+          } catch { /* el error de verdad es el otro */ }
+        }
+        next(error);
+      }
+    });
+
+  app.get('/api/admin/events/:id/competition/captures', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        batches: database.valorantCaptures.listBatches(id, {
+          seriesId: request.query.seriesId ? Number(request.query.seriesId) : null,
+          gameNumber: request.query.gameNumber ? Number(request.query.gameNumber) : 1
+        })
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/admin/events/:id/competition/captures/:batchId', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const lote = database.valorantCaptures.getBatch(id, parseId(request.params.batchId));
+      if (!lote) return sendError(response, 404, 'BATCH_NOT_FOUND', 'Ese lote no existe.');
+      const serie = database.valorantCompetition.getSeries(id, lote.seriesId);
+      response.json({ batch: lote, preview: lote.parsed, roster: rosterForSeries(id, serie), series: serie });
+    } catch (error) { next(error); }
+  });
+
+  /**
+   * La imagen sólo la ve administración. Una captura puede llevar overlays,
+   * ventanas del escritorio o nombres que nadie ha dado permiso para publicar.
+   */
+  app.get('/api/admin/events/:id/competition/captures/:batchId/image/:captureId',
+    async (request, response, next) => {
+      const id = parseId(request.params.id);
+      try {
+        const lote = database.valorantCaptures.getBatch(id, parseId(request.params.batchId));
+        if (!lote) return sendError(response, 404, 'BATCH_NOT_FOUND', 'Ese lote no existe.');
+        const captura = lote.captures.find((c) => c.id === parseId(request.params.captureId));
+        if (!captura) return sendError(response, 404, 'CAPTURE_NOT_FOUND', 'Esa captura no existe.');
+
+        response.type(captura.mimeType);
+        response.setHeader('Cache-Control', 'private, no-store');
+        response.send(await captureStorage.read(captura.storageKey));
+      } catch (error) { next(error); }
+    });
+
+  app.post('/api/admin/events/:id/competition/captures/:batchId/reprocess',
+    async (request, response, next) => {
+      const id = parseId(request.params.id);
+      try {
+        const lote = database.valorantCaptures.getBatch(id, parseId(request.params.batchId));
+        if (!lote) return sendError(response, 404, 'BATCH_NOT_FOUND', 'Ese lote no existe.');
+        if (lote.status === 'CONFIRMED') {
+          return sendError(response, 409, 'BATCH_ALREADY_CONFIRMED',
+            'Ese lote ya se confirmó.');
+        }
+        const { preview } = await reprocesarLote(id, lote);
+        response.json({ batch: database.valorantCaptures.savePreview(id, lote.id, preview), preview });
+      } catch (error) { next(error); }
+    });
+
+  /**
+   * Guarda las correcciones hechas en pantalla.
+   *
+   * Sigue sin tocar el resultado oficial: es una propuesta editada. Se anota
+   * qué campos ha cambiado una persona para poder enseñarlos marcados y no
+   * confundir lo leído con lo corregido.
+   */
+  app.post('/api/admin/events/:id/competition/captures/:batchId/preview',
+    (request, response, next) => {
+      const id = parseId(request.params.id);
+      try {
+        const lote = database.valorantCaptures.getBatch(id, parseId(request.params.batchId));
+        if (!lote) return sendError(response, 404, 'BATCH_NOT_FOUND', 'Ese lote no existe.');
+        if (lote.status === 'CONFIRMED') {
+          return sendError(response, 409, 'BATCH_ALREADY_CONFIRMED',
+            'Ese lote ya se confirmó: para cambiar el resultado hay que corregirlo.');
+        }
+
+        const detectado = lote.parsed ?? {};
+        const propuesta = request.body ?? {};
+        const serie = database.valorantCompetition.getSeries(id, lote.seriesId);
+        const permitidos = new Set(rosterForSeries(id, serie).map((p) => p.participantId));
+
+        const editados = [];
+        const anota = (campo, antes, ahora) => {
+          if (ahora !== undefined && ahora !== null && String(ahora) !== String(antes ?? '')) {
+            editados.push(campo);
+          }
+        };
+        anota('map', detectado.map, propuesta.mapKey);
+        anota('teamARounds', detectado.teamARounds, propuesta.teamARounds);
+        anota('teamBRounds', detectado.teamBRounds, propuesta.teamBRounds);
+
+        const jugadores = (propuesta.players ?? detectado.players ?? []).map((fila, indice) => {
+          const original = (detectado.players ?? [])[indice] ?? {};
+          const cambiados = [];
+          for (const campo of ['participantId', 'agent', 'acs', 'kills', 'deaths', 'assists',
+            'plusMinus', 'adr', 'hsPercent', 'kastPercent', 'firstKills', 'firstDeaths']) {
+            if (fila[campo] !== undefined && String(fila[campo] ?? '') !== String(original[campo] ?? '')) {
+              cambiados.push(campo);
+            }
+          }
+          // Asociar a alguien que no juega este partido no se guarda ni aquí.
+          if (fila.participantId && !permitidos.has(Number(fila.participantId))) {
+            throw new CaptureError(
+              'Ese jugador no pertenece a ninguno de los dos equipos.', 'PLAYER_NOT_IN_SERIES');
+          }
+          return { ...original, ...fila, editedFields: cambiados, detected: original };
+        });
+
+        const preview = {
+          ...detectado,
+          map: propuesta.mapKey ?? detectado.map,
+          teamARounds: propuesta.teamARounds ?? detectado.teamARounds,
+          teamBRounds: propuesta.teamBRounds ?? detectado.teamBRounds,
+          players: jugadores,
+          editedFields: editados,
+          // Editado a mano deja de tener problemas automáticos, pero no se
+          // marca READY solo: eso lo decide quien confirma.
+          status: lote.status === 'REVIEW_REQUIRED' && editados.length ? 'READY' : lote.status
+        };
+
+        response.json({
+          batch: database.valorantCaptures.savePreview(id, lote.id, preview), preview
+        });
+      } catch (error) { next(error); }
+    });
+
+  app.delete('/api/admin/events/:id/competition/captures/:batchId',
+    async (request, response, next) => {
+      const id = parseId(request.params.id);
+      const batchId = parseId(request.params.batchId);
+      try {
+        const lote = database.valorantCaptures.discardBatch(id, batchId, {
+          reason: request.body?.reason ?? null
+        });
+        await captureStorage.removeBatch(id, batchId);
+        response.json({ discarded: lote.id });
+      } catch (error) { next(error); }
+    });
+
+  /**
+   * Confirmar es lo único que toca el resultado oficial.
+   *
+   * Lo que manda el navegador son correcciones sobre lo leído, no autoridad: se
+   * vuelve a comprobar todo aquí. Que la previsualización dijera READY hace un
+   * minuto no basta, porque entre medias pudo cambiar el mapa o el resultado.
+   */
+  app.post('/api/admin/events/:id/competition/captures/:batchId/confirm',
+    async (request, response, next) => {
+      const id = parseId(request.params.id);
+      try {
+        const lote = database.valorantCaptures.getBatch(id, parseId(request.params.batchId));
+        if (!lote) return sendError(response, 404, 'BATCH_NOT_FOUND', 'Ese lote no existe.');
+
+        // Confirmar dos veces no duplica nada: la segunda no hace trabajo.
+        if (lote.status === 'CONFIRMED') {
+          return response.json({
+            batch: lote, alreadyConfirmed: true,
+            series: database.valorantCompetition.getSeries(id, lote.seriesId)
+          });
+        }
+
+        const serie = database.valorantCompetition.getSeries(id, lote.seriesId);
+        if (!serie) return sendError(response, 404, 'SERIES_NOT_FOUND', 'La serie no existe.');
+        const juego = serie.games.find((g) => g.gameNumber === lote.gameNumber);
+        if (!juego) return sendError(response, 404, 'GAME_NOT_FOUND', 'Esa partida no existe.');
+        if (juego.status === 'COMPLETED') {
+          return sendError(response, 409, 'RESULT_ALREADY_RECORDED',
+            'Esa partida ya tiene resultado. Corregirlo es otra acción.');
+        }
+        if (!juego.mapKey) {
+          return sendError(response, 409, 'MAP_REQUIRED',
+            'Asigna el mapa antes de importar el resultado.');
+        }
+
+        const propuesta = request.body ?? {};
+        const mapa = String(propuesta.mapKey ?? lote.parsed?.map ?? '').toLowerCase();
+        if (mapa !== juego.mapKey && propuesta.overrideMap !== true) {
+          return sendError(response, 409, 'MAP_MISMATCH',
+            `La captura dice ${mapa || 'otro mapa'} y el partido tiene ${juego.mapKey}.`);
+        }
+        if (propuesta.overrideMap === true && !String(propuesta.reason || '').trim()) {
+          // Saltarse la comprobación del mapa es excepcional: se explica.
+          return sendError(response, 400, 'REASON_REQUIRED',
+            'Para importar con un mapa distinto hace falta un motivo.');
+        }
+
+        const roster = rosterForSeries(id, serie);
+        const permitidos = new Map(roster.map((persona) => [persona.participantId, persona]));
+
+        const jugadores = [];
+        for (const fila of propuesta.players ?? []) {
+          const participantId = Number(fila.participantId);
+          if (!participantId) continue;                 // sin asociar: no entra
+          const persona = permitidos.get(participantId);
+          if (!persona) {
+            return sendError(response, 400, 'PLAYER_NOT_IN_SERIES',
+              'Hay un jugador que no pertenece a ninguno de los dos equipos.');
+          }
+          jugadores.push({
+            participantId,
+            teamId: persona.teamId,
+            agent: fila.agent ?? null,
+            acs: fila.acs, kills: fila.kills, deaths: fila.deaths, assists: fila.assists,
+            plusMinus: fila.plusMinus, adr: fila.adr,
+            hsPercent: fila.hsPercent, kastPercent: fila.kastPercent,
+            firstKills: fila.firstKills, firstDeaths: fila.firstDeaths,
+            extra: fila.extra ?? null,
+            sourceCaptureId: fila.sourceCaptureId ?? null
+          });
+        }
+
+        const series = database.valorantCompetition.recordGameResult(id, {
+          seriesId: serie.id,
+          gameNumber: lote.gameNumber,
+          teamARounds: propuesta.teamARounds ?? lote.detectedTeamARounds,
+          teamBRounds: propuesta.teamBRounds ?? lote.detectedTeamBRounds,
+          source: 'SCREENSHOT',
+          // Una captura confirmada trae su propia evidencia detrás; el motivo
+          // sólo hace falta si se ha saltado alguna comprobación.
+          reason: propuesta.reason ?? null,
+          stats: jugadores.length ? jugadores : null,
+          captureBatchId: lote.id
+        });
+
+        database.valorantCaptures.markConfirmed(id, lote.id, 'admin');
+        draftStream.publish(id, 'competition_updated');
+
+        response.json({
+          batch: database.valorantCaptures.getBatch(id, lote.id),
+          series,
+          standings: database.valorantCompetition.standings(id, {
+            teams: database.valorant.listTeams(id)
+          })
+        });
+      } catch (error) { next(error); }
+    });
+
   // ---------------------------------------------------- draft: administración
   app.get('/api/admin/events/:id/draft', (request, response, next) => {
     const id = parseId(request.params.id);
@@ -1136,6 +1510,13 @@ function createApp({
     if (error instanceof ReporterAuthError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof ValorantError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof ValorantCompetitionError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof CaptureError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof UploadError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof multer.MulterError) {
+      const code = error.code === 'LIMIT_FILE_SIZE' ? 'FILE_TOO_LARGE'
+        : error.code === 'LIMIT_FILE_COUNT' ? 'TOO_MANY_FILES' : 'UPLOAD_REJECTED';
+      return sendError(response, 413, code, 'La subida no cumple los límites.');
+    }
     if (error instanceof DiscordOAuthError) return sendError(response, error.status || 502, error.code, error.message);
     if (error instanceof InformationValidationError) return sendError(response, 400, 'INVALID_TOURNAMENT_INFORMATION', error.message);
     logger.error({ event: 'request_error', method: request.method, path: request.originalUrl, message: error?.message || String(error) });

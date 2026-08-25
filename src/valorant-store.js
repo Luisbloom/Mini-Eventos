@@ -403,6 +403,50 @@ function createValorantStore(connection) {
       return true;
     },
 
+    /**
+     * Corrige el Riot ID de una inscripción.
+     *
+     * Hace falta de verdad: alguien se equivoca al teclearlo y, si no se puede
+     * arreglar, su nombre no cuadra con el de las capturas y sus estadísticas
+     * no se le asignan a nadie.
+     *
+     * Sigue respetando el índice único: no se puede quedar con el de otro.
+     */
+    setRiotId(eventId, { participantId, riotId, actor = 'admin', reason = null }) {
+      const riot = parseRiotId(riotId);
+      if (!riot.ok) throw new ValorantError(riotIdError(riot.code), 'INVALID_RIOT_ID');
+
+      const guardar = connection.transaction(() => {
+        const antes = connection.prepare(
+          'SELECT riot_game_name, riot_tag_line FROM event_participants WHERE id=? AND event_id=?'
+        ).get(participantId, eventId);
+        if (!antes) throw new ValorantError('Esa inscripción no existe.', 'PARTICIPANT_NOT_FOUND', 404);
+
+        const ocupado = connection.prepare(
+          'SELECT 1 FROM event_participants WHERE event_id=? AND riot_id_normalized=? AND id!=?'
+        ).get(eventId, riot.normalized, participantId);
+        if (ocupado) {
+          throw new ValorantError(
+            'Ese Riot ID ya está inscrito en este torneo.', 'RIOT_ID_ALREADY_REGISTERED', 409);
+        }
+
+        connection.prepare(`
+          UPDATE event_participants
+          SET riot_game_name=?, riot_tag_line=?, riot_id_normalized=?
+          WHERE id=? AND event_id=?`)
+          .run(riot.gameName, riot.tagLine, riot.normalized, participantId, eventId);
+
+        return antes.riot_game_name && antes.riot_tag_line
+          ? `${antes.riot_game_name}#${antes.riot_tag_line}` : null;
+      });
+
+      const anterior = guardar();
+      record(eventId, actor, 'RIOT_ID_UPDATED', `participant:${participantId}`, reason, {
+        previous: anterior, riotId: `${riot.gameName}#${riot.tagLine}`
+      });
+      return { participantId, riotId: `${riot.gameName}#${riot.tagLine}`, previous: anterior };
+    },
+
     // ---------------- equipos ----------------
 
 
@@ -557,7 +601,9 @@ function createValorantStore(connection) {
       const teams = connection.prepare('SELECT * FROM teams WHERE event_id=? ORDER BY seed, id')
         .all(eventId).map(toTeam);
       const members = connection.prepare(`
-        SELECT m.team_id, m.participant_id participantId, m.role, p.display_name displayName
+        SELECT m.team_id, m.participant_id participantId, m.role, p.display_name displayName,
+               CASE WHEN p.riot_game_name IS NOT NULL AND p.riot_tag_line IS NOT NULL
+                    THEN p.riot_game_name || '#' || p.riot_tag_line END riotId
         FROM team_members m JOIN event_participants p ON p.id = m.participant_id
         WHERE m.event_id=? ORDER BY m.role='player', m.joined_at, m.id`).all(eventId);
       return teams.map((team) => ({
