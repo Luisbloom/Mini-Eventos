@@ -16,6 +16,10 @@ const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
 const DRAFT_STATUSES = Object.freeze(['PENDING', 'ACTIVE', 'PAUSED', 'COMPLETED']);
 
+/** Tamaños admitidos del torneo: cuatro, cinco o seis equipos de cinco. */
+const TEAM_COUNTS = Object.freeze([4, 5, 6]);
+const TEAM_SIZE = 5;
+
 const hash = (value) => crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
 
 /** Comparación sin filtrar por tiempo cuánto coincide. */
@@ -277,6 +281,8 @@ function createValorantStore(connection) {
 
   const store = {
     ValorantError,
+    /** Compartido con la competición: un solo registro de auditoría. */
+    recordAudit: record,
     snakeTurn,
     totalPicks,
 
@@ -495,7 +501,7 @@ function createValorantStore(connection) {
      * Renombrar. Quién eres y qué equipo es el tuyo lo resuelve quien llama a
      * partir de la sesión: aquí no llega ningún «soy el capitán» del navegador.
      */
-    renameTeam(eventId, { teamId, name, actor = 'admin', reason = null }) {
+    renameTeam(eventId, { teamId, name, actor = 'admin', reason = null, requireCompletedDraft = false }) {
       const limpio = String(name ?? '').trim().replace(/\s+/g, ' ');
       if (/[\u0000-\u001f\u007f]/.test(limpio)) {
         throw new ValorantError('El nombre tiene caracteres que no valen.', 'INVALID_TEAM_NAME');
@@ -508,6 +514,17 @@ function createValorantStore(connection) {
         const equipo = connection.prepare('SELECT * FROM teams WHERE id=? AND event_id=?')
           .get(teamId, eventId);
         if (!equipo) throw new ValorantError('El equipo no existe.', 'TEAM_NOT_FOUND', 404);
+
+        // Un capitán sólo pone nombre cuando el draft ha terminado. Que la
+        // interfaz esconda el formulario no es una comprobación.
+        if (requireCompletedDraft) {
+          const draft = this.getDraft(eventId);
+          if (!draft || draft.status !== 'COMPLETED') {
+            throw new ValorantError(
+              'Podrás ponerle nombre a tu equipo cuando termine el draft.',
+              'DRAFT_NOT_COMPLETED', 409);
+          }
+        }
 
         // Dos equipos con el mismo nombre confunden a todo el mundo, y
         // "Jarti Team" y "jarti team" son el mismo nombre.
@@ -588,6 +605,15 @@ function createValorantStore(connection) {
     configureDraft(eventId, { captains, teamCount, teamSize, actor = 'admin' }) {
       const total = Number(teamCount);
       const size = Number(teamSize);
+      // Cuatro, cinco o seis equipos de cinco. Con menos no hay liga y con más
+      // no da tiempo en una tarde; el límite es deportivo, no técnico.
+      if (!TEAM_COUNTS.includes(total)) {
+        throw new ValorantError(
+          `El torneo se juega con ${TEAM_COUNTS.join(', ')} equipos.`, 'INVALID_TEAM_COUNT');
+      }
+      if (size !== TEAM_SIZE) {
+        throw new ValorantError(`Los equipos son de ${TEAM_SIZE} jugadores.`, 'INVALID_TEAM_SIZE');
+      }
       if (!Array.isArray(captains) || captains.length !== total) {
         throw new ValorantError(`Hacen falta exactamente ${total} capitanes.`, 'CAPTAIN_COUNT_MISMATCH');
       }
@@ -894,4 +920,7 @@ function createValorantStore(connection) {
   return store;
 }
 
-module.exports = { migrateValorant, createValorantStore, snakeTurn, totalPicks, ValorantError, DRAFT_STATUSES };
+module.exports = {
+  migrateValorant, createValorantStore, snakeTurn, totalPicks,
+  ValorantError, DRAFT_STATUSES, TEAM_COUNTS, TEAM_SIZE
+};

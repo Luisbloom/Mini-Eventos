@@ -96,7 +96,9 @@ describe('draft completo de punta a punta', () => {
     const cookieJugador = await sesionDeCapitan(app, database, event, gente[10].id, 999);
 
     // --- observador del canal en directo --------------------------------
-    const recibidos = [];
+    const recibidos = [];     // sólo los nombres de aviso, para esperar
+    const frames = [];        // el frame entero: event: + data:
+    let bufferSse = '';
     const server = app.listen(0);
     servers.push(server);
     const puerto = server.address().port;
@@ -108,8 +110,20 @@ describe('draft completo de punta a punta', () => {
           assert.equal(respuesta.statusCode, 200);
           respuesta.setEncoding('utf8');
           respuesta.on('data', (trozo) => {
-            for (const linea of trozo.split('\n')) {
-              if (linea.startsWith('event: ')) recibidos.push(linea.slice(7).trim());
+            // Los frames SSE se separan por linea en blanco y pueden llegar
+            // partidos: hay que juntarlos antes de mirar lo que llevan dentro.
+            bufferSse += trozo;
+            const partes = bufferSse.split('\n\n');
+            bufferSse = partes.pop();
+            for (const bruto of partes) {
+              if (!bruto.trim()) continue;
+              const frame = { raw: bruto, event: null, data: null };
+              for (const linea of bruto.split('\n')) {
+                if (linea.startsWith('event: ')) frame.event = linea.slice(7).trim();
+                if (linea.startsWith('data: ')) frame.data = linea.slice(6).trim();
+              }
+              frames.push(frame);
+              if (frame.event) recibidos.push(frame.event);
             }
           });
           resolve();
@@ -247,6 +261,35 @@ describe('draft completo de punta a punta', () => {
     }
 
     // --- y nada privado viajó por el canal ------------------------------
-    assert.equal(recibidos.some((linea) => /900|999|discord/i.test(linea)), false);
+    // Comprobar sólo los nombres de aviso no prueba nada: lo que puede filtrar
+    // es el data:. Aquí se mira el frame entero, tal cual sale por el cable.
+    assert.ok(frames.length >= 5, `pocos frames capturados: ${frames.length}`);
+    assert.ok(frames.every((frame) => frame.event), 'todo frame lleva su event:');
+
+    for (const frame of frames) {
+      assert.ok(frame.data, `el aviso ${frame.event} llegó sin data:`);
+
+      const carga = JSON.parse(frame.data);   // JSON válido, no texto suelto
+      // El saludo inicial sólo lleva por dónde va la revisión; los demás avisos,
+      // eso y de qué son. Nada más: el aviso no es la autoridad, sirve para
+      // saber que hay que volver a pedir el estado.
+      const esperado = frame.event === 'connected' ? ['revision'] : ['revision', 'type'];
+      assert.deepEqual(Object.keys(carga).sort(), esperado,
+        `el aviso ${frame.event} lleva más de lo debido: ${frame.data}`);
+      assert.equal(typeof carga.revision, 'number');
+      if (frame.event !== 'connected') assert.equal(carga.type, frame.event);
+
+      // Ni identificadores de Discord, ni sesiones, ni nombres de jugadores.
+      const texto = frame.raw.toLowerCase();
+      for (const filtracion of ['discord', 'session', 'cookie', 'token', 'avatar',
+        'riot', 'participant', 'captain', 'email', '900', '999']) {
+        assert.equal(texto.includes(filtracion), false,
+          `el frame de ${frame.event} contiene "${filtracion}": ${frame.raw}`);
+      }
+      for (const jugador of gente) {
+        assert.equal(texto.includes(String(jugador.game_name).toLowerCase()), false,
+          `el frame de ${frame.event} nombra a un jugador`);
+      }
+    }
   });
 });

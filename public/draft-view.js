@@ -123,8 +123,64 @@ function createRefreshQueue(run) {
   };
 }
 
+
+// --------------------------------------------------- configuración del draft
+
+/** Tamaños admitidos en este torneo. Cinco por equipo, siempre. */
+const TEAM_COUNTS = Object.freeze([4, 5, 6]);
+const TEAM_SIZE = 5;
+
+/** Cuántas personas hacen falta y cuántas elecciones habrá. */
+function draftPlan(teamCount, teamSize = TEAM_SIZE) {
+  const equipos = Number(teamCount) || 0;
+  const porEquipo = Number(teamSize) || TEAM_SIZE;
+  return {
+    teamCount: equipos,
+    teamSize: porEquipo,
+    participantsNeeded: equipos * porEquipo,
+    captains: equipos,
+    totalPicks: equipos * (porEquipo - 1)
+  };
+}
+
+/**
+ * Si lo que hay en pantalla ya no es lo guardado. Sin esto se puede cambiar un
+ * selector, no guardar, y arrancar un draft con otros capitanes de los que se
+ * están viendo.
+ */
+function captainsAreDirty(selected, savedTeams) {
+  const guardados = [...(savedTeams || [])]
+    .sort((left, right) => (left.seed ?? 0) - (right.seed ?? 0))
+    .map((team) => team.captainParticipantId ?? null);
+  const actuales = [...(selected || [])].map((valor) => (valor == null ? null : Number(valor)));
+
+  if (guardados.length === 0) return true;
+  if (guardados.length !== actuales.length) return true;
+  return guardados.some((valor, indice) => valor !== actuales[indice]);
+}
+
+/** Por qué no se puede empezar todavía, o null si se puede. */
+function startBlockedReason({ selected, savedTeams, confirmedCount, teamCount, teamSize = TEAM_SIZE, status }) {
+  const plan = draftPlan(teamCount, teamSize);
+  if (status && status !== 'PENDING') return 'El draft ya ha empezado.';
+  if (selected.filter(Boolean).length !== plan.captains) {
+    return `Elige los ${plan.captains} capitanes.`;
+  }
+  if (new Set(selected.filter(Boolean)).size !== plan.captains) {
+    return 'Un mismo participante no puede ser dos capitanes.';
+  }
+  if (confirmedCount !== plan.participantsNeeded) {
+    return `Hacen falta exactamente ${plan.participantsNeeded} confirmados y hay ${confirmedCount}.`;
+  }
+  if (captainsAreDirty(selected, savedTeams)) {
+    return 'Guarda la configuración de capitanes antes de iniciar.';
+  }
+  return null;
+}
+
 const DRAFT_VIEW = {
   escapeHtml, initials,
+  TEAM_COUNTS, TEAM_SIZE, draftPlan, captainsAreDirty, startBlockedReason,
   registrationState,
   draftLabel, currentTeam, viewerRole, canPick, teamSlots, draftHeadline,
   createRefreshQueue

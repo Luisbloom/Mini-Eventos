@@ -17,6 +17,7 @@ const {
 } = require('./services/discord-oauth');
 const { ValorantError } = require('./valorant-store');
 const { createDraftStream } = require('./services/draft-stream');
+const { CompetitionError: ValorantCompetitionError } = require('./valorant-competition');
 const { createReporterContextResolver } = require('./services/reporter-context');
 const {
   ReporterAuthError,
@@ -860,7 +861,8 @@ function createApp({
       }
 
       const actualizado = database.valorant.renameTeam(event.id, {
-        teamId: team.id, name: request.body?.name, actor: `captain:${participant.id}`
+        teamId: team.id, name: request.body?.name, actor: `captain:${participant.id}`,
+        requireCompletedDraft: true
       });
       draftStream.publish(event.id, 'team_updated');
       response.json({ team: actualizado });
@@ -877,6 +879,107 @@ function createApp({
       });
       draftStream.publish(id, 'team_updated');
       response.json({ team });
+    } catch (error) { next(error); }
+  });
+
+  // ------------------------------------------------------- fase regular
+  app.get('/api/events/:slug/competition-teams', (request, response, next) => {
+    try {
+      const event = publicDraftEventFromSlug(request, response);
+      if (!event) return;
+      response.json(database.valorantCompetition.publicCompetitionState(
+        event.id, database.valorant.listTeams(event.id)));
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/admin/events/:id/competition', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        maps: database.valorantCompetition.listMaps(id),
+        settings: database.valorantCompetition.getSettings(id),
+        matchdays: database.valorantCompetition.matchdays(id),
+        teams: database.valorant.listTeams(id),
+        draft: database.valorant.getDraft(id) ?? null
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.put('/api/admin/events/:id/competition/maps', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const maps = database.valorantCompetition.setMapPool(id, request.body?.enabled);
+      draftStream.publish(id, 'competition_updated');
+      response.json({ maps });
+    } catch (error) { next(error); }
+  });
+
+  app.put('/api/admin/events/:id/competition/settings', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        settings: database.valorantCompetition.setSettings(id, {
+          tiebreakers: request.body?.tiebreakers, qualifiers: request.body?.qualifiers
+        })
+      });
+    } catch (error) { next(error); }
+  });
+
+  /** Sólo con el draft terminado: sin equipos completos no hay liga que generar. */
+  app.post('/api/admin/events/:id/competition/generate', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const draft = database.valorant.getDraft(id);
+      if (!draft || draft.status !== 'COMPLETED') {
+        return sendError(response, 409, 'DRAFT_NOT_COMPLETED',
+          'La fase regular se genera cuando el draft ha terminado.');
+      }
+      const teams = database.valorant.listTeams(id);
+      if (teams.some((team) => team.members.length !== draft.teamSize)) {
+        return sendError(response, 409, 'TEAMS_INCOMPLETE', 'Hay equipos incompletos.');
+      }
+
+      const series = database.valorantCompetition.generateRegularSeason(
+        id, teams.map((team) => team.id),
+        { force: request.body?.force === true, reason: request.body?.reason ?? null });
+      draftStream.publish(id, 'competition_updated');
+      response.status(201).json({ series, matchdays: database.valorantCompetition.matchdays(id) });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/admin/events/:id/competition/map', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const series = database.valorantCompetition.assignMap(id, {
+        seriesId: request.body?.seriesId,
+        gameNumber: request.body?.gameNumber ?? 1,
+        mapKey: request.body?.mapKey
+      });
+      draftStream.publish(id, 'competition_updated');
+      response.json({ series });
+    } catch (error) { next(error); }
+  });
+
+  /**
+   * Resultado manual: es el respaldo de emergencia, no la vía normal. La vía
+   * principal será la captura, en el bloque siguiente.
+   */
+  app.post('/api/admin/events/:id/competition/result', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const series = database.valorantCompetition.recordGameResult(id, {
+        seriesId: request.body?.seriesId,
+        gameNumber: request.body?.gameNumber ?? 1,
+        teamARounds: request.body?.teamARounds,
+        teamBRounds: request.body?.teamBRounds,
+        source: 'MANUAL',
+        reason: request.body?.reason,
+        allowOverwrite: request.body?.correct === true
+      });
+      draftStream.publish(id, 'competition_updated');
+      response.json({ series, standings: database.valorantCompetition.standings(id, {
+        teams: database.valorant.listTeams(id)
+      }) });
     } catch (error) { next(error); }
   });
 
@@ -975,6 +1078,7 @@ function createApp({
     if (error instanceof CompetitionError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof ReporterAuthError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof ValorantError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof ValorantCompetitionError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof DiscordOAuthError) return sendError(response, error.status || 502, error.code, error.message);
     if (error instanceof InformationValidationError) return sendError(response, 400, 'INVALID_TOURNAMENT_INFORMATION', error.message);
     logger.error({ event: 'request_error', method: request.method, path: request.originalUrl, message: error?.message || String(error) });
