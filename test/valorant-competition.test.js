@@ -712,4 +712,87 @@ describe('fase regular de Valorant', () => {
       assert.deepEqual(revisiones, [...revisiones].sort((a, b) => a - b), 'la revision no retrocede');
     });
   });
+
+  describe('series de varias partidas', () => {
+    it('un BO3 se cierra al segundo mapa, no al tercero', () => {
+      const { database, event } = draftTerminado(4);
+      const equipos = database.valorant.listTeams(event.id);
+      const liga = database.valorantCompetition;
+
+      liga.generateRegularSeason(event.id, equipos.map((e) => e.id), { bestOf: 3 });
+      const serie = liga.listSeries(event.id)[0];
+      assert.equal(serie.games.length, 3, 'tres mapas preparados desde el principio');
+      assert.equal(serie.bestOf, 3);
+
+      const guardar = (gameNumber, ganaA) => liga.recordGameResult(event.id, {
+        seriesId: serie.id, gameNumber,
+        teamARounds: ganaA ? 13 : 6, teamBRounds: ganaA ? 6 : 13,
+        reason: 'prueba de BO3'
+      });
+
+      const tras1 = guardar(1, true);
+      assert.equal(tras1.status, 'WAITING_RESULT', 'con un mapa la serie sigue abierta');
+      assert.equal(tras1.winnerTeamId, null);
+
+      const tras2 = guardar(2, true);
+      assert.equal(tras2.status, 'COMPLETED', 'dos mapas bastan en un BO3');
+      assert.equal(tras2.winnerTeamId, serie.teamAId);
+      // El tercero no se juega: queda pendiente y no cuenta para nada.
+      assert.equal(tras2.games[2].status, 'PENDING');
+
+      // La serie cuenta una sola victoria, pero las rondas de los dos mapas.
+      const tabla = liga.standings(event.id, { teams: equipos });
+      const ganador = tabla.standings.find((f) => f.teamId === serie.teamAId);
+      assert.equal(ganador.wins, 1);
+      assert.equal(ganador.played, 1);
+      assert.equal(ganador.roundsFor, 26);
+      assert.equal(ganador.roundsAgainst, 12);
+    });
+
+    it('el ganador lo decide el servidor, no quien manda el resultado', () => {
+      const { database, event } = draftTerminado(4);
+      const equipos = database.valorant.listTeams(event.id);
+      const liga = database.valorantCompetition;
+      liga.generateRegularSeason(event.id, equipos.map((e) => e.id));
+      const serie = liga.listSeries(event.id)[0];
+
+      // Aunque se intente colar un ganador, se ignora: manda el marcador.
+      const guardada = liga.recordGameResult(event.id, {
+        seriesId: serie.id, teamARounds: 4, teamBRounds: 13,
+        winnerTeamId: serie.teamAId, reason: 'intento de colar ganador'
+      });
+      assert.equal(guardada.winnerTeamId, serie.teamBId);
+      assert.equal(guardada.games[0].resultSource, 'MANUAL');
+
+      // Un empate no existe en Valorant, y las rondas no son texto libre.
+      for (const malo of [
+        { teamARounds: 13, teamBRounds: 13 },
+        { teamARounds: -1, teamBRounds: 13 },
+        { teamARounds: 'muchas', teamBRounds: 3 }
+      ]) {
+        assert.throws(() => liga.recordGameResult(event.id, {
+          seriesId: serie.id, gameNumber: 1, ...malo, reason: 'x', allowOverwrite: true
+        }), (e) => e.code === 'INVALID_ROUNDS', JSON.stringify(malo));
+      }
+
+      // Y sin motivo no se guarda nada: los resultados a mano dejan rastro.
+      assert.throws(() => liga.recordGameResult(event.id, {
+        seriesId: serie.id, teamARounds: 13, teamBRounds: 2, allowOverwrite: true
+      }), (e) => e.code === 'REASON_REQUIRED');
+
+      // El origen esta preparado para lo que viene, pero no acepta inventos.
+      assert.throws(() => liga.recordGameResult(event.id, {
+        seriesId: serie.id, teamARounds: 13, teamBRounds: 2,
+        source: 'OJIMETRO', reason: 'x', allowOverwrite: true
+      }), (e) => e.code === 'UNKNOWN_RESULT_SOURCE');
+
+      for (const origen of ['SCREENSHOT', 'RIOT', 'HENRIK']) {
+        const guardado = liga.recordGameResult(event.id, {
+          seriesId: serie.id, teamARounds: 13, teamBRounds: 2,
+          source: origen, reason: `origen ${origen}`, allowOverwrite: true
+        });
+        assert.equal(guardado.games[0].resultSource, origen);
+      }
+    });
+  });
 });
