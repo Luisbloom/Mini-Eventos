@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
     <link rel="apple-touch-icon" href="/images/logo.png">
-    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><link rel="stylesheet" href="/admin-league.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script><script src="/admin-league.js" defer></script>
+    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><link rel="stylesheet" href="/admin-league.css"><link rel="stylesheet" href="/admin-captures.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script><script src="/admin-league.js" defer></script><script src="/admin-captures.js" defer></script>
   </head>
   <body class="admin-page">
     <div class="grain" aria-hidden="true"></div>
@@ -144,5 +144,49 @@
         </div>
       </div>
     </main>
+
+    <dialog id="captures-dialog" class="captures-dialog">
+      <header class="captures-head">
+        <div>
+          <h3 id="captures-match">Partido</h3>
+          <p id="captures-map">Sin mapa asignado</p>
+        </div>
+        <span id="captures-status" class="captures-status">—</span>
+      </header>
+
+      <div id="captures-drop" class="captures-drop">
+        <input id="captures-file" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+        <strong>SUBIR CAPTURAS</strong>
+        <span>Arrastra aquí las imágenes o pulsa para elegirlas.</span>
+        <small>PNG, JPEG o WebP. Hasta 5 por partido. Se pueden mezclar Valorant y Tracker.</small>
+      </div>
+
+      <div id="captures-preview" class="captures-preview" hidden>
+        <ul id="captures-issues" class="captures-issues" hidden></ul>
+
+        <div class="captures-result">
+          <label>Mapa <input id="captures-map-input" type="text" size="10"></label>
+          <label><span id="captures-team-a">Equipo A</span> <input id="captures-rounds-a" type="number" min="0" max="60" size="3"></label>
+          <label><span id="captures-team-b">Equipo B</span> <input id="captures-rounds-b" type="number" min="0" max="60" size="3"></label>
+        </div>
+
+        <div id="captures-thumbs" class="captures-thumbs"></div>
+
+        <div class="captures-table-wrap">
+          <table id="captures-players" class="captures-players"></table>
+        </div>
+
+        <p class="captures-note">Un hueco vacío significa que ese dato no estaba en la captura. No lo rellenes con cero.</p>
+      </div>
+
+      <p id="captures-feedback" role="status" aria-live="polite"></p>
+
+      <footer class="captures-actions">
+        <button id="captures-discard" type="button" class="secondary-button">DESCARTAR</button>
+        <button id="captures-reprocess" type="button" class="secondary-button">VOLVER A PROCESAR</button>
+        <button id="captures-confirm" type="button">CONFIRMAR E IMPORTAR</button>
+        <button id="captures-close" type="button" class="secondary-button">CERRAR</button>
+      </footer>
+    </dialog>
   </body>
 </html>

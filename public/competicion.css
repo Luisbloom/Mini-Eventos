@@ -30,3 +30,36 @@
   .public-matchday li { grid-template-columns: minmax(0, 1fr) auto; }
   .public-matchday li span:last-of-type { grid-column: 1 / -1; text-align: left; }
 }
+
+/* --- estadísticas de jugadores --- */
+.public-players { min-width: 640px; }
+.public-players tbody th small { display: block; color: var(--muted); font: .55rem/1.3 var(--mono); letter-spacing: .06em; }
+/* Lo que no se vio se enseña como raya, y se nota que no es un cero. */
+.public-players td.is-missing { color: var(--muted); opacity: .45; }
+.public-players tr.team-split td { padding: 0; height: 2px; background: var(--event-accent); opacity: .5; }
+
+.match-stats-link {
+  grid-column: 1 / -1; justify-self: start;
+  margin-top: .3rem; padding: .35rem .7rem;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  cursor: pointer; font: .55rem/1 var(--mono); letter-spacing: .1em;
+}
+.match-stats-link:hover { border-color: var(--event-accent); color: var(--paper); }
+
+.match-stats-dialog {
+  width: min(900px, calc(100vw - 2rem)); max-height: calc(100vh - 3rem);
+  padding: 0; border: 1px solid var(--event-accent); background: var(--surface); color: var(--paper);
+  overflow: auto;
+}
+.match-stats-dialog::backdrop { background: rgba(0, 0, 0, .75); }
+.match-stats-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  padding: 1.2rem 1.3rem; border-bottom: 1px solid var(--line);
+}
+.match-stats-head h3 { margin: 0 0 .3rem; font: 1.3rem/1.1 var(--display); text-transform: uppercase; }
+.match-stats-head p { margin: 0; color: var(--event-accent); font: .62rem/1 var(--mono); letter-spacing: .08em; }
+.match-stats-head button {
+  min-width: 40px; min-height: 40px; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.match-stats-dialog .league-table-wrap { border: 0; }

@@ -187,6 +187,28 @@
 
         for (const juego of serie.games) {
           fila.append(selectorDeMapa(serie, juego), formularioDeResultado(serie, juego));
+
+          // La via normal es la captura; el formulario de al lado es el
+          // respaldo para cuando no hay imagen que valga.
+          if (juego.status !== 'COMPLETED') {
+            const capturas = document.createElement('button');
+            capturas.type = 'button';
+            capturas.className = 'league-captures';
+            capturas.textContent = 'SUBIR CAPTURAS';
+            capturas.disabled = !juego.mapKey;
+            capturas.title = juego.mapKey
+              ? 'Leer el resultado de una captura de pantalla'
+              : 'Asigna primero el mapa';
+            capturas.addEventListener('click', () => window.openCaptureDialog?.(
+              evento,
+              {
+                ...serie,
+                teamAName: nombreDe(serie.teamAId),
+                teamBName: nombreDe(serie.teamBId)
+              },
+              juego.gameNumber));
+            fila.append(capturas);
+          }
         }
         bloque.append(fila);
       }
@@ -322,6 +344,9 @@
     id('generate-league')?.addEventListener('click', () => generar());
     id('regenerate-league')?.addEventListener('click', () => rehacer());
   });
+
+  // Al confirmar una captura el panel se recarga sin esperar al aviso del canal.
+  window.addEventListener('jartiland:competition-updated', () => { refrescar(); });
 
   window.addEventListener('jartiland:event-selected', (suceso) => {
     cargar(suceso.detail.event).catch((error) => {

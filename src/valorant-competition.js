@@ -985,7 +985,18 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         tieRequiresAdmin: tabla.tieRequiresAdmin,
         qualifiers: tabla.settings.qualifiers,
         maps: this.listMaps(eventId),
-        playerStats: this.tournamentPlayerStats(eventId)
+        playerStats: this.tournamentPlayerStats(eventId),
+        // Sólo lo justo para poner nombre a las filas de estadísticas: el
+        // nombre visible, que ya sale en la página del draft. Ni Riot ID, ni
+        // nada de Discord.
+        teams: teams.map((equipo) => ({
+          id: equipo.id,
+          name: equipo.name,
+          members: (equipo.members || []).map((miembro) => ({
+            participantId: miembro.participantId,
+            displayName: miembro.displayName
+          }))
+        }))
       };
     }
   };

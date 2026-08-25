@@ -59,7 +59,28 @@
         <header class="section-bar"><div><p class="section-index">02 / CALENDARIO</p><h2 id="calendar-title">Las jornadas</h2></div></header>
         <div id="public-matchdays" class="public-matchdays"></div>
       </section>
+
+      <section id="players-section" class="draft-section" aria-labelledby="players-title" hidden>
+        <header class="section-bar"><div><p class="section-index">03 / JUGADORES</p><h2 id="players-title">Estadísticas</h2></div></header>
+        <div class="league-table-wrap">
+          <table id="public-players" class="public-standings public-players"></table>
+        </div>
+        <p id="players-note" class="captain-hint"></p>
+      </section>
     </main>
+
+    <dialog id="match-stats-dialog" class="match-stats-dialog">
+      <header class="match-stats-head">
+        <div>
+          <h3 id="match-stats-title">Partido</h3>
+          <p id="match-stats-score">—</p>
+        </div>
+        <button id="match-stats-close" type="button" aria-label="Cerrar">✕</button>
+      </header>
+      <div class="league-table-wrap">
+        <table id="match-stats-table" class="public-standings public-players"></table>
+      </div>
+    </dialog>
 
     <section id="league-unavailable" class="event-fatal" hidden>
       <span aria-hidden="true">◷</span>

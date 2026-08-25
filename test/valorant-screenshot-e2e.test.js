@@ -646,4 +646,99 @@ describe('resultados por captura, de punta a punta', () => {
       assert.equal(database.valorantCaptures.getBatch(event.id, lote.id), null);
     });
   });
+
+  // ========================================================= PÚBLICO Y MEDIAS
+
+  describe('lo que se publica', () => {
+    /** Confirma un partido con las estadísticas que se le pasen. */
+    async function confirmar(app, event, serie, guion, extra = {}) {
+      const subida = await subir(app, event, serie, await renderScreenshot(guion.lineas));
+      assert.equal(subida.status, 201, JSON.stringify(subida.body));
+      const preview = subida.body.preview;
+
+      return admin(app, 'post',
+        `/api/admin/events/${event.id}/competition/captures/${subida.body.batch.id}/confirm`)
+        .send({
+          mapKey: preview.map,
+          teamARounds: preview.teamARounds,
+          teamBRounds: preview.teamBRounds,
+          players: preview.players.map((jugador, indice) => ({
+            participantId: jugador.participantId,
+            agent: jugador.agent,
+            acs: jugador.acs, kills: jugador.kills,
+            deaths: jugador.deaths, assists: jugador.assists,
+            ...(extra.adrDesde !== undefined && indice < (extra.conAdr ?? 99)
+              ? { adr: extra.adrDesde + indice * 10 } : {})
+          }))
+        });
+    }
+
+    it('las medias sólo cuentan las partidas donde el dato aparece', async () => {
+      const { app, database, event, serie, guion, ocrProvider } = torneoConGuion();
+
+      // Primer partido CON ADR.
+      await confirmar(app, event, serie, guion, { adrDesde: 150, conAdr: 99 }).then((r) =>
+        assert.equal(r.status, 200, JSON.stringify(r.body)));
+
+      // Segundo partido del mismo equipo, SIN ADR en la captura.
+      const otra = database.valorantCompetition.listSeries(event.id)
+        .find((s) => s.id !== serie.id
+          && (s.teamAId === serie.teamAId || s.teamBId === serie.teamAId));
+      const guionOtra = guionDelPartido(database, event, otra);
+      ocrProvider.setScript(guionOtra.texto);
+      await confirmar(app, event, otra, guionOtra).then((r) =>
+        assert.equal(r.status, 200, JSON.stringify(r.body)));
+
+      const publico = await request(app)
+        .get(`/api/events/${event.slug}/competition-teams`).expect(200);
+
+      // Quien jugó los dos partidos tiene dos partidas, pero un solo ADR.
+      const conDos = publico.body.playerStats.filter((fila) => fila.games === 2);
+      assert.ok(conDos.length > 0, 'alguien debería haber jugado los dos partidos');
+
+      for (const fila of conDos) {
+        assert.equal(fila.sampleSizes.acs, 2, 'el ACS estaba en las dos');
+        assert.equal(fila.sampleSizes.adr, 1, 'el ADR sólo en una');
+        assert.ok(fila.adr >= 150,
+          `la media de ADR (${fila.adr}) no puede hundirse por la partida sin dato`);
+      }
+    });
+
+    it('la tabla del partido llega completa y sin nada privado', async () => {
+      const { app, event, serie, guion } = torneoConGuion();
+      await confirmar(app, event, serie, guion).then((r) => assert.equal(r.status, 200));
+
+      const publico = await request(app)
+        .get(`/api/events/${event.slug}/competition-teams`).expect(200);
+
+      const partido = publico.body.matchdays.flatMap((j) => j.series)
+        .find((s) => s.id === serie.id);
+      assert.equal(partido.games[0].stats.length, 10);
+
+      // Cada fila trae lo necesario para pintarla y nada más.
+      const fila = partido.games[0].stats[0];
+      assert.deepEqual(Object.keys(fila).sort(), [
+        'acs', 'adr', 'agent', 'assists', 'deaths', 'firstDeaths', 'firstKills',
+        'hsPercent', 'kastPercent', 'kills', 'participantId', 'plusMinus', 'teamId'
+      ]);
+
+      // Los nombres para pintar la tabla salen de aquí, sin datos personales.
+      assert.ok(publico.body.teams.length >= 2);
+      const miembro = publico.body.teams[0].members[0];
+      assert.deepEqual(Object.keys(miembro).sort(), ['displayName', 'participantId']);
+
+      const texto = JSON.stringify(publico.body).toLowerCase();
+      for (const prohibido of ['discord', 'riot', 'session', 'storagekey', 'sha256',
+        'ocr', 'confidence', 'reason', 'audit', 'batch']) {
+        assert.equal(texto.includes(prohibido), false, `no debe salir ${prohibido}`);
+      }
+    });
+
+    it('sin partidas confirmadas no hay estadísticas que enseñar', async () => {
+      const { app, event } = torneoConGuion();
+      const publico = await request(app)
+        .get(`/api/events/${event.slug}/competition-teams`).expect(200);
+      assert.deepEqual(publico.body.playerStats, []);
+    });
+  });
 });
