@@ -195,6 +195,14 @@ function migrateValorant(connection) {
     'ON event_participants(event_id, discord_account_id) WHERE discord_account_id IS NOT NULL'
   );
 
+  // El evento de Valorant ya existia antes de que hubiera modulo de draft. Se
+  // le enciende sin tocar nada mas: ni estado, ni fechas, ni inscripciones. Es
+  // idempotente porque solo actua donde todavia no esta puesto.
+  connection.exec(
+    "UPDATE events SET modules_json = json_set(modules_json,'$.draft', json('true')) " +
+    "WHERE game = 'Valorant' AND COALESCE(json_extract(modules_json,'$.draft'), 0) != 1"
+  );
+
   // Y un mismo jugador de Riot tampoco, aunque use dos cuentas de Discord. El
   // indice es parcial para no chocar con los eventos que no usan Riot ID, y va
   // por evento: el mismo jugador si puede estar en torneos distintos.

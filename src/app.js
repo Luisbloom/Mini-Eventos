@@ -615,6 +615,32 @@ function createApp({
     return event;
   }
 
+  /**
+   * Lo mismo, pero para lo que ve cualquiera. Tener el módulo encendido no hace
+   * público el draft: mientras el evento siga anunciado y sin abrir, quién es
+   * capitán o cómo van los equipos no debe poder averiguarse por la API.
+   */
+  function publicDraftEventFromSlug(request, response) {
+    const event = draftEventFromSlug(request, response);
+    if (!event) return null;
+    if (event.status === 'Próximamente') {
+      sendError(response, 404, 'EVENT_NOT_PUBLISHED', 'Este evento todavía no está abierto.');
+      return null;
+    }
+    return event;
+  }
+
+  /** Y la inscripción de Riot ID sólo tiene sentido en un torneo de Valorant. */
+  function valorantEventFromSlug(request, response) {
+    const event = draftEventFromSlug(request, response);
+    if (!event) return null;
+    if (String(event.game).trim().toLowerCase() !== 'valorant') {
+      sendError(response, 404, 'MODULE_DISABLED', 'Este evento no usa inscripción de Valorant.');
+      return null;
+    }
+    return event;
+  }
+
   function currentSession(request) {
     const id = readSessionCookie(request.headers.cookie);
     return id ? database.valorant.getSession(id) : null;
@@ -730,7 +756,7 @@ function createApp({
    */
   app.post('/api/events/:slug/valorant/registrations', (request, response, next) => {
     try {
-      const event = draftEventFromSlug(request, response);
+      const event = valorantEventFromSlug(request, response);
       if (!event) return;
 
       const session = currentSession(request);
@@ -752,7 +778,7 @@ function createApp({
   // ---------------------------------------------------------------- draft
   app.get('/api/events/:slug/draft', (request, response, next) => {
     try {
-      const event = draftEventFromSlug(request, response);
+      const event = publicDraftEventFromSlug(request, response);
       if (!event) return;
       const state = database.valorant.publicDraftState(event.id);
       if (!state) return sendError(response, 404, 'DRAFT_NOT_FOUND', 'Este evento no tiene draft.');
@@ -762,7 +788,7 @@ function createApp({
 
   app.get('/api/events/:slug/teams', (request, response, next) => {
     try {
-      const event = draftEventFromSlug(request, response);
+      const event = publicDraftEventFromSlug(request, response);
       if (!event) return;
       response.json({ teams: database.valorant.listTeams(event.id) });
     } catch (error) { next(error); }
@@ -774,7 +800,7 @@ function createApp({
    */
   app.post('/api/events/:slug/draft/pick', (request, response, next) => {
     try {
-      const event = draftEventFromSlug(request, response);
+      const event = publicDraftEventFromSlug(request, response);
       if (!event) return;
 
       const session = currentSession(request);
@@ -808,7 +834,7 @@ function createApp({
    * privado aunque alguien añada un campo sin darse cuenta.
    */
   app.get('/api/events/:slug/draft/stream', (request, response) => {
-    const event = draftEventFromSlug(request, response);
+    const event = publicDraftEventFromSlug(request, response);
     if (!event) return;
     draftStream.attach(event.id, request, response);
   });

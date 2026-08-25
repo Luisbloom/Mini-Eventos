@@ -1122,4 +1122,166 @@ describe('draft de Valorant', () => {
       }
     });
   });
+
+  // ===================== PREFLIGHT: CAPACIDAD Y VISIBILIDAD =====================
+
+  describe('el torneo de Valorant existente recibe el módulo de draft', () => {
+    it('se le enciende sin tocar estado, fechas ni inscripciones, y dos veces da igual', () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-backfill-'));
+      directories.push(directory);
+      const ruta = path.join(directory, 'tournament.db');
+
+      // El evento nace como está hoy en producción: anunciado y cerrado.
+      const primera = openDatabase(ruta);
+      const among = primera.getDefaultEvent();
+      assert.equal(among.modules.draft, false, 'Among Us no lleva draft');
+
+      const creado = primera.createEvent({
+        slug: 'torneo-valorant', name: 'Torneo Valorant', game: 'Valorant',
+        description: 'x', status: 'Próximamente',
+        accentColor: '#ff4655', icon: 'crosshair', coverImage: '/images/events/x.png'
+      });
+      const idOriginal = creado.id;
+      assert.equal(creado.modules.draft, false, 'todavía sin draft');
+      primera.close();
+
+      // --- se reabre: aquí corre el backfill ---
+      const segunda = openDatabase(ruta);
+      const valorant = segunda.getEventBySlug('torneo-valorant');
+      assert.equal(valorant.modules.draft, true, 'draft encendido');
+      assert.equal(valorant.id, idOriginal, 'mismo evento, no uno nuevo');
+      assert.equal(valorant.status, 'Próximamente', 'sigue anunciado');
+      assert.equal(valorant.registrationsOpen, false, 'sigue cerrado');
+      assert.equal(valorant.registration.available, false);
+      assert.equal(segunda.getDefaultEvent().modules.draft, false, 'Among Us intacto');
+      assert.equal(segunda.listEvents().length, 2);
+      segunda.close();
+
+      // --- y otra vez, sin duplicar ni revertir ---
+      const tercera = openDatabase(ruta);
+      const otraVez = tercera.getEventBySlug('torneo-valorant');
+      assert.equal(otraVez.modules.draft, true);
+      assert.equal(otraVez.id, idOriginal);
+      assert.equal(otraVez.status, 'Próximamente');
+      assert.equal(tercera.listEvents().length, 2);
+      tercera.close();
+    });
+  });
+
+  describe('mientras el evento esté en Próximamente el draft no se filtra', () => {
+    /** Inscribe primero y cierra después: así queda como está hoy en producción. */
+    function anunciado() {
+      const contexto = montar();
+      const { database, event } = contexto;
+      const gente = inscribir(database, event);
+      database.updateEvent(event.id, {
+        ...event, status: 'Próximamente', registrationsOpen: false
+      });
+      return { ...contexto, gente };
+    }
+
+    it('las rutas públicas no dicen quién es capitán ni cómo van los equipos', async () => {
+      const { app, database, event, gente } = anunciado();
+      database.valorant.configureDraft(event.id, {
+        captains: gente.slice(0, 4).map((p) => p.id), teamCount: 4, teamSize: 5
+      });
+
+      for (const ruta of ['draft', 'teams']) {
+        const respuesta = await request(app).get(`/api/events/${event.slug}/${ruta}`);
+        assert.equal(respuesta.status, 404, ruta);
+        assert.equal(respuesta.body.error.code, 'EVENT_NOT_PUBLISHED');
+        // Y desde luego no cuela ningún nombre.
+        assert.equal(JSON.stringify(respuesta.body).includes('Jugador'), false);
+      }
+    });
+
+    it('el canal en directo tampoco se abre, ni deja un oyente colgado', async () => {
+      const { app } = anunciado();
+      const respuesta = await request(app).get('/api/events/torneo-valorant/draft/stream');
+      assert.equal(respuesta.status, 404);
+      assert.equal(app.locals.draftStream.connections, 0, 'sin oyentes');
+    });
+
+    it('pero administración sí puede prepararlo', () => {
+      const { database, event, gente } = anunciado();
+      const draft = database.valorant.configureDraft(event.id, {
+        captains: gente.slice(0, 4).map((p) => p.id), teamCount: 4, teamSize: 5
+      });
+      assert.equal(draft.status, 'PENDING');
+      assert.equal(database.valorant.listTeams(event.id).length, 4);
+    });
+
+    it('en cuanto se abre, las rutas públicas responden', async () => {
+      const { app, database, event, gente } = anunciado();
+      database.valorant.configureDraft(event.id, {
+        captains: gente.slice(0, 4).map((p) => p.id), teamCount: 4, teamSize: 5
+      });
+      database.updateEvent(event.id, { ...event, status: 'Inscripciones abiertas', registrationsOpen: true });
+
+      const estado = await request(app).get(`/api/events/${event.slug}/draft`).expect(200);
+      assert.equal(estado.body.status, 'PENDING');
+      assert.equal(estado.body.teams.length, 4);
+    });
+  });
+
+  describe('la inscripción de Riot ID es sólo para Valorant', () => {
+    it('un torneo por equipos de otro juego la rechaza', async () => {
+      const { app, database } = montar();
+      // Mismo módulo de draft, otro juego: el draft vale, el Riot ID no.
+      const otro = database.createEvent({
+        slug: 'torneo-lol', name: 'Torneo LoL', game: 'League of Legends',
+        description: 'x', status: 'Inscripciones abiertas', registrationsOpen: true,
+        modules: { draft: true },
+        accentColor: '#0ac8b9', icon: 'crosshair', coverImage: '/images/events/x.png'
+      });
+      assert.equal(otro.modules.draft, true);
+
+      const { sesion } = await login(app);
+      const intento = await request(app).post(`/api/events/${otro.slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' });
+      assert.equal(intento.status, 404);
+      assert.equal(intento.body.error.code, 'MODULE_DISABLED');
+
+      // Y el draft de ese torneo sí funciona: son capacidades distintas.
+      await request(app).get(`/api/events/${otro.slug}/draft`).expect(404); // sin draft configurado
+      assert.equal(database.valorant.listTeams(otro.id).length, 0);
+    });
+  });
+
+  describe('el canal en directo lleva una revisión por evento', () => {
+    it('mover un draft no hace refrescar a quien mira otro', () => {
+      const { createDraftStream } = require('../src/services/draft-stream');
+      const stream = createDraftStream();
+
+      assert.equal(stream.revisionFor(1), 0);
+      assert.equal(stream.publish(1, 'pick_made'), 1);
+      assert.equal(stream.publish(2, 'pick_made'), 1, 'el otro evento empieza en su propio 1');
+      assert.equal(stream.publish(1, 'pick_made'), 2);
+      assert.equal(stream.revisionFor(2), 1, 'el evento 2 no se ha movido');
+      assert.equal(stream.revisionFor(1), 2);
+    });
+
+    it('se olvida de quien se va y no acumula conexiones', () => {
+      const { createDraftStream } = require('../src/services/draft-stream');
+      const stream = createDraftStream({ setIntervalImpl: () => 0, clearIntervalImpl: () => {} });
+
+      const cierres = [];
+      for (let i = 0; i < 5; i++) {
+        const oyentes = {};
+        const request = { on: (evento, fn) => { oyentes[evento] = fn; } };
+        const response = { writeHead: () => {}, write: () => true, end: () => {} };
+        cierres.push({ detach: stream.attach(7, request, response), oyentes });
+      }
+      assert.equal(stream.countFor(7), 5);
+
+      // Se van como se va un navegador de verdad: cerrando la conexión.
+      cierres.forEach((c) => c.oyentes.close());
+      assert.equal(stream.countFor(7), 0);
+      assert.equal(stream.connections, 0);
+
+      // Cerrar dos veces no rompe ni deja el contador en negativo.
+      cierres.forEach((c) => c.detach());
+      assert.equal(stream.connections, 0);
+    });
+  });
 });

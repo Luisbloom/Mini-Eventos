@@ -22,7 +22,9 @@ function createDraftStream({ keepAliveMs = KEEPALIVE_MS, setIntervalImpl, clearI
   // Una lista de oyentes por evento: quien mira un draft no recibe los avisos
   // de otro torneo.
   const listeners = new Map();
-  let revision = 0;
+  // Una revision por evento: que se mueva un draft no debe hacer refrescar a
+  // quien esta mirando otro.
+  const revisions = new Map();
 
   function subscribers(eventId) {
     if (!listeners.has(eventId)) listeners.set(eventId, new Set());
@@ -38,8 +40,10 @@ function createDraftStream({ keepAliveMs = KEEPALIVE_MS, setIntervalImpl, clearI
     }
   }
 
+  const revisionOf = (eventId) => revisions.get(eventId) ?? 0;
+
   return {
-    get revision() { return revision; },
+    revisionFor: revisionOf,
     countFor(eventId) { return listeners.get(eventId)?.size ?? 0; },
     get connections() { return [...listeners.values()].reduce((total, set) => total + set.size, 0); },
 
@@ -55,7 +59,7 @@ function createDraftStream({ keepAliveMs = KEEPALIVE_MS, setIntervalImpl, clearI
 
       const clients = subscribers(eventId);
       clients.add(response);
-      write(response, 'connected', { revision });
+      write(response, 'connected', { revision: revisionOf(eventId) });
 
       // Un comentario cada pocos segundos: mantiene viva la conexión y detecta
       // al que se fue sin avisar.
@@ -84,7 +88,8 @@ function createDraftStream({ keepAliveMs = KEEPALIVE_MS, setIntervalImpl, clearI
      * se pide aparte, así que aquí no puede colarse nada privado por descuido.
      */
     publish(eventId, type) {
-      revision += 1;
+      const revision = revisionOf(eventId) + 1;
+      revisions.set(eventId, revision);
       const clients = listeners.get(eventId);
       if (!clients) return revision;
       for (const response of [...clients]) {
