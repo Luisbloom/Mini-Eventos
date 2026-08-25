@@ -1,0 +1,76 @@
+/* Panel de la fase regular: mapas, calendario y clasificación. */
+
+.draft-format {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin-bottom: 22px;
+}
+.draft-format label { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+.draft-format-note { margin: 0; font-size: 0.84rem; opacity: 0.75; }
+
+.league-maps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.league-map {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.league-map:hover { border-color: rgba(255, 70, 85, 0.5); }
+
+.league-matchday { margin-top: 18px; }
+.league-matchday h4 {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.league-bye { font-size: 0.74rem; letter-spacing: 0.04em; text-transform: none; opacity: 0.6; }
+
+.league-series {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+.league-series.is-done { border-color: rgba(120, 220, 150, 0.35); }
+.league-teams { flex: 1 1 240px; font-weight: 600; }
+
+.league-result { display: flex; align-items: center; gap: 6px; }
+.league-result input { width: 64px; text-align: center; }
+
+/* La tabla nunca empuja la página a lo ancho: se desplaza ella sola. */
+.league-table-wrap { overflow-x: auto; }
+.league-standings { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.league-standings th,
+.league-standings td {
+  padding: 8px 10px;
+  text-align: right;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+.league-standings thead th { font-size: 0.72rem; letter-spacing: 0.1em; opacity: 0.6; }
+.league-standings tbody td:first-of-type,
+.league-standings thead th:nth-child(2) { text-align: left; }
+.league-standings tbody tr.is-qualified { background: rgba(255, 70, 85, 0.08); }
+.league-standings tbody tr.needs-admin { outline: 1px dashed rgba(255, 200, 90, 0.6); }
+
+@media (max-width: 620px) {
+  .league-series { flex-direction: column; align-items: stretch; }
+  .league-teams { flex: initial; }
+}

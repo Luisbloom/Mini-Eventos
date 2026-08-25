@@ -556,4 +556,28 @@ describe('fase regular de Valorant', () => {
       }), (e) => e.code === 'UNKNOWN_TIEBREAKER');
     });
   });
+
+  describe('las páginas se sirven', () => {
+    it('la fase regular tiene su propia dirección', async () => {
+      const { app, event } = montar();
+      const pagina = await request(app).get(`/eventos/${event.slug}/competicion`).expect(200);
+      assert.match(pagina.text, /competicion\.js/);
+      assert.match(pagina.text, /public-standings/);
+
+      // Y sigue sirviendo la del draft, que comparte prefijo.
+      const draft = await request(app).get(`/eventos/${event.slug}/draft`).expect(200);
+      assert.match(draft.text, /draft\.js/);
+    });
+
+    it('el título de los equipos ya no da por hecho que son cuatro', () => {
+      const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'draft.html'), 'utf8');
+      assert.equal(html.includes('Los cuatro equipos'), false);
+
+      const guion = fs.readFileSync(path.join(__dirname, '..', 'public', 'draft.js'), 'utf8');
+      assert.match(guion, /--team-columns/, 'las columnas salen del número de equipos');
+
+      const estilos = fs.readFileSync(path.join(__dirname, '..', 'public', 'draft.css'), 'utf8');
+      assert.match(estilos, /repeat\(var\(--team-columns/);
+    });
+  });
 });

@@ -1064,6 +1064,7 @@ function createApp({
   app.get('/informacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/informacion`));
   app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}#clasificacion`));
   app.get('/eventos/:slug/draft', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'draft.html')));
+  app.get('/eventos/:slug/competicion', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'competicion.html')));
   app.get('/eventos/:slug/informacion', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'informacion.html')));
   app.get('/eventos/:slug', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));
   app.get('/eventos/:slug/:section', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));

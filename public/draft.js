@@ -84,8 +84,22 @@ function tarjetaEquipo(team) {
   return card;
 }
 
+const NUMEROS = { 4: 'cuatro', 5: 'cinco', 6: 'seis' };
+
 function pintarEquipos() {
-  byId('draft-teams').replaceChildren(...(draft.teams || []).map(tarjetaEquipo));
+  const equipos = draft.teams || [];
+  const cuantos = draft.teamCount || equipos.length || 4;
+
+  // El torneo se juega con cuatro, cinco o seis equipos, así que ni el título
+  // ni la rejilla pueden dar por hecho que son cuatro.
+  byId('teams-title').textContent = NUMEROS[cuantos]
+    ? `Los ${NUMEROS[cuantos]} equipos`
+    : 'Los equipos';
+
+  // Seis en una fila salen demasiado estrechos; en dos filas de tres se leen.
+  const zona = byId('draft-teams');
+  zona.style.setProperty('--team-columns', String(cuantos === 6 ? 3 : cuantos));
+  zona.replaceChildren(...equipos.map(tarjetaEquipo));
 }
 
 function pintarDisponibles() {

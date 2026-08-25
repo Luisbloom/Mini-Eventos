@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Calendario y clasificación de la fase regular del torneo por equipos de Jartiland">
+    <title>Fase regular · Mini Eventos Jartiland</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
+    <link rel="apple-touch-icon" href="/images/logo.png">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/draft.css">
+    <link rel="stylesheet" href="/competicion.css">
+    <script src="/draft-view.js" defer></script>
+    <script src="/competicion.js" defer></script>
+  </head>
+  <body class="draft-page">
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Mini Eventos Jartiland">
+        <img class="brand-logo" src="/images/logo-96.png" alt="" aria-hidden="true" width="40" height="40" decoding="async">
+        <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Navegación principal">
+        <a id="back-to-event" href="/">Volver al evento</a>
+        <a id="back-to-draft" href="/">Draft</a>
+        <a class="active" href="#competicion" aria-current="page">Fase regular</a>
+      </nav>
+      <div class="broadcast" aria-live="polite">
+        <span id="league-dot" class="live-dot loading"></span><span id="league-connection">CONECTANDO</span>
+      </div>
+    </header>
+
+    <main id="league-main" class="draft-main" hidden>
+      <section class="draft-hero" aria-labelledby="league-title">
+        <p class="kicker">TORNEO POR EQUIPOS · FASE REGULAR</p>
+        <h1 id="league-title">Todos<br><span>contra todos</span></h1>
+        <p id="league-headline" class="draft-headline"></p>
+
+        <div class="draft-status">
+          <div><span>JORNADAS</span><strong id="league-matchday-count">—</strong></div>
+          <div><span>PARTIDOS</span><strong id="league-played">—</strong></div>
+          <div><span>CLASIFICAN</span><strong id="league-qualifiers">—</strong></div>
+        </div>
+      </section>
+
+      <section class="draft-section" aria-labelledby="standings-title">
+        <header class="section-bar"><div><p class="section-index">01 / CLASIFICACIÓN</p><h2 id="standings-title">La tabla</h2></div></header>
+        <div class="league-table-wrap">
+          <table id="public-standings" class="public-standings"></table>
+        </div>
+        <p id="league-tie-note" class="captain-hint" hidden></p>
+      </section>
+
+      <section class="draft-section" aria-labelledby="calendar-title">
+        <header class="section-bar"><div><p class="section-index">02 / CALENDARIO</p><h2 id="calendar-title">Las jornadas</h2></div></header>
+        <div id="public-matchdays" class="public-matchdays"></div>
+      </section>
+    </main>
+
+    <section id="league-unavailable" class="event-fatal" hidden>
+      <span aria-hidden="true">◷</span>
+      <h1 id="league-unavailable-title">Todavía no</h1>
+      <p id="league-unavailable-copy">La fase regular aún no está en marcha.</p>
+      <a href="/">VOLVER A EVENTOS</a>
+    </section>
+  </body>
+</html>

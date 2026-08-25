@@ -17,6 +17,7 @@
   let draft = null;
   let equipos = [];
   let capitanes = [];      // orden elegido, por participantId
+  let numeroDeEquipos = 4; // lo que hay elegido en pantalla, guardado o no
   let stream = null;
 
   const api = (ruta, opciones) => window.adminApi
@@ -32,14 +33,15 @@
   // ------------------------------------------------------------- pintar
 
   function resumen() {
-    const necesarios = (draft?.teamCount ?? 4) * (draft?.teamSize ?? 5);
-    const elecciones = (draft?.teamCount ?? 4) * ((draft?.teamSize ?? 5) - 1);
+    // El resumen sigue al selector, no a lo guardado: así se ve lo que va a
+    // pasar antes de guardarlo.
+    const plan = window.DraftView.draftPlan(numeroDeEquipos, window.DraftView.TEAM_SIZE);
     const filas = [
-      ['Participantes confirmados', `${confirmados.length} / ${necesarios}`],
-      ['Capitanes', `${capitanes.filter(Boolean).length} / ${draft?.teamCount ?? 4}`],
-      ['Jugadores por elegir', String(elecciones)],
-      ['Equipos', String(draft?.teamCount ?? 4)],
-      ['Jugadores por equipo', String(draft?.teamSize ?? 5)]
+      ['Participantes confirmados', `${confirmados.length} / ${plan.participantsNeeded}`],
+      ['Capitanes', `${capitanes.filter(Boolean).length} / ${plan.captains}`],
+      ['Jugadores por elegir', String(plan.totalPicks)],
+      ['Equipos', String(plan.teamCount)],
+      ['Jugadores por equipo', String(plan.teamSize)]
     ];
     id('draft-admin-summary').replaceChildren(...filas.flatMap(([clave, valor]) => {
       const caja = document.createElement('div');
@@ -113,20 +115,41 @@
       ...capitanes.map((_, indice) => selectorDeCapitan(indice)));
     resumen();
 
-    const completos = capitanes.filter(Boolean).length === capitanes.length;
-    const plantillaOk = confirmados.length === (draft?.teamCount ?? 4) * (draft?.teamSize ?? 5);
-    const configurado = equipos.length === (draft?.teamCount ?? 4);
+    // Un solo sitio decide si se puede empezar y por qué no. Antes el botón y
+    // el mensaje se calculaban por separado y podían no coincidir: se podía
+    // cambiar un capitán, no guardar, y arrancar con otros de los que se veían.
+    const motivo = window.DraftView.startBlockedReason({
+      selected: capitanes,
+      savedTeams: equipos,
+      confirmedCount: confirmados.length,
+      teamCount: numeroDeEquipos,
+      teamSize: window.DraftView.TEAM_SIZE,
+      status: draft?.status
+    });
+    id('start-draft').disabled = Boolean(motivo);
+    aviso(motivo || '');
 
-    id('start-draft').disabled = !(completos && plantillaOk && configurado && draft?.status === 'PENDING');
-    if (!plantillaOk) {
-      aviso(`Hacen falta exactamente ${(draft?.teamCount ?? 4) * (draft?.teamSize ?? 5)} confirmados y hay ${confirmados.length}.`);
-    } else if (!completos) {
-      aviso('Elige los cuatro capitanes.');
-    } else if (!configurado) {
-      aviso('Guarda los capitanes antes de empezar.');
-    } else {
-      aviso('');
+    const nota = id('draft-format-note');
+    if (nota) {
+      const plan = window.DraftView.draftPlan(numeroDeEquipos, window.DraftView.TEAM_SIZE);
+      nota.textContent = `${plan.participantsNeeded} inscritos confirmados, ${plan.captains} capitanes y ${plan.totalPicks} elecciones.`;
     }
+  }
+
+  function pintarFormato() {
+    const selector = id('draft-team-count');
+    if (!selector) return;
+    selector.value = String(numeroDeEquipos);
+    // Con el draft en marcha el formato ya no se toca.
+    selector.disabled = Boolean(draft && draft.status !== 'PENDING');
+  }
+
+  function cambiarNumeroDeEquipos(valor) {
+    numeroDeEquipos = Number(valor) || 4;
+    // Se conservan los capitanes que ya estaban y se ajusta el número de huecos.
+    const anteriores = [...capitanes];
+    capitanes = Array.from({ length: numeroDeEquipos }, (_, i) => anteriores[i] ?? null);
+    pintarCapitanes();
   }
 
   function pintarEnCurso() {
@@ -185,14 +208,17 @@
     draft = estado.draft || { status: 'PENDING', teamCount: 4, teamSize: 5, totalPicks: 16 };
     equipos = estado.teams || [];
 
-    if (capitanes.length !== (draft.teamCount ?? 4)) {
-      capitanes = Array.from({ length: draft.teamCount ?? 4 }, () => null);
+    // Si hay algo guardado manda eso; si no, lo que haya elegido en pantalla.
+    if (estado.draft) numeroDeEquipos = draft.teamCount ?? numeroDeEquipos;
+    if (capitanes.length !== numeroDeEquipos) {
+      capitanes = Array.from({ length: numeroDeEquipos }, (_, i) => capitanes[i] ?? null);
     }
     // Si ya se guardaron, se recuperan en su orden.
     if (equipos.length) {
       capitanes = [...equipos].sort((a, b) => a.seed - b.seed).map((e) => e.captainParticipantId);
     }
 
+    pintarFormato();
     pintarCapitanes();
     pintarEnCurso();
     conectar();
@@ -218,7 +244,11 @@
     try {
       await api(`/api/admin/events/${evento.id}/draft`, {
         method: 'PUT',
-        body: JSON.stringify({ captains: capitanes, teamCount: capitanes.length, teamSize: draft.teamSize ?? 5 })
+        body: JSON.stringify({
+          captains: capitanes,
+          teamCount: numeroDeEquipos,
+          teamSize: window.DraftView.TEAM_SIZE
+        })
       });
       aviso('Capitanes guardados.');
       await cargar(evento);
@@ -251,6 +281,8 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     id('save-captains')?.addEventListener('click', guardarCapitanes);
+    id('draft-team-count')?.addEventListener('change', (suceso) =>
+      cambiarNumeroDeEquipos(suceso.target.value));
     id('start-draft')?.addEventListener('click', iniciar);
     id('pause-draft')?.addEventListener('click', () => cambiarEstado('PAUSED'));
     id('resume-draft')?.addEventListener('click', () => cambiarEstado('ACTIVE'));

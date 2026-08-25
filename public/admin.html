@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
     <link rel="apple-touch-icon" href="/images/logo.png">
-    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script>
+    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><link rel="stylesheet" href="/admin-league.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script><script src="/admin-league.js" defer></script>
   </head>
   <body class="admin-page">
     <div class="grain" aria-hidden="true"></div>
@@ -51,6 +51,17 @@
             <dl id="draft-admin-summary" class="draft-admin-summary"></dl>
 
             <div id="draft-captains-block" class="draft-admin-block">
+              <div class="mini-heading"><h3>FORMATO</h3><span>Equipos de cinco</span></div>
+              <div class="draft-format">
+                <label for="draft-team-count">Número de equipos</label>
+                <select id="draft-team-count">
+                  <option value="4">4 equipos · 20 jugadores</option>
+                  <option value="5">5 equipos · 25 jugadores</option>
+                  <option value="6">6 equipos · 30 jugadores</option>
+                </select>
+                <p id="draft-format-note" class="draft-format-note"></p>
+              </div>
+
               <div class="mini-heading"><h3>CAPITANES</h3><span>El orden manda</span></div>
               <ol id="draft-captains" class="draft-captains"></ol>
               <div class="draft-admin-actions">
@@ -69,6 +80,36 @@
               </div>
             </div>
           </section>
+
+          <section id="league-admin-section" class="admin-section" hidden>
+            <header class="admin-section-heading"><div><span>11 / FASE REGULAR</span><h2>Liga y clasificación</h2><p>Todos contra todos. Se genera cuando el draft ha terminado y los equipos están completos.</p></div><span id="league-state" class="draft-admin-state">—</span></header>
+
+            <div class="draft-admin-block">
+              <div class="mini-heading"><h3>MAPAS</h3><span>Los que se juegan en este torneo</span></div>
+              <div id="league-maps" class="league-maps"></div>
+              <div class="draft-admin-actions">
+                <button id="save-league-maps" type="button" class="secondary-button">GUARDAR MAPAS</button>
+              </div>
+            </div>
+
+            <div class="draft-admin-block">
+              <div class="mini-heading"><h3>CALENDARIO</h3><span id="league-summary">—</span></div>
+              <div class="draft-admin-actions">
+                <button id="generate-league" type="button">GENERAR FASE REGULAR</button>
+                <button id="regenerate-league" type="button" class="secondary-button" hidden>REHACER CALENDARIO</button>
+              </div>
+              <p id="league-feedback" role="status" aria-live="polite"></p>
+              <div id="league-matchdays" class="league-matchdays"></div>
+            </div>
+
+            <div class="draft-admin-block">
+              <div class="mini-heading"><h3>CLASIFICACIÓN</h3><span>Se calcula de los resultados</span></div>
+              <div class="league-table-wrap">
+                <table id="league-standings" class="league-standings"></table>
+              </div>
+            </div>
+          </section>
+
 
           <section id="reporter-simulator-section" class="admin-section" hidden>
             <header class="admin-section-heading reporter-heading"><div><span>08 / REPORTER</span><h2>Hosts del torneo</h2><p>Cada PC host recibe su propio archivo de configuración. Créalo, envíaselo por privado y el Reporter quedará identificado automáticamente.</p></div><span class="reporter-step">01 · CONFIGURAR PCS</span></header>

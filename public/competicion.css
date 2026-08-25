@@ -1,0 +1,32 @@
+/* Página pública de la fase regular. */
+
+/* La tabla nunca empuja la página a lo ancho: se desplaza ella sola. */
+.league-table-wrap { overflow-x: auto; border: 1px solid var(--line); }
+.public-standings { width: 100%; min-width: 520px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.public-standings th,
+.public-standings td { padding: .85rem .8rem; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.public-standings thead th { color: var(--muted); font: .55rem/1 var(--mono); letter-spacing: .12em; }
+.public-standings tbody th { text-align: left; font: 1rem/1.2 var(--body); overflow-wrap: anywhere; white-space: normal; }
+.public-standings tbody tr:last-child td,
+.public-standings tbody tr:last-child th { border-bottom: 0; }
+.public-standings tbody tr.is-qualified { background: rgba(255, 70, 85, .07); box-shadow: inset 3px 0 0 var(--event-accent); }
+.public-standings tbody tr.needs-admin th { color: #ffc85a; }
+
+.public-matchdays { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.public-matchday { padding: 1.3rem; background: var(--surface); }
+.public-matchday h3 { margin-bottom: .9rem; font: 1.3rem/1.1 var(--display); text-transform: uppercase; }
+.public-bye { margin: -.5rem 0 .9rem; color: var(--muted); font: .6rem/1.4 var(--mono); letter-spacing: .08em; }
+
+.public-matchday ul { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.public-matchday li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .6rem; padding: .7rem .8rem; border: 1px solid var(--line); font-size: .92rem; }
+.public-matchday li.is-done { border-color: rgba(255, 70, 85, .3); }
+.public-matchday li span { overflow-wrap: anywhere; color: var(--muted); }
+.public-matchday li span:last-of-type { text-align: right; }
+.public-matchday li span.is-winner { color: var(--paper); font-weight: 600; }
+.public-matchday li b { color: var(--event-accent); font: .62rem/1 var(--mono); letter-spacing: .06em; }
+.public-matchday li small { grid-column: 1 / -1; color: var(--muted); font: .55rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+
+@media (max-width: 620px) {
+  .public-matchday li { grid-template-columns: minmax(0, 1fr) auto; }
+  .public-matchday li span:last-of-type { grid-column: 1 / -1; text-align: left; }
+}

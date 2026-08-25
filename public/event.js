@@ -40,7 +40,10 @@ function configureModules(event) {
     document.querySelectorAll(`[data-module="${module}"], [data-module-link="${module}"]`).forEach((element) => { element.hidden = !visible; });
   }
   byId('information-link').href = `/eventos/${encodeURIComponent(event.slug)}/informacion`;
-  const labels = { information: 'Información', participants: 'Participantes', leaderboard: 'Clasificación', matches: 'Resultados', registration: 'Inscripción', competition: 'Fases', schedule: 'Agenda', prizes: 'Premios' };
+  // El draft y la fase regular son páginas propias, no anclas de esta.
+  byId('draft-link').href = `/eventos/${encodeURIComponent(event.slug)}/draft`;
+  byId('league-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
+  const labels = { draft: 'Draft', information: 'Información', participants: 'Participantes', leaderboard: 'Clasificación', matches: 'Resultados', registration: 'Inscripción', competition: 'Fases', schedule: 'Agenda', prizes: 'Premios' };
   byId('module-list').replaceChildren(...Object.entries(event.modules).filter(([key,enabled]) => enabled&&!(key==='leaderboard'&&event.modules.competition)).map(([key]) => {
     const span = document.createElement('span'); span.textContent = labels[key]; return span;
   }));

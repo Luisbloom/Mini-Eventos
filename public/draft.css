@@ -25,7 +25,9 @@
 .section-stat { color: var(--muted); font: .55rem/1 var(--mono); letter-spacing: .1em; }
 
 /* --- equipos ------------------------------------------------------------ */
-.draft-teams { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+/* Las columnas las pone la página según cuántos equipos haya (4, 5 o 6);
+   el 4 es sólo el valor de reserva si el guion no ha llegado a correr. */
+.draft-teams { display: grid; grid-template-columns: repeat(var(--team-columns, 4), minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
 .team-card { padding: 1.3rem; background: var(--surface); }
 .team-card.is-turn { background: rgba(255, 70, 85, .07); box-shadow: inset 0 3px 0 var(--event-accent); }
 .team-card h3 { margin-bottom: 1.1rem; font: 1.5rem/1.1 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
@@ -72,6 +74,11 @@
 #pick-dialog-feedback { color: var(--coral); font-family: var(--body); font-size: .88rem; }
 
 /* --- responsive --------------------------------------------------------- */
+@media (max-width: 1400px) {
+  /* Con cinco o seis equipos las tarjetas se quedan estrechas antes: bajan a
+     tres por fila mientras que con cuatro todavía caben. */
+  .draft-teams { grid-template-columns: repeat(min(var(--team-columns, 4), 3), minmax(0, 1fr)); }
+}
 @media (max-width: 1080px) {
   .draft-teams { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
