@@ -1108,11 +1108,16 @@ function createApp({
       lecturas.push({ ...leido, captureId: captura.id });
     }
 
+    const equipos = database.valorant.listTeams(eventId);
+    const nombreDe = (id) => equipos.find((equipo) => equipo.id === id)?.name ?? null;
+
     const preview = buildPreview(lecturas, {
       roster: rosterForSeries(eventId, serie),
       expectedMap: juego?.mapKey ?? null,
       teamAId: serie.teamAId,
-      teamBId: serie.teamBId
+      teamBId: serie.teamBId,
+      teamAName: nombreDe(serie.teamAId),
+      teamBName: nombreDe(serie.teamBId)
     });
 
     return { preview, serie, juego };

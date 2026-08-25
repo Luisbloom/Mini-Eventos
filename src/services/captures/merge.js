@@ -3,53 +3,26 @@
 /**
  * Fusión de varias capturas del mismo partido.
  *
- * Una captura de Valorant trae mapa, marcador y K/D/A; una de Tracker de ese
- * mismo mapa trae además ADR, HS% y KAST. Juntas dan un cuadro completo.
+ * Una captura del cliente trae agente, K/D/A, economía, spikes y desactivaciones;
+ * una de Tracker del mismo mapa trae ADR, HS%, KAST, K/D, DDΔ y multikills.
+ * Juntas dan un cuadro completo que ninguna de las dos da por su cuenta.
  *
- * ⚠️ Cuando dos capturas dicen cosas distintas NO se elige una en silencio.
- * Una regla de prioridad escondida —«Tracker manda»— es exactamente lo que hace
- * que un resultado equivocado entre sin que nadie se entere. Se marca el
- * conflicto y lo resuelve quien está mirando.
+ * ⚠️ Cuando dos capturas dicen cosas distintas NO se elige una en silencio. Pero
+ * «distinto» no es lo mismo que «incompatible»: las dos fuentes redondean el ACS
+ * de forma distinta y difieren en 1 sistemáticamente. Quién manda y cuánta
+ * diferencia se admite lo decide `reconcile.js`, campo por campo y de forma
+ * explícita, no una prioridad escondida aquí dentro.
  */
 
 const { partirRiotId } = require('./parsers');
+const { reconcileField, reconcileScore, SOURCE_OF_KIND } = require('./reconcile');
 
-/** Campos de jugador que se fusionan; el resto viaja en `extra`. */
+/** Campos de jugador que se concilian; lo que no esté aquí viaja en `extra`. */
 const STAT_FIELDS = Object.freeze([
-  'acs', 'kills', 'deaths', 'assists', 'plusMinus',
-  'adr', 'hsPercent', 'kastPercent', 'firstKills', 'firstDeaths'
+  'acs', 'kills', 'deaths', 'assists', 'plusMinus', 'kdRatio', 'ddDelta',
+  'adr', 'hsPercent', 'kastPercent', 'firstKills', 'firstDeaths', 'multiKills',
+  'economyRating', 'spikesPlanted', 'defuses'
 ]);
-
-const presente = (valor) => valor !== null && valor !== undefined;
-
-/**
- * Junta un valor que aparece en varias capturas.
- *
- * @returns {{value: *, sources: number[], conflict: null|{values: *[], sources: number[]}}}
- */
-function mergeValue(aportaciones) {
-  const conDato = aportaciones.filter((aporte) => presente(aporte.value));
-  if (conDato.length === 0) {
-    // Nadie lo vio. Null, no cero: son cosas distintas.
-    return { value: null, sources: [], conflict: null };
-  }
-
-  const distintos = [...new Set(conDato.map((aporte) => JSON.stringify(aporte.value)))];
-  if (distintos.length === 1) {
-    return { value: conDato[0].value, sources: conDato.map((a) => a.captureId), conflict: null };
-  }
-
-  // Discrepan. Se queda el primero para poder enseñar algo, pero marcado: la
-  // previsualización lo destaca y no se puede confirmar sin mirarlo.
-  return {
-    value: conDato[0].value,
-    sources: conDato.map((aporte) => aporte.captureId),
-    conflict: {
-      values: distintos.map((texto) => JSON.parse(texto)),
-      sources: conDato.map((aporte) => aporte.captureId)
-    }
-  };
-}
 
 /** La clave con la que se reconoce a la misma persona entre capturas. */
 function playerKey(jugador) {
@@ -58,98 +31,162 @@ function playerKey(jugador) {
 }
 
 /**
+ * Junta a la misma persona aunque una captura traiga la etiqueta y la otra no.
+ *
+ * El cliente enseña «Luisbloom» y Tracker «Luisbloom#NANO»: son el mismo. Si se
+ * tratan como dos, la tabla sale con veinte filas y ninguna completa.
+ */
+function agruparJugadores(apariciones) {
+  const grupos = new Map();
+
+  const buscarGrupo = (jugador) => {
+    const conTag = jugador.riotId ? jugador.riotId.toLowerCase() : null;
+    const sinTag = String(jugador.gameName || jugador.raw || '').trim().toLowerCase();
+
+    if (conTag && grupos.has(conTag)) return conTag;
+    if (grupos.has(sinTag)) return sinTag;
+
+    // ¿Hay ya un grupo cuyo nombre coincide, con o sin etiqueta?
+    for (const [clave, miembros] of grupos) {
+      const nombre = String(miembros[0].jugador.gameName || '').trim().toLowerCase();
+      if (nombre && nombre === sinTag) return clave;
+    }
+    return conTag ?? sinTag;
+  };
+
+  for (const aparicion of apariciones) {
+    const clave = buscarGrupo(aparicion.jugador);
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave).push(aparicion);
+  }
+  return grupos;
+}
+
+/**
  * @param {Array<{captureId: number, kind: string, parsed: object}>} capturas
  */
 function mergeCaptures(capturas) {
-  const utiles = capturas.filter((captura) => captura.parsed);
-  const conflictos = [];
+  const utiles = (capturas || []).filter((captura) => captura.parsed);
+  const conFuente = utiles.map((captura) => ({
+    ...captura,
+    source: SOURCE_OF_KIND[captura.kind] ?? null
+  }));
 
-  const anota = (field, fusion) => {
-    if (fusion.conflict) {
-      conflictos.push({ field, values: fusion.conflict.values, sources: fusion.conflict.sources });
-    }
-    return fusion;
+  const conflictos = [];
+  const variaciones = [];
+
+  const conciliar = (field, observaciones) => {
+    const resultado = reconcileField(field, observaciones);
+    if (resultado.conflict) conflictos.push(resultado.conflict);
+    if (resultado.variance) variaciones.push(resultado.variance);
+    return resultado;
   };
 
-  const mapa = anota('map', mergeValue(utiles.map((captura) => ({
-    captureId: captura.captureId, value: captura.parsed.map?.key ?? null
-  }))));
+  // --- mapa ---
+  const mapa = conciliar('map', conFuente.map((captura) => ({
+    source: captura.source, captureId: captura.captureId,
+    value: captura.parsed.map?.key ?? null
+  })));
 
-  const rondasA = anota('teamARounds', mergeValue(utiles.map((captura) => ({
-    captureId: captura.captureId, value: captura.parsed.teamARounds
-  }))));
+  // --- marcador ---
+  // Sólo Tracker orienta; la pantalla del cliente da el par sin saber de quién
+  // es cada cifra, así que se comparan como conjunto.
+  const orientadas = conFuente.filter((captura) =>
+    captura.parsed.teamARounds !== null && captura.parsed.teamARounds !== undefined);
+  const conPar = conFuente.filter((captura) => Array.isArray(captura.parsed.scorePair));
 
-  const rondasB = anota('teamBRounds', mergeValue(utiles.map((captura) => ({
-    captureId: captura.captureId, value: captura.parsed.teamBRounds
-  }))));
+  const orientado = orientadas.length
+    ? [orientadas[0].parsed.teamARounds, orientadas[0].parsed.teamBRounds]
+    : null;
+  const sinOrientar = conPar.find((captura) => !orientadas.includes(captura))?.parsed.scorePair
+    ?? (conPar.length ? conPar[0].parsed.scorePair : null);
 
-  // --- jugadores ---
-  const porJugador = new Map();
-  for (const captura of utiles) {
-    for (const jugador of captura.parsed.players || []) {
-      const clave = playerKey(jugador);
-      if (!clave) continue;
-      if (!porJugador.has(clave)) porJugador.set(clave, []);
-      porJugador.get(clave).push({ captureId: captura.captureId, jugador });
-    }
+  const marcador = reconcileScore({ oriented: orientado, unordered: sinOrientar });
+  if (marcador.code === 'SCORE_CONFLICT') {
+    conflictos.push({
+      field: 'score', values: marcador.values,
+      sources: conFuente.map((captura) => captura.source)
+    });
   }
 
-  const jugadores = [...porJugador.entries()].map(([clave, apariciones]) => {
+  // Si dos capturas orientadas discrepan, eso sí es un conflicto duro.
+  if (orientadas.length > 1) {
+    conciliar('teamARounds', orientadas.map((captura) => ({
+      source: captura.source, captureId: captura.captureId, value: captura.parsed.teamARounds
+    })));
+    conciliar('teamBRounds', orientadas.map((captura) => ({
+      source: captura.source, captureId: captura.captureId, value: captura.parsed.teamBRounds
+    })));
+  }
+
+  // --- jugadores ---
+  const apariciones = conFuente.flatMap((captura) =>
+    (captura.parsed.players || []).map((jugador) => ({
+      captureId: captura.captureId, source: captura.source, jugador
+    })));
+
+  const jugadores = [...agruparJugadores(apariciones).values()].map((miembros) => {
     // El nombre más completo gana: si una captura trae el Riot ID entero y otra
     // sólo el nombre, nos quedamos con el entero.
-    const conRiotId = apariciones.find((aparicion) => aparicion.jugador.riotId);
+    const conRiotId = miembros.find((miembro) => miembro.jugador.riotId);
     const identidad = partirRiotId(
-      conRiotId?.jugador.riotId ?? apariciones[0].jugador.raw ?? clave);
+      conRiotId?.jugador.riotId ?? miembros[0].jugador.raw ?? miembros[0].jugador.gameName ?? '');
 
     const stats = {};
-    const sources = {};
-    for (const campo of STAT_FIELDS) {
-      const fusion = mergeValue(apariciones.map((aparicion) => ({
-        captureId: aparicion.captureId, value: aparicion.jugador[campo] ?? null
+    const observaciones = {};
+
+    for (const campo of [...STAT_FIELDS, 'agent']) {
+      const resultado = reconcileField(campo, miembros.map((miembro) => ({
+        source: miembro.source, captureId: miembro.captureId, value: miembro.jugador[campo] ?? null
       })));
-      if (fusion.conflict) {
-        conflictos.push({
-          field: `${identidad.riotId ?? identidad.gameName}.${campo}`,
-          values: fusion.conflict.values,
-          sources: fusion.conflict.sources
-        });
+
+      if (resultado.conflict) {
+        conflictos.push({ ...resultado.conflict, player: identidad.riotId ?? identidad.gameName });
       }
-      stats[campo] = fusion.value;
-      if (fusion.sources.length) sources[campo] = fusion.sources;
+      if (resultado.variance) {
+        variaciones.push({ ...resultado.variance, player: identidad.riotId ?? identidad.gameName });
+      }
+
+      stats[campo] = resultado.value;
+      // Se guarda lo que dijo CADA fuente, también la que no manda: sin eso no
+      // se puede averiguar después por qué un número no cuadraba.
+      if (resultado.observations.length > 1
+        || (resultado.observations.length === 1 && resultado.observations[0].value !== null)) {
+        observaciones[campo] = resultado.observations;
+      }
     }
 
-    const agente = mergeValue(apariciones.map((aparicion) => ({
-      captureId: aparicion.captureId, value: aparicion.jugador.agent ?? null
-    })));
-    if (agente.conflict) {
-      conflictos.push({
-        field: `${identidad.riotId ?? identidad.gameName}.agent`,
-        values: agente.conflict.values, sources: agente.conflict.sources
-      });
-    }
+    // El lado en el que salía, cuando alguna captura los separaba.
+    const visualTeam = miembros.map((miembro) => miembro.jugador.visualTeam).find(Boolean) ?? null;
 
     return {
       ...identidad,
-      raw: apariciones[0].jugador.raw,
-      agent: agente.value,
+      raw: miembros[0].jugador.raw ?? identidad.gameName,
+      visualTeam,
       ...stats,
-      // Cuantas más capturas coincidan, más se puede confiar.
       confidence: Math.min(1,
-        apariciones.reduce((total, a) => total + (a.jugador.confidence ?? 0.8), 0) / apariciones.length
-        + (apariciones.length > 1 ? 0.05 : 0)),
-      seenIn: apariciones.map((aparicion) => aparicion.captureId),
-      fieldSources: sources
+        miembros.reduce((total, m) => total + (m.jugador.confidence ?? 0.8), 0) / miembros.length
+        + (miembros.length > 1 ? 0.05 : 0)),
+      seenIn: miembros.map((miembro) => miembro.captureId),
+      sources: [...new Set(miembros.map((miembro) => miembro.source).filter(Boolean))],
+      observations: observaciones
     };
   });
 
   return {
     map: mapa.value,
-    teamARounds: rondasA.value,
-    teamBRounds: rondasB.value,
+    teamARounds: marcador.ok ? marcador.teamARounds : null,
+    teamBRounds: marcador.ok ? marcador.teamBRounds : null,
+    // Los nombres tal y como salían junto al marcador: en la pantalla de fin de
+    // partida son lo único que dice qué cifra es de quién.
+    teamNames: orientadas.length ? (orientadas[0].parsed.teamNames ?? []) : [],
+    score: marcador,
     players: jugadores,
     conflicts: conflictos,
-    captureCount: utiles.length
+    // Discrepancias conocidas y admitidas: se registran, pero no bloquean.
+    variances: variaciones,
+    captureCount: conFuente.length
   };
 }
 
-module.exports = { mergeCaptures, mergeValue, playerKey, STAT_FIELDS };
+module.exports = { mergeCaptures, playerKey, agruparJugadores, STAT_FIELDS };

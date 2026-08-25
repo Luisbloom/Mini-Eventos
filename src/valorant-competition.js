@@ -212,6 +212,35 @@ function migrateValorantCompetition(connection) {
       FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE
     );
   `);
+
+  migrateExtraStats(connection);
+}
+
+/**
+ * Columnas que salieron al leer capturas reales: Tracker enseña K/D, DDΔ y
+ * multikills, y el cliente economía, spikes y desactivaciones.
+ *
+ * Se añaden con ALTER TABLE y no recreando la tabla: donde ya hay resultados
+ * guardados, recrearla los borraría.
+ */
+function migrateExtraStats(connection) {
+  const columnas = connection.pragma('table_info(valorant_player_game_stats)').map((c) => c.name);
+  const nuevas = [
+    ['kd_ratio', 'REAL'],
+    ['dd_delta', 'INTEGER'],
+    ['multi_kills', 'INTEGER'],
+    ['economy_rating', 'INTEGER'],
+    ['spikes_planted', 'INTEGER'],
+    ['defuses', 'INTEGER'],
+    // Lo que dijo cada fuente antes de conciliarlas: sin esto no se puede
+    // averiguar después por qué un número no cuadraba.
+    ['observations_json', 'TEXT']
+  ];
+  for (const [nombre, tipo] of nuevas) {
+    if (!columnas.includes(nombre)) {
+      connection.exec(`ALTER TABLE valorant_player_game_stats ADD COLUMN ${nombre} ${tipo}`);
+    }
+  }
 }
 
 function createValorantCompetitionStore(connection, { audit } = {}) {
@@ -238,6 +267,13 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
     return Number.isFinite(numero) ? Math.round(numero) : null;
   };
 
+  /** Los decimales de verdad no se redondean: un ADR de 129.6 no es 130. */
+  const decimal = (valor) => {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? numero : null;
+  };
+
   const porcentaje = (valor) => {
     const numero = entero(valor);
     if (numero === null) return null;
@@ -249,6 +285,13 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
 
   const toStats = (row) => row && {
     gameId: row.game_id,
+    kdRatio: row.kd_ratio,
+    ddDelta: row.dd_delta,
+    multiKills: row.multi_kills,
+    economyRating: row.economy_rating,
+    spikesPlanted: row.spikes_planted,
+    defuses: row.defuses,
+    observations: row.observations_json ? JSON.parse(row.observations_json) : null,
     participantId: row.participant_id,
     teamId: row.team_id,
     agent: row.agent,
@@ -554,9 +597,11 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       const insertar = connection.prepare(`
         INSERT INTO valorant_player_game_stats
           (game_id, participant_id, team_id, agent, acs, kills, deaths, assists, plus_minus,
-           adr, hs_percent, kast_percent, first_kills, first_deaths, stats_json, source_capture_id)
+           adr, hs_percent, kast_percent, first_kills, first_deaths, stats_json, source_capture_id,
+           kd_ratio, dd_delta, multi_kills, economy_rating, spikes_planted, defuses, observations_json)
         VALUES (@gameId, @participantId, @teamId, @agent, @acs, @kills, @deaths, @assists, @plusMinus,
-                @adr, @hsPercent, @kastPercent, @firstKills, @firstDeaths, @statsJson, @sourceCaptureId)`);
+                @adr, @hsPercent, @kastPercent, @firstKills, @firstDeaths, @statsJson, @sourceCaptureId,
+                @kdRatio, @ddDelta, @multiKills, @economyRating, @spikesPlanted, @defuses, @observationsJson)`);
 
       const equipos = new Set([serie.team_a_id, serie.team_b_id]);
       const vistos = new Set();
@@ -585,13 +630,22 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           deaths: entero(jugador.deaths),
           assists: entero(jugador.assists),
           plusMinus: entero(jugador.plusMinus),
-          adr: entero(jugador.adr),
+          adr: decimal(jugador.adr),
           hsPercent: porcentaje(jugador.hsPercent),
           kastPercent: porcentaje(jugador.kastPercent),
           firstKills: entero(jugador.firstKills),
           firstDeaths: entero(jugador.firstDeaths),
+          kdRatio: decimal(jugador.kdRatio),
+          ddDelta: entero(jugador.ddDelta),
+          multiKills: entero(jugador.multiKills),
+          economyRating: entero(jugador.economyRating),
+          spikesPlanted: entero(jugador.spikesPlanted),
+          defuses: entero(jugador.defuses),
           statsJson: jugador.extra && Object.keys(jugador.extra).length
             ? JSON.stringify(jugador.extra) : null,
+          // Lo que decía cada fuente, incluida la que no manda.
+          observationsJson: jugador.observations && Object.keys(jugador.observations).length
+            ? JSON.stringify(jugador.observations) : null,
           sourceCaptureId: jugador.sourceCaptureId ?? null
         });
       }

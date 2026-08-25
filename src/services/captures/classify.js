@@ -30,29 +30,55 @@ const MIN_SIGNALS = 2;
 const PROFILES = [
   {
     kind: KINDS.TRACKER_MATCH,
-    minScore: 3,
-    // Tracker se delata por su propia marca y por columnas que Valorant no
-    // enseña en la pantalla de fin de partida.
+    minScore: 4,
+    /*
+      Tracker se reconoce por su estructura, no por su marca: la captura real no
+      lleva escrito «tracker.gg» por ninguna parte. Lo que sí lleva son las
+      cabeceras de equipo, sus pestañas y columnas que el cliente del juego no
+      enseña (DDΔ, MK, KAST).
+    */
     signals: [
-      { pattern: /\bTRACKER(\.GG)?\b/i, points: 3 },
-      { pattern: /\bTRN\b/i, points: 2 },
-      { pattern: /\bPERFORMANCE\s*SCORE\b/i, points: 2 },
+      { pattern: /\bTEAM\s*A\b/i, points: 3 },
+      { pattern: /\bTEAM\s*B\b/i, points: 3 },
+      { pattern: /\bAVG\.?\s*RANK\b/i, points: 2 },
+      { pattern: /\bCURRENT\s*RANK\b/i, points: 2 },
+      { pattern: /\bDUELS\b/i, points: 2 },
+      { pattern: /\bROUNDS\b/i, points: 1 },
       { pattern: /\bKAST\b/i, points: 2 },
+      { pattern: /\bDD\s*[ΔA]?\b/, points: 2 },
+      { pattern: /\bMK\b/, points: 1 },
       { pattern: /\bADR\b/i, points: 1 },
-      { pattern: /\bHS%?\b/i, points: 1 },
-      { pattern: /\bFIRST\s*(BLOODS?|KILLS?)\b/i, points: 1 },
+      { pattern: /\bHS\s*%/i, points: 1 },
+      { pattern: /\d+m\s*\d+s\b/i, points: 2 },
+      // La marca sigue valiendo cuando aparece, pero ya no hace falta.
+      { pattern: /\bTRACKER(\.GG)?\b/i, points: 3 },
+      { pattern: /\bPERFORMANCE\s*SCORE\b/i, points: 2 },
       { pattern: /\bMATCH\s*(HISTORY|DETAILS)\b/i, points: 1 }
     ]
   },
   {
     kind: KINDS.VALORANT_SCOREBOARD,
-    minScore: 3,
-    // El marcador de dentro de la partida: sale el tanteo por bandos.
+    minScore: 4,
+    /*
+      La pantalla de puntuaciones del cliente. Llega en el idioma de quien juega,
+      así que las señales van en los dos y sin depender de los acentos: el OCR
+      pierde la Ó de ECONOMÍA con facilidad.
+    */
     signals: [
+      { pattern: /\bPUNTUACIONES\b/i, points: 3 },
       { pattern: /\bSCOREBOARD\b/i, points: 3 },
+      { pattern: /\bPUNT\.?\s*MED\.?\s*COMBATE\b/i, points: 3 },
+      { pattern: /\bCOMBAT\s*SCORE\b/i, points: 2 },
+      { pattern: /\bPRIMERAS\s*SANGRES\b/i, points: 3 },
+      { pattern: /\bFIRST\s*BLOODS?\b/i, points: 2 },
+      { pattern: /\bSPIKES?\s*(COLOCADAS?|PLANTED)\b/i, points: 3 },
+      { pattern: /\bDESACTIVACIONES\b/i, points: 3 },
+      { pattern: /\bDEFUSES\b/i, points: 2 },
+      { pattern: /\bECONOM[IÍ]A\b/i, points: 2 },
+      { pattern: /\bECONOMY\b/i, points: 2 },
+      { pattern: /\bORDENADO\s+DE\s+FORMA\s+INDIVIDUAL\b/i, points: 3 },
       { pattern: /\bATTACK(ING|ERS)?\b/i, points: 1 },
       { pattern: /\bDEFEN(SE|DING|DERS)\b/i, points: 1 },
-      { pattern: /\bROUND\s+\d+\b/i, points: 2 },
       { pattern: /\bCREDITS?\b/i, points: 1 }
     ]
   },
