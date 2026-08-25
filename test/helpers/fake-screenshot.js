@@ -16,6 +16,8 @@ const sharp = require('sharp');
 const ANCHO = 1280;
 const MARGEN = 40;
 const ALTO_LINEA = 46;
+/** Lo que ocupa un carácter con la fuente y el tamaño que se usan al dibujar. */
+const ANCHO_CARACTER = 18.2;
 
 function escapeXml(valor) {
   return String(valor)
@@ -32,7 +34,12 @@ function escapeXml(valor) {
  *
  * @param {string[]} lineas
  */
-async function renderScreenshot(lineas, { format = 'png', width = ANCHO } = {}) {
+async function renderScreenshot(lineas, { format = 'png', width = null } = {}) {
+  // El lienzo se ajusta a la línea más larga. Con un ancho fijo, una tabla con
+  // muchas columnas se sale por la derecha y el OCR nunca ve la última: parece
+  // un fallo del parser cuando en realidad falta media imagen.
+  const masLarga = Math.max(0, ...lineas.map((linea) => String(linea).length));
+  const ancho = width ?? Math.max(ANCHO, MARGEN * 2 + Math.ceil(masLarga * ANCHO_CARACTER));
   const alto = MARGEN * 2 + lineas.length * ALTO_LINEA;
   const textos = lineas.map((linea, indice) => {
     const y = MARGEN + (indice + 1) * ALTO_LINEA - 12;
@@ -40,7 +47,7 @@ async function renderScreenshot(lineas, { format = 'png', width = ANCHO } = {}) 
       + `font-size="30" fill="#000000" xml:space="preserve">${escapeXml(linea)}</text>`;
   }).join('\n');
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${alto}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${ancho}" height="${alto}">
     <rect width="100%" height="100%" fill="#ffffff"/>
     ${textos}
   </svg>`;
