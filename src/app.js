@@ -839,7 +839,59 @@ function createApp({
     draftStream.attach(event.id, request, response);
   });
 
+  /**
+   * El capitán le pone nombre a SU equipo. No recibe qué equipo: se deduce de
+   * quién es, así que no hay forma de renombrar el de otro.
+   */
+  app.patch('/api/events/:slug/my-team', (request, response, next) => {
+    try {
+      const event = publicDraftEventFromSlug(request, response);
+      if (!event) return;
+
+      const session = currentSession(request);
+      if (!session) return sendError(response, 401, 'AUTH_REQUIRED', 'Entra con Discord.');
+
+      const participant = database.valorant.findParticipantByDiscord(event.id, session.account.id);
+      const team = participant
+        ? database.valorant.teamCaptainedBy(event.id, participant.id)
+        : null;
+      if (!team) {
+        return sendError(response, 403, 'NOT_A_CAPTAIN', 'Sólo el capitán puede cambiar el nombre de su equipo.');
+      }
+
+      const actualizado = database.valorant.renameTeam(event.id, {
+        teamId: team.id, name: request.body?.name, actor: `captain:${participant.id}`
+      });
+      draftStream.publish(event.id, 'team_updated');
+      response.json({ team: actualizado });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/admin/events/:id/teams/rename', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const team = database.valorant.renameTeam(id, {
+        teamId: request.body?.teamId,
+        name: request.body?.name,
+        reason: request.body?.reason
+      });
+      draftStream.publish(id, 'team_updated');
+      response.json({ team });
+    } catch (error) { next(error); }
+  });
+
   // ---------------------------------------------------- draft: administración
+  app.get('/api/admin/events/:id/draft', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        draft: database.valorant.getDraft(id) ?? null,
+        teams: database.valorant.listTeams(id),
+        available: database.valorant.listAvailableParticipants(id)
+      });
+    } catch (error) { next(error); }
+  });
+
   app.put('/api/admin/events/:id/draft', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
@@ -908,6 +960,7 @@ function createApp({
 
   app.get('/informacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/informacion`));
   app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}#clasificacion`));
+  app.get('/eventos/:slug/draft', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'draft.html')));
   app.get('/eventos/:slug/informacion', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'informacion.html')));
   app.get('/eventos/:slug', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));
   app.get('/eventos/:slug/:section', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));

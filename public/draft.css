@@ -1,0 +1,86 @@
+/* Draft en directo. Misma identidad que el resto de Mini Eventos: fondo oscuro,
+   acento del evento y tipografía condensada. El acento lo pone el evento. */
+
+.draft-page { --event-accent: #ff4655; }
+.draft-main { width: min(1540px, 100%); margin: 0 auto; padding: 0 var(--portal-pad, clamp(1.25rem, 4vw, 3.5rem)) 5rem; }
+
+.draft-hero { position: relative; padding: clamp(3rem, 6vw, 5.5rem) 0 3rem; border-bottom: 1px solid var(--line); }
+.draft-hero h1 { font-size: clamp(3rem, 8vw, 6.5rem); }
+.draft-hero h1 span { -webkit-text-stroke-color: var(--event-accent); }
+.draft-headline { margin: 1.6rem 0 0; max-width: 620px; color: #c6cdcb; font-size: clamp(.95rem, 1.3vw, 1.1rem); line-height: 1.6; }
+
+.draft-status { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 2.5rem; background: var(--line); border: 1px solid var(--line); }
+.draft-status > div { padding: 1.1rem; background: var(--surface); }
+.draft-status span { display: block; color: var(--muted); font: .5rem/1 var(--mono); letter-spacing: .1em; }
+.draft-status strong { display: block; margin-top: .6rem; font: 1.7rem/1 var(--display); text-transform: uppercase; }
+
+.draft-turn { margin-top: 1.5rem; padding: 1.2rem; border: 1px solid var(--event-accent); background: rgba(255, 70, 85, .06); }
+.draft-turn > span { color: var(--event-accent); font: .5rem/1 var(--mono); letter-spacing: .12em; }
+.draft-turn strong { display: block; margin-top: .5rem; font: 2rem/1 var(--display); text-transform: uppercase; }
+.draft-turn small { display: block; margin-top: .4rem; color: var(--muted); font: .62rem/1.4 var(--mono); }
+
+.draft-section { padding: 3.5rem 0; border-bottom: 1px solid var(--line); }
+.draft-section .section-bar { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
+.draft-section h2 { font-size: clamp(1.9rem, 4vw, 3rem); }
+.section-stat { color: var(--muted); font: .55rem/1 var(--mono); letter-spacing: .1em; }
+
+/* --- equipos ------------------------------------------------------------ */
+.draft-teams { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.team-card { padding: 1.3rem; background: var(--surface); }
+.team-card.is-turn { background: rgba(255, 70, 85, .07); box-shadow: inset 0 3px 0 var(--event-accent); }
+.team-card h3 { margin-bottom: 1.1rem; font: 1.5rem/1.1 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+.team-roster { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; counter-reset: hueco; }
+.team-roster li { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; padding: .6rem .7rem; border: 1px solid var(--line); color: var(--paper); font-size: .92rem; }
+.team-roster li.empty { color: var(--muted); border-style: dashed; }
+.team-roster b { color: var(--event-accent); font: .46rem/1 var(--mono); letter-spacing: .09em; }
+
+/* --- disponibles -------------------------------------------------------- */
+.captain-hint { margin: 0 0 1.4rem; padding: .9rem 1.1rem; border-left: 2px solid var(--event-accent); background: rgba(255,255,255,.02); color: #c6cdcb; }
+.draft-available { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.player-card { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: 1rem; background: var(--surface); }
+.player-card strong { font-size: .98rem; overflow-wrap: anywhere; }
+.player-card button { flex: none; padding: .6rem .8rem; border: 1px solid var(--event-accent); background: transparent; color: var(--event-accent); cursor: pointer; font: .5rem/1 var(--mono); letter-spacing: .09em; transition: .18s ease; }
+.player-card button:hover { background: var(--event-accent); color: var(--void); }
+
+/* --- historial ---------------------------------------------------------- */
+.draft-history { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; background: var(--line); border: 1px solid var(--line); }
+.draft-history li { display: grid; grid-template-columns: 60px minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: baseline; padding: .85rem 1rem; background: var(--surface); }
+.draft-history span { color: var(--event-accent); font: .62rem/1 var(--mono); }
+.draft-history strong { font: 1rem/1.2 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+.draft-history b { color: var(--muted); font-weight: 400; overflow-wrap: anywhere; }
+
+/* --- nombre de equipo --------------------------------------------------- */
+.team-name-form { display: grid; gap: .7rem; max-width: 460px; }
+.team-name-form label { color: var(--muted); font: .55rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.team-name-form input { min-height: 48px; padding: .8rem; border: 1px solid var(--line); background: #090d0f; color: var(--paper); font: 1rem/1 var(--body); }
+.team-name-form input:focus { outline: 1px solid var(--event-accent); border-color: var(--event-accent); }
+.team-name-form small { color: var(--muted); font-size: .82rem; }
+.team-name-form button { min-height: 48px; border: 0; background: var(--event-accent); color: var(--void); cursor: pointer; font: .6rem/1 var(--mono); letter-spacing: .12em; }
+.team-name-form button:disabled { opacity: .45; cursor: progress; }
+.team-name-form p { margin: 0; min-height: 1.2rem; color: var(--muted); font-size: .88rem; }
+
+/* --- modal -------------------------------------------------------------- */
+.pick-dialog { width: min(420px, calc(100vw - 2.5rem)); padding: 0; border: 1px solid var(--event-accent); background: var(--surface); color: var(--paper); }
+.pick-dialog::backdrop { background: rgba(5, 8, 10, .78); }
+.pick-dialog form { padding: 1.5rem; }
+.pick-dialog h3 { font: 1.5rem/1.15 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+.pick-dialog p { margin: .8rem 0 0; color: var(--muted); font: .62rem/1.5 var(--mono); }
+.pick-dialog-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.5rem; }
+.pick-dialog-actions button { flex: 1; min-height: 46px; min-width: 130px; border: 0; background: var(--event-accent); color: var(--void); cursor: pointer; font: .55rem/1 var(--mono); letter-spacing: .1em; }
+.pick-dialog-actions .ghost { border: 1px solid var(--line); background: transparent; color: var(--muted); }
+.pick-dialog-actions button:disabled { opacity: .45; cursor: progress; }
+#pick-dialog-feedback { color: var(--coral); font-family: var(--body); font-size: .88rem; }
+
+/* --- responsive --------------------------------------------------------- */
+@media (max-width: 1080px) {
+  .draft-teams { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .draft-teams { grid-template-columns: 1fr; }
+  .draft-status { grid-template-columns: 1fr; }
+  .draft-section .section-bar { flex-direction: column; align-items: start; }
+  .draft-history li { grid-template-columns: 46px minmax(0, 1fr); }
+  .draft-history b { grid-column: 2 / -1; }
+  .player-card { flex-wrap: wrap; }
+  .player-card button { width: 100%; }
+}

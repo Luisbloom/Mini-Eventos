@@ -490,6 +490,52 @@ function createValorantStore(connection) {
       return equipo.role === 'captain' ? 'captain' : 'participant';
     },
 
+
+    /**
+     * Renombrar. Quién eres y qué equipo es el tuyo lo resuelve quien llama a
+     * partir de la sesión: aquí no llega ningún «soy el capitán» del navegador.
+     */
+    renameTeam(eventId, { teamId, name, actor = 'admin', reason = null }) {
+      const limpio = String(name ?? '').trim().replace(/\s+/g, ' ');
+      if (/[\u0000-\u001f\u007f]/.test(limpio)) {
+        throw new ValorantError('El nombre tiene caracteres que no valen.', 'INVALID_TEAM_NAME');
+      }
+      if (limpio.length < 2 || limpio.length > 32) {
+        throw new ValorantError('El nombre debe tener entre 2 y 32 caracteres.', 'INVALID_TEAM_NAME');
+      }
+
+      const cambiar = connection.transaction(() => {
+        const equipo = connection.prepare('SELECT * FROM teams WHERE id=? AND event_id=?')
+          .get(teamId, eventId);
+        if (!equipo) throw new ValorantError('El equipo no existe.', 'TEAM_NOT_FOUND', 404);
+
+        // Dos equipos con el mismo nombre confunden a todo el mundo, y
+        // "Jarti Team" y "jarti team" son el mismo nombre.
+        const repetido = connection.prepare(
+          'SELECT id FROM teams WHERE event_id=? AND id != ? AND lower(name)=lower(?)'
+        ).get(eventId, teamId, limpio);
+        if (repetido) {
+          throw new ValorantError('Ya hay un equipo con ese nombre.', 'TEAM_NAME_TAKEN', 409);
+        }
+
+        connection.prepare(`UPDATE teams SET name=?, updated_at=${NOW} WHERE id=?`).run(limpio, teamId);
+        return { anterior: equipo.name, nuevo: limpio };
+      });
+
+      const resultado = cambiar();
+      record(eventId, actor, 'TEAM_RENAMED', `team:${teamId}`, reason, resultado);
+      return this.getTeam(eventId, teamId);
+    },
+
+    /** El equipo del que esta persona es capitán, o null. */
+    teamCaptainedBy(eventId, participantId) {
+      if (!participantId) return null;
+      const fila = connection.prepare(
+        'SELECT * FROM teams WHERE event_id=? AND captain_participant_id=?'
+      ).get(eventId, participantId);
+      return toTeam(fila);
+    },
+
     listTeams(eventId) {
       const teams = connection.prepare('SELECT * FROM teams WHERE event_id=? ORDER BY seed, id')
         .all(eventId).map(toTeam);

@@ -247,10 +247,7 @@ function mensajeDeError(cuerpo, porDefecto) {
 }
 
 /** Iniciales del nombre: evita traer el avatar, cuya URL lleva el id de Discord. */
-function iniciales(nombre) {
-  return String(nombre || '?').trim().split(/\s+/).slice(0, 2)
-    .map((parte) => parte[0] || '').join('').toUpperCase() || '?';
-}
+const iniciales = (nombre) => window.DraftView.initials(nombre);
 
 async function cargarEstadoDiscord(event) {
   const [estado, yo] = await Promise.all([
@@ -291,8 +288,9 @@ function pasoEntrar(event) {
 }
 
 function pasoCerrado(etiqueta) {
+  // La etiqueta la escribe administración desde el panel: se escapa igual.
   return `<div class="discord-note">
-      <strong>${etiqueta || 'Inscripciones cerradas'}</strong>
+      <strong>${escaparTexto(etiqueta || 'Inscripciones cerradas')}</strong>
       <p>Las inscripciones todavía no están abiertas. Tu cuenta ya está conectada:
          cuando abran, sólo tendrás que poner tu Riot ID.</p>
     </div>`;
@@ -317,18 +315,14 @@ function pasoInscrito(datos) {
         <strong>INSCRIPCIÓN REALIZADA</strong>
         <dl>
           <div><dt>Riot ID</dt><dd>${escaparTexto(datos.riotId || '—')}</dd></div>
-          <div><dt>Estado</dt><dd>${estados[datos.registrationStatus] || datos.registrationStatus || '—'}</dd></div>
+          <div><dt>Estado</dt><dd>${escaparTexto(estados[datos.registrationStatus] || datos.registrationStatus || '—')}</dd></div>
         </dl>
       </div>
     </div>`;
 }
 
 /** El nombre y el Riot ID los escribe una persona: nunca se inyectan como HTML. */
-function escaparTexto(valor) {
-  const div = document.createElement('div');
-  div.textContent = String(valor ?? '');
-  return div.innerHTML;
-}
+const escaparTexto = (valor) => window.DraftView.escapeHtml(valor);
 
 async function renderDiscordRegistration(event) {
   const caja = byId('discord-registration');
@@ -342,12 +336,13 @@ async function renderDiscordRegistration(event) {
   const paso = byId('discord-step');
   const datos = yo.event || {};
 
-  if (!estado.configured && !yo.authenticated) { paso.innerHTML = pasoNoConfigurado(); return; }
-  if (!yo.authenticated) { paso.innerHTML = pasoEntrar(event); return; }
-  if (datos.registered) { paso.innerHTML = pasoInscrito(datos); return; }
-  if (!datos.registrationsOpen) { paso.innerHTML = pasoCerrado(datos.registrationLabel); return; }
-
-  paso.innerHTML = pasoFormulario();
+  switch (window.DraftView.registrationState({ discordConfigured: estado.configured, me: yo })) {
+    case 'unavailable': paso.innerHTML = pasoNoConfigurado(); return;
+    case 'login': paso.innerHTML = pasoEntrar(event); return;
+    case 'registered': paso.innerHTML = pasoInscrito(datos); return;
+    case 'closed': paso.innerHTML = pasoCerrado(datos.registrationLabel); return;
+    default: paso.innerHTML = pasoFormulario();
+  }
   byId('riot-form').addEventListener('submit', async (submit) => {
     submit.preventDefault();
     const boton = byId('riot-form').querySelector('button');

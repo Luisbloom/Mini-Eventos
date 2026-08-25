@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
     <link rel="apple-touch-icon" href="/images/logo.png">
-    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><script src="/admin.js" defer></script><script src="/admin-competition.js" defer></script>
+    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script>
   </head>
   <body class="admin-page">
     <div class="grain" aria-hidden="true"></div>
@@ -43,6 +43,31 @@
             <header class="admin-section-heading"><div><span>07 / PRODUCCIÓN</span><h2>Agenda y premios</h2></div></header>
             <div class="competition-editor-block"><div class="mini-heading"><h3>AGENDA</h3><button id="add-schedule" type="button">+ ENTRADA</button></div><div id="admin-schedule" class="compact-editor"></div><button id="save-schedule" class="secondary-action" type="button">GUARDAR AGENDA</button></div>
             <div class="competition-editor-block"><div class="mini-heading"><h3>PREMIOS</h3><button id="add-prize" type="button">+ PREMIO</button></div><div id="admin-prizes" class="compact-editor"></div><button id="save-prizes" class="secondary-action" type="button">GUARDAR PREMIOS</button></div>
+          </section>
+
+          <section id="draft-admin-section" class="admin-section" hidden>
+            <header class="admin-section-heading"><div><span>10 / DRAFT</span><h2>Draft por equipos</h2><p>Elige a los capitanes y ordénalos: ese orden es el de la primera ronda. El draft se abre solo cuando la plantilla cuadra.</p></div><span id="draft-admin-state" class="draft-admin-state">—</span></header>
+
+            <dl id="draft-admin-summary" class="draft-admin-summary"></dl>
+
+            <div id="draft-captains-block" class="draft-admin-block">
+              <div class="mini-heading"><h3>CAPITANES</h3><span>El orden manda</span></div>
+              <ol id="draft-captains" class="draft-captains"></ol>
+              <div class="draft-admin-actions">
+                <button id="save-captains" type="button" class="secondary-button">GUARDAR CAPITANES</button>
+                <button id="start-draft" type="button" disabled>INICIAR DRAFT</button>
+              </div>
+              <p id="draft-admin-feedback" role="status" aria-live="polite"></p>
+            </div>
+
+            <div id="draft-live-block" class="draft-admin-block" hidden>
+              <div class="mini-heading"><h3>EN CURSO</h3><span id="draft-live-turn">—</span></div>
+              <div id="draft-live-teams" class="draft-admin-teams"></div>
+              <div class="draft-admin-actions">
+                <button id="pause-draft" type="button" class="secondary-button">PAUSAR</button>
+                <button id="resume-draft" type="button" class="secondary-button" hidden>REANUDAR</button>
+              </div>
+            </div>
           </section>
 
           <section id="reporter-simulator-section" class="admin-section" hidden>

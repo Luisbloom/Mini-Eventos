@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Draft en directo del torneo por equipos de Jartiland">
+    <title>Draft · Mini Eventos Jartiland</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
+    <link rel="apple-touch-icon" href="/images/logo.png">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/draft.css">
+    <script src="/draft-view.js" defer></script>
+    <script src="/draft.js" defer></script>
+  </head>
+  <body class="draft-page">
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Mini Eventos Jartiland">
+        <img class="brand-logo" src="/images/logo-96.png" alt="" aria-hidden="true" width="40" height="40" decoding="async">
+        <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Navegación principal">
+        <a id="back-to-event" href="/">Volver al evento</a>
+        <a class="active" href="#draft" aria-current="page">Draft</a>
+      </nav>
+      <div class="broadcast" aria-live="polite">
+        <span id="draft-dot" class="live-dot loading"></span><span id="draft-connection">CONECTANDO</span>
+      </div>
+    </header>
+
+    <main id="draft-main" class="draft-main" hidden>
+      <section class="draft-hero" aria-labelledby="draft-title">
+        <p class="kicker"><span id="draft-game">TORNEO</span> · DRAFT EN DIRECTO</p>
+        <h1 id="draft-title">Draft<br><span>de equipos</span></h1>
+        <p id="draft-headline" class="draft-headline"></p>
+
+        <div class="draft-status">
+          <div><span>ESTADO</span><strong id="draft-status">—</strong></div>
+          <div><span>RONDA</span><strong id="draft-round">—</strong></div>
+          <div><span>ELECCIÓN</span><strong id="draft-pick">—</strong></div>
+        </div>
+
+        <div id="draft-turn" class="draft-turn" hidden>
+          <span>TURNO ACTUAL</span>
+          <strong id="draft-turn-team">—</strong>
+          <small id="draft-turn-captain">—</small>
+        </div>
+      </section>
+
+      <section class="draft-section" aria-labelledby="teams-title">
+        <header class="section-bar"><div><p class="section-index">01 / EQUIPOS</p><h2 id="teams-title">Los cuatro equipos</h2></div></header>
+        <div id="draft-teams" class="draft-teams"></div>
+      </section>
+
+      <section class="draft-section" aria-labelledby="available-title">
+        <header class="section-bar">
+          <div><p class="section-index">02 / DISPONIBLES</p><h2 id="available-title">Por elegir</h2></div>
+          <span class="section-stat" id="available-count">—</span>
+        </header>
+        <p id="captain-hint" class="captain-hint" hidden></p>
+        <div id="draft-available" class="draft-available"></div>
+      </section>
+
+      <section class="draft-section" aria-labelledby="history-title">
+        <header class="section-bar"><div><p class="section-index">03 / HISTORIAL</p><h2 id="history-title">Elecciones</h2></div></header>
+        <ol id="draft-history" class="draft-history"></ol>
+      </section>
+
+      <section id="team-name-section" class="draft-section" aria-labelledby="team-name-title" hidden>
+        <header class="section-bar"><div><p class="section-index">04 / TU EQUIPO</p><h2 id="team-name-title">Ponle nombre</h2></div></header>
+        <form id="team-name-form" class="team-name-form" novalidate>
+          <label for="team-name">Nombre del equipo</label>
+          <input id="team-name" maxlength="32" autocomplete="off" required>
+          <small>Entre 2 y 32 caracteres. Lo verá todo el mundo.</small>
+          <button type="submit">GUARDAR NOMBRE <span aria-hidden="true">→</span></button>
+          <p id="team-name-feedback" role="status"></p>
+        </form>
+      </section>
+    </main>
+
+    <section id="draft-unavailable" class="event-fatal" hidden>
+      <span aria-hidden="true">◷</span>
+      <h1 id="draft-unavailable-title">Todavía no</h1>
+      <p id="draft-unavailable-copy">Este torneo aún no tiene draft público.</p>
+      <a href="/">VOLVER A EVENTOS</a>
+    </section>
+
+    <dialog id="pick-dialog" class="pick-dialog">
+      <form method="dialog">
+        <h3 id="pick-dialog-title">¿Elegir a este jugador?</h3>
+        <p id="pick-dialog-detail"></p>
+        <div class="pick-dialog-actions">
+          <button value="cancel" type="submit" class="ghost">CANCELAR</button>
+          <button id="pick-confirm" value="confirm" type="submit">CONFIRMAR ELECCIÓN</button>
+        </div>
+        <p id="pick-dialog-feedback" role="status"></p>
+      </form>
+    </dialog>
+
+    <footer class="ticker" aria-label="Draft Jartiland"><div><span>DRAFT EN DIRECTO</span><b>✦</b><span>JARTILAND</span><b>✦</b><span>MINI EVENTOS</span><b>✦</b><span aria-hidden="true">DRAFT EN DIRECTO</span><b aria-hidden="true">✦</b></div></footer>
+  </body>
+</html>
