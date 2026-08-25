@@ -6,17 +6,25 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const request = require('supertest');
+const http = require('node:http');
 const { openDatabase } = require('../src/database');
 const { createApp } = require('../src/app');
 const { roundRobinSchedule, scheduleSummary } = require('../src/services/round-robin');
 const V = require('../public/draft-view');
 
+// Los frames SSE se separan por linea en blanco. Escrito asi para no depender
+// de como se escapen los saltos al generar este fichero.
+const SALTO = String.fromCharCode(10);
+const SEPARADOR = SALTO + SALTO;
+
 describe('fase regular de Valorant', () => {
   const directories = [];
   const bases = [];
+  const servers = [];
   const ADMIN = 'token-de-pruebas';
 
   afterEach(() => {
+    servers.splice(0).forEach((s) => { try { s.close(); } catch { /* ya cerrado */ } });
     bases.splice(0).forEach((db) => { try { db.close(); } catch { /* ya cerrada */ } });
     directories.splice(0).forEach((d) => fs.rmSync(d, { recursive: true, force: true }));
   });
@@ -578,6 +586,130 @@ describe('fase regular de Valorant', () => {
 
       const estilos = fs.readFileSync(path.join(__dirname, '..', 'public', 'draft.css'), 'utf8');
       assert.match(estilos, /repeat\(var\(--team-columns/);
+    });
+  });
+
+  describe('empates que nadie puede deshacer', () => {
+    it('se marcan en vez de resolverse a la brava', async () => {
+      const { database, app, event } = draftTerminado(4);
+      await admin(app, 'post', `/api/admin/events/${event.id}/competition/generate`, {}).expect(201);
+      const equipos = database.valorant.listTeams(event.id);
+      const series = database.valorantCompetition.listSeries(event.id);
+
+      // Se deja un solo criterio: asi el empate a victorias no tiene salida.
+      await admin(app, 'put', `/api/admin/events/${event.id}/competition/settings`,
+        { tiebreakers: ['wins'], qualifiers: 4 }).expect(200);
+
+      const [uno, dos, tres, cuatro] = equipos.map((e) => e.id);
+      const busca = (a, b) => series.find((s) =>
+        (s.teamAId === a && s.teamBId === b) || (s.teamAId === b && s.teamBId === a));
+      const gana = async (serie, ganador) => {
+        const ganaA = serie.teamAId === ganador;
+        await admin(app, 'post', `/api/admin/events/${event.id}/competition/result`, {
+          seriesId: serie.id,
+          teamARounds: ganaA ? 13 : 7, teamBRounds: ganaA ? 7 : 13,
+          reason: 'montaje de empate'
+        }).expect(200);
+      };
+
+      // Un ciclo perfecto: todos acaban con las mismas victorias y las mismas
+      // rondas, y el enfrentamiento directo no ordena nada entre cuatro.
+      await gana(busca(uno, dos), uno);
+      await gana(busca(dos, tres), dos);
+      await gana(busca(tres, cuatro), tres);
+      await gana(busca(cuatro, uno), cuatro);
+      await gana(busca(uno, tres), uno);
+      await gana(busca(dos, cuatro), dos);
+
+      const tabla = database.valorantCompetition.standings(event.id, { teams: equipos });
+      const empatados = tabla.standings.filter((f) => f.wins === 2);
+      assert.ok(empatados.length >= 2, 'hacen falta empatados para la prueba');
+
+      assert.equal(tabla.tieRequiresAdmin, true);
+      assert.equal(tabla.tieCode, 'TIE_REQUIRES_ADMIN');
+      assert.equal(empatados.every((f) => f.tieRequiresAdmin), true,
+        'cada empatado queda marcado');
+
+      // Y se dice tambien en publico, en vez de ensenar un orden que parece
+      // decidido cuando no lo esta.
+      const publico = await request(app).get(`/api/events/${event.slug}/competition-teams`).expect(200);
+      assert.equal(publico.body.tieRequiresAdmin, true);
+    });
+  });
+
+  describe('avisos en directo de la competicion', () => {
+    it('cada cambio avisa, y el aviso no lleva el cambio dentro', async () => {
+      const { database, app, event } = draftTerminado(4);
+
+      const frames = [];
+      let buffer = '';
+      const server = app.listen(0);
+      servers.push(server);
+      const puerto = server.address().port;
+
+      await new Promise((resolve) => {
+        const peticion = http.get(
+          { port: puerto, path: `/api/events/${event.slug}/draft/stream` },
+          (respuesta) => {
+            assert.equal(respuesta.statusCode, 200);
+            respuesta.setEncoding('utf8');
+            respuesta.on('data', (trozo) => {
+              buffer += trozo;
+              const partes = buffer.split(SEPARADOR);
+              buffer = partes.pop();
+              for (const bruto of partes) {
+                if (!bruto.trim()) continue;
+                const frame = { raw: bruto, event: null, data: null };
+                for (const linea of bruto.split(SALTO)) {
+                  if (linea.startsWith('event: ')) frame.event = linea.slice(7).trim();
+                  if (linea.startsWith('data: ')) frame.data = linea.slice(6).trim();
+                }
+                frames.push(frame);
+              }
+            });
+            resolve();
+          });
+        peticion.on('error', resolve);
+        servers.push({ close: () => peticion.destroy() });
+      });
+
+      const cuantos = (tipo) => frames.filter((f) => f.event === tipo).length;
+      const esperar = async (tipo, minimo = 1) => {
+        for (let i = 0; i < 80 && cuantos(tipo) < minimo; i++) {
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        assert.ok(cuantos(tipo) >= minimo,
+          `no llego ${tipo} x${minimo}. Recibidos: ${frames.map((f) => f.event).join(', ')}`);
+      };
+
+      await esperar('connected');
+
+      await admin(app, 'post', `/api/admin/events/${event.id}/competition/generate`, {}).expect(201);
+      await esperar('competition_updated', 1);
+
+      const series = database.valorantCompetition.listSeries(event.id);
+      await admin(app, 'post', `/api/admin/events/${event.id}/competition/map`,
+        { seriesId: series[0].id, mapKey: 'ascent' }).expect(200);
+      await admin(app, 'post', `/api/admin/events/${event.id}/competition/result`,
+        { seriesId: series[0].id, teamARounds: 13, teamBRounds: 4, reason: 'prueba' }).expect(200);
+
+      // Generar, poner mapa y guardar resultado son tres cambios: tres avisos.
+      await esperar('competition_updated', 3);
+
+      // El aviso no es la autoridad: solo dice que hay que volver a preguntar.
+      for (const frame of frames.filter((f) => f.event === 'competition_updated')) {
+        const carga = JSON.parse(frame.data);
+        assert.deepEqual(Object.keys(carga).sort(), ['revision', 'type']);
+        assert.equal(carga.type, 'competition_updated');
+        for (const filtracion of ['map', 'rounds', 'winner', 'reason', 'discord', 'session']) {
+          assert.equal(frame.raw.toLowerCase().includes(filtracion), false,
+            `el aviso lleva "${filtracion}": ${frame.raw}`);
+        }
+      }
+
+      // Y la revision avanza, para que quien se pierda un aviso lo note.
+      const revisiones = frames.filter((f) => f.data).map((f) => JSON.parse(f.data).revision);
+      assert.deepEqual(revisiones, [...revisiones].sort((a, b) => a - b), 'la revision no retrocede');
     });
   });
 });

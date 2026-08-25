@@ -488,14 +488,21 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       const cuantosIgual = new Map();
       for (const fila of filas) cuantosIgual.set(huella(fila), (cuantosIgual.get(huella(fila)) ?? 0) + 1);
 
-      filas.sort((uno, otro) => {
+      // Devuelve 0 sólo cuando NINGÚN criterio configurado los separa: eso es un
+      // empate que la organización tiene que resolver.
+      const comparar = (uno, otro) => {
         const empatados = huella(uno) === huella(otro) ? cuantosIgual.get(huella(uno)) : 0;
         for (const criterio of settings.tiebreakers) {
           const resultado = porCriterio(criterio, uno, otro, empatados);
           if (resultado !== 0) return resultado;
         }
-        return String(uno.name ?? uno.teamId).localeCompare(String(otro.name ?? otro.teamId), 'es');
-      });
+        return 0;
+      };
+
+      filas.sort((uno, otro) => comparar(uno, otro)
+        // El orden final es alfabético para que la tabla no baile entre
+        // recargas, pero eso NO es un desempate: se marca abajo.
+        || String(uno.name ?? uno.teamId).localeCompare(String(otro.name ?? otro.teamId), 'es'));
 
       const jugadas = series.filter((s) => s.status === 'COMPLETED').length;
       const completa = series.length > 0 && jugadas === series.length;
@@ -506,22 +513,21 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         seriesTotal: series.length,
         seriesPlayed: jugadas,
         complete: completa,
-        standings: filas.map((fila, indice) => {
-          // Si dos comparten todo y ningún criterio los separa, lo decide la
-          // organización. Nunca al azar.
-          const anterior = filas[indice - 1];
-          const siguiente = filas[indice + 1];
-          const indistinguible = (otro) => otro
-            && otro.wins === fila.wins && otro.losses === fila.losses
-            && otro.roundDiff === fila.roundDiff && otro.roundsFor === fila.roundsFor
-            && (cuantosIgual.get(huella(fila)) ?? 0) > 2;
-          return {
-            position: indice + 1,
-            ...fila,
-            qualified: completa ? indice < settings.qualifiers : null,
-            tieRequiresAdmin: Boolean(indistinguible(anterior) || indistinguible(siguiente))
-          };
-        })
+        // Si ningún criterio configurado separa a dos vecinos en la tabla, el
+        // orden que se ve es sólo el alfabético: lo decide la organización.
+        // Nunca al azar, y nunca haciendo como si estuviera resuelto.
+        tieRequiresAdmin: filas.some((fila, indice) =>
+          indice > 0 && comparar(filas[indice - 1], fila) === 0),
+        tieCode: filas.some((fila, indice) =>
+          indice > 0 && comparar(filas[indice - 1], fila) === 0) ? 'TIE_REQUIRES_ADMIN' : null,
+        standings: filas.map((fila, indice) => ({
+          position: indice + 1,
+          ...fila,
+          qualified: completa ? indice < settings.qualifiers : null,
+          tieRequiresAdmin: Boolean(
+            (indice > 0 && comparar(filas[indice - 1], fila) === 0)
+            || (indice < filas.length - 1 && comparar(fila, filas[indice + 1]) === 0))
+        }))
       };
     },
 
@@ -556,6 +562,7 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         seriesTotal: tabla.seriesTotal,
         seriesPlayed: tabla.seriesPlayed,
         complete: tabla.complete,
+        tieRequiresAdmin: tabla.tieRequiresAdmin,
         qualifiers: tabla.settings.qualifiers,
         maps: this.listMaps(eventId)
       };
