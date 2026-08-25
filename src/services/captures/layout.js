@@ -84,10 +84,12 @@ function columnasDeLinea(linea) {
     for (let largo = Math.min(MAX_HEADER_WORDS, palabras.length - i); largo >= 1; largo--) {
       const grupo = palabras.slice(i, i + largo);
       const texto = grupo.map((p) => p.text).join(' ');
-      if (!isKnownHeader(texto)) continue;
+      // Una sola palabra puede ser una cabecera que el OCR fusionó.
+      const pegada = largo === 1;
+      if (!isKnownHeader(texto, { glued: pegada })) continue;
 
       const sitio = {
-        field: fieldForHeader(texto),
+        field: fieldForHeader(texto, { glued: pegada }),
         x0: grupo[0].bbox.x0,
         x1: grupo[grupo.length - 1].bbox.x1,
         center: (grupo[0].bbox.x0 + grupo[grupo.length - 1].bbox.x1) / 2,
@@ -166,34 +168,42 @@ function readRow(linea, cabecera, ancho) {
 /**
  * La celda agrupada del cliente: «28 / 9 / 7».
  *
- * Según cómo caiga el OCR llega entera o partida en cinco trozos, así que se
- * recogen los números cercanos a esa columna y se toman los tres primeros.
+ * ⚠️ El OCR la parte de formas muy distintas según cómo caigan las barras:
+ * entera («28/9/7»), en tres números sueltos, o con la barra pegada a un dígito
+ * («28/», «/9», «28 / 9»). Por eso no se buscan «números»: se junta todo el
+ * texto de esa columna y se leen los grupos de dígitos que haya.
  */
 function leerKda(candidatos, columna, ancho) {
   const margen = ancho * 0.06;
-  const juntos = candidatos.filter((dato) =>
-    !dato.usado && Math.abs(dato.center - columna.center) <= margen);
+  const juntos = candidatos
+    .filter((dato) => !dato.usado && Math.abs(dato.center - columna.center) <= margen)
+    .sort((uno, otro) => uno.center - otro.center);
+  if (juntos.length === 0) return null;
 
-  // Puede venir como un solo trozo: «28/9/7».
-  for (const dato of juntos) {
-    const partido = /^(\d{1,3})\s*\/\s*(\d{1,3})\s*\/\s*(\d{1,3})$/.exec(dato.texto.replace(/\s/g, ''));
-    if (partido) {
-      dato.usado = true;
-      return { kills: Number(partido[1]), deaths: Number(partido[2]), assists: Number(partido[3]) };
-    }
+  // Se junta en el orden en que estaban y se sacan los grupos de dígitos.
+  const texto = juntos.map((dato) => dato.texto).join(' ');
+  const grupos = texto.match(/\d+/g);
+  if (!grupos || grupos.length < 3) return null;
+
+  // Con exactamente tres, no hay duda.
+  let tres = grupos.slice(0, 3);
+
+  if (grupos.length > 3) {
+    // Con más, la lectura no es fiable: una barra confundida con un 1 mete un
+    // número de más y colocarlos a ciegas daría un K/D/A inventado.
+    const separadores = (texto.match(/\//g) || []).length;
+    if (separadores !== 2) return null;
+    // Con las dos barras bien leídas se puede repartir por ellas.
+    const porBarra = texto.split('/').map((trozo) => (trozo.match(/\d+/g) || []));
+    if (porBarra.length !== 3 || porBarra.some((trozo) => trozo.length !== 1)) return null;
+    tres = porBarra.map((trozo) => trozo[0]);
   }
 
-  const numeros = juntos
-    .filter((dato) => esNumero(dato.texto))
-    .sort((uno, otro) => uno.center - otro.center);
-  if (numeros.length < 3) return null;
-
-  const tres = numeros.slice(0, 3);
-  for (const dato of tres) dato.usado = true;
+  for (const dato of juntos) dato.usado = true;
   return {
-    kills: numero(tres[0].texto),
-    deaths: numero(tres[1].texto),
-    assists: numero(tres[2].texto)
+    kills: numero(tres[0]),
+    deaths: numero(tres[1]),
+    assists: numero(tres[2])
   };
 }
 

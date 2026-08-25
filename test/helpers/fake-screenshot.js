@@ -93,4 +93,36 @@ function postMatchLines(partida = PARTIDA_DE_MUESTRA) {
   ];
 }
 
-module.exports = { renderScreenshot, postMatchLines, PARTIDA_DE_MUESTRA };
+/**
+ * Dibuja palabras EN SUS COORDENADAS, no reflowadas a texto monoespaciado.
+ *
+ * Reflowar pierde justo lo que el parser necesita: en qué columna cae cada
+ * número. Una imagen así se lee mal y parece un fallo del parser cuando lo que
+ * falla es el dibujo.
+ */
+async function renderWords(words, { format = 'png', padding = 40, scale = 1 } = {}) {
+  const ancho = Math.ceil(Math.max(...words.map((p) => p.bbox.x1)) * scale) + padding * 2;
+  const alto = Math.ceil(Math.max(...words.map((p) => p.bbox.y1)) * scale) + padding * 2;
+
+  const textos = words.map((palabra) => {
+    const x = (palabra.bbox.x0 * scale + padding).toFixed(1);
+    const y = (palabra.bbox.y1 * scale + padding).toFixed(1);
+    // El tamaño sale de la altura de la caja: así las etiquetas pequeñas del
+    // Riot ID salen pequeñas, como en la captura de verdad.
+    const tam = Math.max(11, (palabra.bbox.y1 - palabra.bbox.y0) * scale * 0.92).toFixed(1);
+    return '<text x="' + x + '" y="' + y + '" '
+      + 'font-family="DejaVu Sans, Arial, sans-serif" font-size="' + tam + '" '
+      + 'fill="#111111" xml:space="preserve">' + escapeXml(palabra.text) + '</text>';
+  }).join('\n');
+
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + ancho + '" height="' + alto + '">'
+    + '<rect width="100%" height="100%" fill="#ffffff"/>'
+    + textos + '</svg>';
+
+  const imagen = sharp(Buffer.from(svg));
+  if (format === 'jpeg' || format === 'jpg') return imagen.jpeg({ quality: 95 }).toBuffer();
+  if (format === 'webp') return imagen.webp({ quality: 95 }).toBuffer();
+  return imagen.png().toBuffer();
+}
+
+module.exports = { renderScreenshot, renderWords, postMatchLines, PARTIDA_DE_MUESTRA };

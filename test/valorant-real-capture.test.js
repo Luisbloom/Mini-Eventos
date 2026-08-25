@@ -524,3 +524,48 @@ describe('previsualización con los equipos del torneo', () => {
     assert.equal(buscar(asociados, 'tilofuro').match, 'GAME_NAME');
   });
 });
+
+// ======================================================= CABECERAS FUSIONADAS
+
+describe('cabeceras que el OCR junta o rompe', () => {
+  const { fieldForHeader } = require('../src/services/captures/columns');
+
+  it('reconoce una cabecera de varias palabras venga junta o separada', () => {
+    for (const forma of ['PUNT. MED. COMBATE', 'PUNT.MEDCOMBATE', 'PUNTMEDCOMBATE',
+      'Punt. Med. Combate']) {
+      assert.equal(fieldForHeader(forma, { glued: true }), 'acs', forma);
+    }
+    for (const forma of ['PRIMERAS SANGRES', 'PRIMERASSANGRES']) {
+      assert.equal(fieldForHeader(forma, { glued: true }), 'firstKills', forma);
+    }
+    for (const forma of ['SPIKES COLOCADAS', 'SPIKESCOLOCADAS']) {
+      assert.equal(fieldForHeader(forma, { glued: true }), 'spikesPlanted', forma);
+    }
+  });
+
+  it('sin acentos también, porque el OCR los pierde', () => {
+    assert.equal(fieldForHeader('ECONOMÍA'), 'economyRating');
+    assert.equal(fieldForHeader('ECONOMIA'), 'economyRating');
+    assert.equal(fieldForHeader('DDΔ'), 'ddDelta');
+    assert.equal(fieldForHeader('DD'), 'ddDelta');
+  });
+
+  it('NO junta tres columnas sueltas en la celda agrupada', () => {
+    // «K D A» son tres columnas independientes de Tracker. Si el atajo de las
+    // palabras fusionadas se aplicara aquí, se las comería las tres y la tabla
+    // se quedaría sin bajas, muertes ni asistencias.
+    assert.equal(fieldForHeader('K D A'), null);
+    assert.equal(fieldForHeader('K D A', { glued: true }), 'kda',
+      'como UNA palabra fusionada sí, pero eso sólo pasa con un token suelto');
+    assert.equal(fieldForHeader('AMA'), 'kda', 'la celda agrupada de verdad');
+  });
+
+  it('la tabla de Tracker conserva sus tres columnas', () => {
+    const { parsed } = tracker();
+    // Si «K D A» se hubiera fusionado, estas tres serían undefined.
+    const luis = buscar(parsed.players, 'Luisbloom');
+    assert.equal(luis.kills, 18);
+    assert.equal(luis.deaths, 15);
+    assert.equal(luis.assists, 1);
+  });
+});

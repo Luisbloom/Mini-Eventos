@@ -103,14 +103,30 @@ function tablaDeEstadisticas(tabla, filas, columnas, { primera = 'JUGADOR', porE
   tabla.replaceChildren(cabecera, cuerpo);
 }
 
+/**
+ * Las columnas se parten en dos.
+ *
+ * Con las quince que salen de juntar las dos capturas, la tabla no se lee: hay
+ * que elegir qué se enseña de entrada. Los datos se guardan todos igualmente;
+ * esto es sólo qué se pinta primero.
+ */
 const COLUMNAS_PARTIDA = [
   ['acs', 'ACS', 'Puntuación media de combate'],
   ['kills', 'K', 'Bajas'], ['deaths', 'D', 'Muertes'], ['assists', 'A', 'Asistencias'],
   ['plusMinus', '+/-', 'Diferencia entre bajas y muertes'],
   ['adr', 'ADR', 'Daño medio por ronda'],
   ['hsPercent', 'HS%', 'Porcentaje de disparos a la cabeza'],
-  ['kastPercent', 'KAST', 'Rondas con baja, asistencia, supervivencia o intercambio'],
-  ['firstKills', 'FK', 'Primeras bajas'], ['firstDeaths', 'FD', 'Primeras muertes']
+  ['kastPercent', 'KAST', 'Rondas con baja, asistencia, supervivencia o intercambio']
+];
+
+const COLUMNAS_PARTIDA_DETALLE = [
+  ['kdRatio', 'K/D', 'Bajas entre muertes'],
+  ['ddDelta', 'DDΔ', 'Diferencia de daño por ronda'],
+  ['firstKills', 'FK', 'Primeras bajas'], ['firstDeaths', 'FD', 'Primeras muertes'],
+  ['multiKills', 'MK', 'Rondas con varias bajas'],
+  ['economyRating', 'ECO', 'Puntuación de economía'],
+  ['spikesPlanted', 'PLANT', 'Spikes colocadas'],
+  ['defuses', 'DEF', 'Desactivaciones']
 ];
 
 const COLUMNAS_TORNEO = [
@@ -124,6 +140,9 @@ const COLUMNAS_TORNEO = [
   ['firstKills', 'FK', 'Primeras bajas'], ['firstDeaths', 'FD', 'Primeras muertes']
 ];
 
+/** Si se están enseñando también las columnas de detalle. */
+let verDetalle = false;
+
 function abrirEstadisticasDePartida(serie, juego) {
   byId('match-stats-title').textContent =
     `${nombreDe(serie.teamA)} vs ${nombreDe(serie.teamB)}`;
@@ -136,8 +155,26 @@ function abrirEstadisticasDePartida(serie, juego) {
     return (otro.acs ?? -1) - (uno.acs ?? -1);
   });
 
-  tablaDeEstadisticas(byId('match-stats-table'), filas,
-    columnasConDatos(filas, COLUMNAS_PARTIDA), { porEquipo: true });
+  const pintar = () => {
+    const candidatas = verDetalle
+      ? [...COLUMNAS_PARTIDA, ...COLUMNAS_PARTIDA_DETALLE]
+      : COLUMNAS_PARTIDA;
+    tablaDeEstadisticas(byId('match-stats-table'), filas,
+      columnasConDatos(filas, candidatas), { porEquipo: true });
+  };
+
+  // El botón sólo aparece si de verdad hay algo más que enseñar.
+  const hayDetalle = columnasConDatos(filas, COLUMNAS_PARTIDA_DETALLE).length > 0;
+  const alternar = byId('match-stats-detail');
+  alternar.hidden = !hayDetalle;
+  alternar.textContent = verDetalle ? 'VER MENOS' : 'VER TODO';
+  alternar.onclick = () => {
+    verDetalle = !verDetalle;
+    alternar.textContent = verDetalle ? 'VER MENOS' : 'VER TODO';
+    pintar();
+  };
+
+  pintar();
   byId('match-stats-dialog').showModal();
 }
 

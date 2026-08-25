@@ -32,8 +32,10 @@
   /** Las columnas de estadísticas que se pueden editar. */
   const CAMPOS = [
     ['acs', 'ACS'], ['kills', 'K'], ['deaths', 'D'], ['assists', 'A'],
-    ['plusMinus', '+/-'], ['adr', 'ADR'], ['hsPercent', 'HS%'],
-    ['kastPercent', 'KAST'], ['firstKills', 'FK'], ['firstDeaths', 'FD']
+    ['plusMinus', '+/-'], ['kdRatio', 'K/D'], ['ddDelta', 'DDΔ'],
+    ['adr', 'ADR'], ['hsPercent', 'HS%'], ['kastPercent', 'KAST'],
+    ['firstKills', 'FK'], ['firstDeaths', 'FD'], ['multiKills', 'MK'],
+    ['economyRating', 'ECO'], ['spikesPlanted', 'PLANT'], ['defuses', 'DEF']
   ];
 
   // ------------------------------------------------------------ abrir
@@ -103,13 +105,29 @@
     estado.textContent = revisar ? 'REVISAR' : 'LISTO';
     estado.className = `captures-status ${revisar ? 'is-review' : 'is-ready'}`;
 
-    id('captures-issues').replaceChildren(...(preview.issues || []).map((problema) => {
+    const avisos = (preview.issues || []).map((problema) => {
       const fila = document.createElement('li');
       fila.className = `captures-issue is-${problema.code.toLowerCase().replace(/_/g, '-')}`;
       fila.textContent = problema.message;
       return fila;
-    }));
-    id('captures-issues').hidden = !(preview.issues || []).length;
+    });
+
+    // Las diferencias conocidas entre fuentes se cuentan, no se listan una a
+    // una: siete líneas diciendo «el ACS difiere en 1» sólo hacen ruido.
+    const notas = preview.notes || [];
+    if (notas.length) {
+      const fila = document.createElement('li');
+      fila.className = 'captures-issue is-note';
+      const cuantos = notas.filter((nota) => nota.code === 'ROUNDING_VARIANCE').length;
+      fila.textContent = cuantos
+        ? `${cuantos} ${cuantos === 1 ? 'estadística difiere' : 'estadísticas difieren'} en 1 entre `
+          + 'las dos capturas: es el redondeo de cada fuente, no un error.'
+        : `${notas.length} diferencias menores entre capturas.`;
+      avisos.push(fila);
+    }
+
+    id('captures-issues').replaceChildren(...avisos);
+    id('captures-issues').hidden = avisos.length === 0;
 
     // --- mapa y marcador ---
     id('captures-map-input').value = preview.map ?? '';
@@ -214,9 +232,20 @@
         const celda = document.createElement('td');
         const entrada = document.createElement('input');
         entrada.type = 'number';
+        entrada.step = campo === 'adr' || campo === 'kdRatio' ? '0.1' : '1';
         entrada.value = jugador[campo] ?? '';
         entrada.placeholder = '—';       // vacío significa «no visible», no cero
         entrada.size = 4;
+
+        // Si las dos capturas dieron valores distintos, se dice cuál era cuál.
+        const observaciones = jugador.observations?.[campo];
+        if (observaciones && observaciones.length > 1
+          && new Set(observaciones.map((o) => o.value)).size > 1) {
+          entrada.classList.add('has-variance');
+          entrada.title = observaciones
+            .map((o) => `${o.source}: ${o.value}`).join(' · ');
+        }
+
         const detectado = jugador[campo];
         entrada.addEventListener('input', () => {
           jugador[campo] = entrada.value === '' ? null : Number(entrada.value);

@@ -188,7 +188,7 @@ function trackerWords({ teamARounds = MATCH.trackerTeamARounds, teamBRounds = MA
 
 /** Dónde cae cada columna en la pantalla de puntuaciones del cliente. */
 const CLIENT_COLS = Object.freeze({
-  acs: 900, kda: 1120, economy: 1330, firstBloods: 1520, plants: 1700, defuses: 1870
+  acs: 940, kda: 1220, economy: 1500, firstBloods: 1760, plants: 2060, defuses: 2400
 });
 
 /**
@@ -218,12 +218,14 @@ function clientWords({ scoreLine = MATCH.clientScoreLine } = {}) {
   words.push(...fila(y, [
     { text: 'ORDENADO', left: 100 }, { text: 'DE', left: 250 },
     { text: 'FORMA', left: 300 }, { text: 'INDIVIDUAL', left: 400 },
-    { text: 'PUNT.', x: CLIENT_COLS.acs - 60 }, { text: 'MED.', x: CLIENT_COLS.acs },
-    { text: 'COMBATE', x: CLIENT_COLS.acs + 70 },
+    // Las cabeceras de varias palabras van separadas, como en la pantalla real:
+    // si se solapan, el OCR devuelve una sola palabra ilegible.
+    { text: 'PUNT.', x: CLIENT_COLS.acs - 120 }, { text: 'MED.', x: CLIENT_COLS.acs - 20 },
+    { text: 'COMBATE', x: CLIENT_COLS.acs + 100 },
     { text: 'AMA', x: CLIENT_COLS.kda },
     { text: 'ECONOMÍA', x: CLIENT_COLS.economy },
-    { text: 'PRIMERAS', x: CLIENT_COLS.firstBloods - 40 }, { text: 'SANGRES', x: CLIENT_COLS.firstBloods + 50 },
-    { text: 'SPIKES', x: CLIENT_COLS.plants - 40 }, { text: 'COLOCADAS', x: CLIENT_COLS.plants + 50 },
+    { text: 'PRIMERAS', x: CLIENT_COLS.firstBloods - 80 }, { text: 'SANGRES', x: CLIENT_COLS.firstBloods + 80 },
+    { text: 'SPIKES', x: CLIENT_COLS.plants - 90 }, { text: 'COLOCADAS', x: CLIENT_COLS.plants + 80 },
     { text: 'DESACTIVACIONES', x: CLIENT_COLS.defuses }
   ]));
   y += ALTO_LINEA * 2;
@@ -234,11 +236,13 @@ function clientWords({ scoreLine = MATCH.clientScoreLine } = {}) {
     words.push(...fila(y, [
       { text: jugador.name, left: 160 },
       { text: jugador.acsClient, x: CLIENT_COLS.acs },
-      { text: String(jugador.k), x: CLIENT_COLS.kda - 55 },
-      { text: '/', x: CLIENT_COLS.kda - 25 },
+      // Con las barras pegadas a los dígitos el OCR las lee como parte del
+      // número; el cliente real las separa, y el fixture también.
+      { text: String(jugador.k), x: CLIENT_COLS.kda - 110 },
+      { text: '/', x: CLIENT_COLS.kda - 55 },
       { text: String(jugador.d), x: CLIENT_COLS.kda },
-      { text: '/', x: CLIENT_COLS.kda + 25 },
-      { text: String(jugador.a), x: CLIENT_COLS.kda + 55 },
+      { text: '/', x: CLIENT_COLS.kda + 55 },
+      { text: String(jugador.a), x: CLIENT_COLS.kda + 110 },
       { text: jugador.economy, x: CLIENT_COLS.economy },
       { text: jugador.fk, x: CLIENT_COLS.firstBloods },
       { text: jugador.plants, x: CLIENT_COLS.plants },

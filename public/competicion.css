@@ -63,3 +63,19 @@
   background: transparent; color: var(--muted); cursor: pointer;
 }
 .match-stats-dialog .league-table-wrap { border: 0; }
+
+/* Con quince columnas la tabla no se lee de golpe: se separan en dos vistas. */
+.match-stats-actions { display: flex; align-items: center; gap: .6rem; }
+#match-stats-detail {
+  padding: .45rem .8rem; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); cursor: pointer;
+  font: .55rem/1 var(--mono); letter-spacing: .1em; white-space: nowrap;
+}
+#match-stats-detail:hover { border-color: var(--event-accent); color: var(--paper); }
+
+@media (max-width: 620px) {
+  /* En móvil manda el scroll horizontal: comprimir quince columnas las hace
+     ilegibles, y una tabla ilegible no informa de nada. */
+  .public-players { min-width: 720px; }
+  .match-stats-head { flex-wrap: wrap; }
+}

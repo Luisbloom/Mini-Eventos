@@ -106,21 +106,53 @@ const PERCENT_FIELDS = Object.freeze(new Set(['hsPercent', 'kastPercent']));
 /** Campos con decimales de verdad; el resto se redondea a entero. */
 const DECIMAL_FIELDS = Object.freeze(new Set(['adr', 'kdRatio']));
 
-function fieldForHeader(texto) {
+/**
+ * Los mismos alias con los espacios quitados.
+ *
+ * Tesseract junta con facilidad las palabras cortas y pegadas de una cabecera:
+ * «PUNT. MED. COMBATE» llega como «PUNT.MEDCOMBATE». Sin esto, esa columna se
+ * pierde entera y con ella todos sus números.
+ */
+const ALIASES_SIN_ESPACIOS = Object.freeze(Object.fromEntries(
+  Object.entries(COLUMN_ALIASES).map(([alias, campo]) => [alias.replace(/\s/g, ''), campo])
+));
+
+const IGNORADOS_SIN_ESPACIOS = Object.freeze(new Set(
+  [...IGNORED_HEADERS].map((alias) => alias.replace(/\s/g, ''))
+));
+
+/**
+ * @param {string} texto
+ * @param {{glued?: boolean}} opciones  `glued` sólo cuando el texto viene de UNA
+ *   palabra: es la que el OCR pudo haber fusionado. Aplicarlo a varias palabras
+ *   seguidas haría que «K D A» encajara con el alias de la celda agrupada y se
+ *   comiera las tres columnas sueltas.
+ */
+function fieldForHeader(texto, { glued = false } = {}) {
   const clave = normalizeHeader(texto);
   if (IGNORED_HEADERS.has(clave)) return null;
-  return COLUMN_ALIASES[clave] ?? null;
+  if (COLUMN_ALIASES[clave]) return COLUMN_ALIASES[clave];
+  if (!glued) return null;
+
+  const pegado = clave.replace(/\s/g, '');
+  if (IGNORADOS_SIN_ESPACIOS.has(pegado)) return null;
+  return ALIASES_SIN_ESPACIOS[pegado] ?? null;
 }
 
 /** Si es una cabecera que sabemos reconocer, traiga datos o no. */
-function isKnownHeader(texto) {
+function isKnownHeader(texto, { glued = false } = {}) {
   const clave = normalizeHeader(texto);
-  return IGNORED_HEADERS.has(clave) || Boolean(COLUMN_ALIASES[clave]);
+  if (IGNORED_HEADERS.has(clave) || COLUMN_ALIASES[clave]) return true;
+  if (!glued) return false;
+  const pegado = clave.replace(/\s/g, '');
+  return IGNORADOS_SIN_ESPACIOS.has(pegado) || Boolean(ALIASES_SIN_ESPACIOS[pegado]);
 }
 
 /** Si ocupa una columna propia entre el nombre y los datos. */
 function isSpacerHeader(texto) {
-  return SPACER_HEADERS.has(normalizeHeader(texto));
+  const clave = normalizeHeader(texto);
+  return SPACER_HEADERS.has(clave)
+    || [...SPACER_HEADERS].some((alias) => alias.replace(/\s/g, '') === clave.replace(/\s/g, ''));
 }
 
 module.exports = {

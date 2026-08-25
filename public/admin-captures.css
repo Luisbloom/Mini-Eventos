@@ -97,3 +97,8 @@
   .captures-dialog { width: 100vw; max-height: 100vh; border-radius: 0; }
   .captures-actions button { flex: 1 1 100%; }
 }
+
+/* Una nota, no un problema: las dos fuentes redondean distinto y ya está. */
+.captures-issue.is-note { border-left-color: #78b4dc; background: rgba(120, 180, 220, .09); }
+/* Un valor que difiere entre capturas dentro de lo tolerado. */
+.captures-players input.has-variance { border-color: #78b4dc; border-style: dashed; }
