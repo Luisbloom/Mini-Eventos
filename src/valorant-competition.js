@@ -1,6 +1,7 @@
 'use strict';
 
 const { roundRobinSchedule, scheduleSummary } = require('./services/round-robin');
+const { validateValorantScore, DEFAULT_SCORE_POLICY } = require('./services/valorant-score');
 
 /**
  * Fase regular de un torneo por equipos: calendario, mapas, resultados y
@@ -40,9 +41,24 @@ const DEFAULT_MAP_POOL = Object.freeze([
   { key: 'abyss', name: 'Abyss' }
 ]);
 
-/** Criterios de desempate que la organización puede ordenar como quiera. */
-const TIEBREAKERS = Object.freeze(['wins', 'head_to_head', 'round_diff', 'rounds_for']);
-const DEFAULT_TIEBREAKERS = Object.freeze(['wins', 'head_to_head', 'round_diff', 'rounds_for']);
+/**
+ * Las victorias mandan siempre y van primero: eso no es configurable. Poner la
+ * diferencia de rondas por delante haría que un equipo con menos victorias
+ * quedara por encima de otro con más, y eso ya no es una liga.
+ *
+ * Lo que la organización sí ordena es lo que viene DESPUÉS del empate a
+ * victorias.
+ */
+const PRIMARY_TIEBREAKER = 'wins';
+const SECONDARY_TIEBREAKERS = Object.freeze(['head_to_head', 'round_diff', 'rounds_for']);
+const TIEBREAKERS = Object.freeze([PRIMARY_TIEBREAKER, ...SECONDARY_TIEBREAKERS]);
+const DEFAULT_TIEBREAKERS = Object.freeze([...TIEBREAKERS]);
+
+/** En esta fase clasifican cuatro. Con cuatro equipos, todos. */
+const QUALIFIERS = 4;
+
+/** Lo que hay que escribir para rehacer un calendario y perder los resultados. */
+const REGENERATE_CONFIRMATION = 'REGENERATE';
 
 class CompetitionError extends Error {
   constructor(message, code = 'VALORANT_COMPETITION_ERROR', status = 400) {
@@ -107,6 +123,87 @@ function migrateValorantCompetition(connection) {
       FOREIGN KEY(winner_team_id) REFERENCES teams(id) ON DELETE SET NULL
     );
 
+    /*
+      Ingesta de capturas. El lote es la unidad: varias imágenes del mismo
+      partido se leen juntas y se confirman de una vez, porque una captura de
+      Valorant y una de Tracker del mismo mapa se complementan.
+    */
+    CREATE TABLE IF NOT EXISTS valorant_capture_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL,
+      series_id INTEGER NOT NULL,
+      game_number INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'UPLOADED'
+        CHECK (status IN ('UPLOADED','PROCESSING','REVIEW_REQUIRED','READY','CONFIRMED','REJECTED')),
+      detected_source TEXT,
+      detected_map TEXT,
+      detected_team_a_rounds INTEGER,
+      detected_team_b_rounds INTEGER,
+      confidence REAL,
+      parsed_json TEXT,
+      error_code TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (${NOW}),
+      confirmed_at TEXT,
+      confirmed_by TEXT,
+      FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+      FOREIGN KEY(series_id) REFERENCES valorant_series(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_batches_series ON valorant_capture_batches(series_id, game_number);
+
+    CREATE TABLE IF NOT EXISTS valorant_captures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_id INTEGER NOT NULL,
+      storage_key TEXT NOT NULL,
+      original_filename TEXT,
+      mime_type TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      bytes INTEGER,
+      sha256 TEXT NOT NULL,
+      source_kind TEXT NOT NULL DEFAULT 'UNKNOWN'
+        CHECK (source_kind IN ('VALORANT_POST_MATCH','VALORANT_SCOREBOARD','TRACKER_MATCH','UNKNOWN')),
+      ocr_text TEXT,
+      ocr_json TEXT,
+      confidence REAL,
+      created_at TEXT NOT NULL DEFAULT (${NOW}),
+      UNIQUE(batch_id, sha256),
+      FOREIGN KEY(batch_id) REFERENCES valorant_capture_batches(id) ON DELETE CASCADE
+    );
+
+    /*
+      Estadísticas por jugador y partida. La columna stats_json guarda lo leído
+      y todavía no tiene columna propia: no se pierde un dato sólo porque el
+      esquema no lo previera.
+    */
+    CREATE TABLE IF NOT EXISTS valorant_player_game_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id INTEGER NOT NULL,
+      participant_id INTEGER NOT NULL,
+      team_id INTEGER NOT NULL,
+      agent TEXT,
+      acs INTEGER,
+      kills INTEGER,
+      deaths INTEGER,
+      assists INTEGER,
+      plus_minus INTEGER,
+      adr INTEGER,
+      hs_percent REAL,
+      kast_percent REAL,
+      first_kills INTEGER,
+      first_deaths INTEGER,
+      stats_json TEXT,
+      source_capture_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (${NOW}),
+      updated_at TEXT NOT NULL DEFAULT (${NOW}),
+      UNIQUE(game_id, participant_id),
+      FOREIGN KEY(game_id) REFERENCES valorant_games(id) ON DELETE CASCADE,
+      FOREIGN KEY(participant_id) REFERENCES event_participants(id) ON DELETE CASCADE,
+      FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE,
+      FOREIGN KEY(source_capture_id) REFERENCES valorant_captures(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_stats_participant ON valorant_player_game_stats(participant_id);
+
     CREATE TABLE IF NOT EXISTS valorant_settings (
       event_id INTEGER PRIMARY KEY,
       tiebreakers_json TEXT NOT NULL DEFAULT '["wins","head_to_head","round_diff","rounds_for"]',
@@ -132,6 +229,40 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
     status: row.status,
     winnerTeamId: row.winner_team_id,
     scheduledAt: row.scheduled_at
+  };
+
+  /** Ausente no es cero: lo que no se ve se guarda como NULL. */
+  const entero = (valor) => {
+    if (valor === null || valor === undefined || valor === '') return null;
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? Math.round(numero) : null;
+  };
+
+  const porcentaje = (valor) => {
+    const numero = entero(valor);
+    if (numero === null) return null;
+    if (numero < 0 || numero > 100) {
+      throw new CompetitionError('Un porcentaje va de 0 a 100.', 'INVALID_PERCENT');
+    }
+    return numero;
+  };
+
+  const toStats = (row) => row && {
+    gameId: row.game_id,
+    participantId: row.participant_id,
+    teamId: row.team_id,
+    agent: row.agent,
+    acs: row.acs,
+    kills: row.kills,
+    deaths: row.deaths,
+    assists: row.assists,
+    plusMinus: row.plus_minus,
+    adr: row.adr,
+    hsPercent: row.hs_percent,
+    kastPercent: row.kast_percent,
+    firstKills: row.first_kills,
+    firstDeaths: row.first_deaths,
+    extra: row.stats_json ? JSON.parse(row.stats_json) : null
   };
 
   const toGame = (row) => row && {
@@ -206,26 +337,52 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
 
     getSettings(eventId) {
       const row = connection.prepare('SELECT * FROM valorant_settings WHERE event_id=?').get(eventId);
-      if (!row) {
-        return { tiebreakers: [...DEFAULT_TIEBREAKERS], qualifiers: 4 };
-      }
-      return { tiebreakers: JSON.parse(row.tiebreakers_json), qualifiers: row.qualifiers };
+      const guardados = row ? JSON.parse(row.tiebreakers_json) : [...SECONDARY_TIEBREAKERS];
+      return {
+        // Las victorias se reponen siempre las primeras aunque en la base haya
+        // quedado otra cosa de una versión anterior.
+        tiebreakers: [PRIMARY_TIEBREAKER, ...guardados.filter((c) => c !== PRIMARY_TIEBREAKER)],
+        qualifiers: QUALIFIERS,
+        scorePolicy: { ...DEFAULT_SCORE_POLICY }
+      };
     },
 
+    /**
+     * La organización ordena los desempates que van DESPUÉS de las victorias.
+     * Ni las victorias se pueden quitar ni el número de clasificados se toca:
+     * son reglas de la fase, no preferencias.
+     */
     setSettings(eventId, { tiebreakers, qualifiers, actor = 'admin' } = {}) {
-      const criterios = (tiebreakers || DEFAULT_TIEBREAKERS).map(String);
-      for (const criterio of criterios) {
+      if (qualifiers !== undefined && Number(qualifiers) !== QUALIFIERS) {
+        throw new CompetitionError(
+          `En esta fase clasifican siempre ${QUALIFIERS}.`, 'QUALIFIERS_FIXED');
+      }
+
+      const pedidos = (tiebreakers ?? DEFAULT_TIEBREAKERS).map(String);
+      for (const criterio of pedidos) {
         if (!TIEBREAKERS.includes(criterio)) {
           throw new CompetitionError(`Criterio de desempate desconocido: ${criterio}.`, 'UNKNOWN_TIEBREAKER');
         }
       }
-      const clasifican = Number(qualifiers ?? 4);
+      // Aceptar la lista con 'wins' delante o sin ella, pero nunca con 'wins'
+      // en otro sitio: eso sería pedir que la diferencia de rondas mande.
+      const posicion = pedidos.indexOf(PRIMARY_TIEBREAKER);
+      if (posicion > 0) {
+        throw new CompetitionError(
+          'Las victorias mandan siempre y van las primeras.', 'WINS_MUST_BE_FIRST');
+      }
+      const secundarios = pedidos.filter((c) => c !== PRIMARY_TIEBREAKER);
+      if (new Set(secundarios).size !== secundarios.length) {
+        throw new CompetitionError('Hay un criterio de desempate repetido.', 'DUPLICATE_TIEBREAKER');
+      }
+
       connection.prepare(`
         INSERT INTO valorant_settings (event_id,tiebreakers_json,qualifiers) VALUES (?,?,?)
         ON CONFLICT(event_id) DO UPDATE SET
           tiebreakers_json=excluded.tiebreakers_json, qualifiers=excluded.qualifiers, updated_at=${NOW}
-      `).run(eventId, JSON.stringify(criterios), clasifican);
-      registrar(eventId, actor, 'COMPETITION_SETTINGS_UPDATED', null, null, { tiebreakers: criterios, qualifiers: clasifican });
+      `).run(eventId, JSON.stringify(secundarios), QUALIFIERS);
+      registrar(eventId, actor, 'COMPETITION_SETTINGS_UPDATED', null, null,
+        { tiebreakers: [PRIMARY_TIEBREAKER, ...secundarios] });
       return this.getSettings(eventId);
     },
 
@@ -252,16 +409,57 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       ).get(eventId).total > 0;
     },
 
+    /** Cuántos partidos ya tienen resultado: lo que se perdería al rehacer. */
+    completedCount(eventId, stage = 'REGULAR') {
+      return connection.prepare(`
+        SELECT COUNT(*) total FROM valorant_games g
+        JOIN valorant_series s ON s.id = g.series_id
+        WHERE s.event_id=? AND s.stage=? AND g.status='COMPLETED'`).get(eventId, stage).total;
+    },
+
     /**
-     * Crea el calendario. `force` existe para rehacerlo si algo salió mal, pero
-     * borra resultados: por eso hay que pedirlo a propósito.
+     * Crea el calendario. Nunca borra nada: si ya existe, se niega. Rehacerlo
+     * es otra operación, `regenerateRegularSeason`, precisamente para que un
+     * booleano suelto en un cuerpo JSON no pueda tirar la fase regular entera.
      */
-    generateRegularSeason(eventId, teamIds, { bestOf = 1, force = false, actor = 'admin', reason = null } = {}) {
-      if (this.hasRegularSeason(eventId) && !force) {
+    generateRegularSeason(eventId, teamIds, { bestOf = 1, actor = 'admin' } = {}) {
+      if (this.hasRegularSeason(eventId)) {
         throw new CompetitionError(
-          'La fase regular ya está generada. Para rehacerla hay que pedirlo expresamente.',
+          'La fase regular ya está generada. Rehacerla es otra operación.',
           'REGULAR_SEASON_EXISTS', 409);
       }
+      return this.buildRegularSeason(eventId, teamIds, { bestOf, actor });
+    },
+
+    /**
+     * Rehace el calendario BORRANDO los partidos y sus resultados.
+     *
+     * Pide un texto exacto además del motivo: un `force: true` es demasiado
+     * fácil de mandar por error desde un cliente, y esto no se puede deshacer.
+     */
+    regenerateRegularSeason(eventId, teamIds, { bestOf = 1, actor = 'admin', reason = null, confirmation = null } = {}) {
+      if (!this.hasRegularSeason(eventId)) {
+        throw new CompetitionError(
+          'No hay ninguna fase regular que rehacer.', 'REGULAR_SEASON_MISSING', 409);
+      }
+      if (!reason || !String(reason).trim()) {
+        throw new CompetitionError('Hace falta un motivo.', 'REASON_REQUIRED');
+      }
+      if (String(confirmation) !== REGENERATE_CONFIRMATION) {
+        throw new CompetitionError(
+          `Rehacer el calendario borra los partidos y sus resultados. Para confirmarlo hay que escribir ${REGENERATE_CONFIRMATION}.`,
+          'CONFIRMATION_REQUIRED');
+      }
+
+      const perdidos = this.completedCount(eventId);
+      const hecho = this.buildRegularSeason(eventId, teamIds, {
+        bestOf, actor, reason, replace: true, discardedResults: perdidos
+      });
+      return { series: hecho, discardedResults: perdidos };
+    },
+
+    /** El trabajo común de generar y rehacer. No comprueba permisos: ya lo hicieron. */
+    buildRegularSeason(eventId, teamIds, { bestOf = 1, actor = 'admin', reason = null, replace = false, discardedResults = 0 } = {}) {
       if (!Array.isArray(teamIds) || teamIds.length < 2) {
         throw new CompetitionError('Hacen falta al menos dos equipos.', 'NOT_ENOUGH_TEAMS');
       }
@@ -269,7 +467,8 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       const calendario = roundRobinSchedule(teamIds);
 
       const generar = connection.transaction(() => {
-        if (force) {
+        if (replace) {
+          // ON DELETE CASCADE se lleva partidas, y con ellas las estadísticas.
           connection.prepare("DELETE FROM valorant_series WHERE event_id=? AND stage='REGULAR'").run(eventId);
         }
         const insertarSerie = connection.prepare(`
@@ -292,8 +491,12 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       });
       generar();
 
-      registrar(eventId, actor, force ? 'REGULAR_SEASON_REGENERATED' : 'REGULAR_SEASON_GENERATED',
-        null, reason, { teams: teamIds.length, ...scheduleSummary(teamIds.length) });
+      registrar(eventId, actor, replace ? 'REGULAR_SEASON_REGENERATED' : 'REGULAR_SEASON_GENERATED',
+        null, reason, {
+          teams: teamIds.length,
+          ...scheduleSummary(teamIds.length),
+          ...(replace ? { discardedResults } : {})
+        });
       return this.listSeries(eventId);
     },
 
@@ -340,6 +543,72 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       return this.getSeries(eventId, seriesId);
     },
 
+    // ---------------------------------------------------- estadísticas
+
+    /**
+     * Reemplaza las estadísticas de una partida. Va dentro de la transacción de
+     * quien la llama: si el resultado no entra, las estadísticas tampoco.
+     */
+    _replaceGameStats(gameId, serie, jugadores, captureBatchId = null) {
+      connection.prepare('DELETE FROM valorant_player_game_stats WHERE game_id=?').run(gameId);
+      const insertar = connection.prepare(`
+        INSERT INTO valorant_player_game_stats
+          (game_id, participant_id, team_id, agent, acs, kills, deaths, assists, plus_minus,
+           adr, hs_percent, kast_percent, first_kills, first_deaths, stats_json, source_capture_id)
+        VALUES (@gameId, @participantId, @teamId, @agent, @acs, @kills, @deaths, @assists, @plusMinus,
+                @adr, @hsPercent, @kastPercent, @firstKills, @firstDeaths, @statsJson, @sourceCaptureId)`);
+
+      const equipos = new Set([serie.team_a_id, serie.team_b_id]);
+      const vistos = new Set();
+
+      for (const jugador of jugadores) {
+        const participantId = Number(jugador.participantId);
+        const teamId = Number(jugador.teamId);
+        if (!equipos.has(teamId)) {
+          throw new CompetitionError(
+            'Ese equipo no juega este partido.', 'TEAM_NOT_IN_SERIES');
+        }
+        if (vistos.has(participantId)) {
+          throw new CompetitionError(
+            'Un jugador no puede aparecer dos veces en la misma partida.', 'DUPLICATE_PLAYER');
+        }
+        vistos.add(participantId);
+
+        insertar.run({
+          gameId,
+          participantId,
+          teamId,
+          agent: jugador.agent ?? null,
+          // Ausente y cero son cosas distintas: un dato que no se ve queda NULL.
+          acs: entero(jugador.acs),
+          kills: entero(jugador.kills),
+          deaths: entero(jugador.deaths),
+          assists: entero(jugador.assists),
+          plusMinus: entero(jugador.plusMinus),
+          adr: entero(jugador.adr),
+          hsPercent: porcentaje(jugador.hsPercent),
+          kastPercent: porcentaje(jugador.kastPercent),
+          firstKills: entero(jugador.firstKills),
+          firstDeaths: entero(jugador.firstDeaths),
+          statsJson: jugador.extra && Object.keys(jugador.extra).length
+            ? JSON.stringify(jugador.extra) : null,
+          sourceCaptureId: jugador.sourceCaptureId ?? null
+        });
+      }
+
+      if (captureBatchId) {
+        connection.prepare(
+          `UPDATE valorant_capture_batches SET status='CONFIRMED', confirmed_at=${NOW} WHERE id=?`
+        ).run(captureBatchId);
+      }
+    },
+
+    listGameStats(gameId) {
+      return connection.prepare(
+        'SELECT * FROM valorant_player_game_stats WHERE game_id=? ORDER BY team_id, acs DESC, kills DESC'
+      ).all(gameId).map(toStats);
+    },
+
     getSeries(eventId, seriesId) {
       const serie = toSeries(connection.prepare('SELECT * FROM valorant_series WHERE id=? AND event_id=?')
         .get(seriesId, eventId));
@@ -356,21 +625,47 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
      * partir de las rondas: aceptar un ganador del cliente permitiría registrar
      * un 13-8 perdido.
      */
-    recordGameResult(eventId, { seriesId, gameNumber = 1, teamARounds, teamBRounds, source = 'MANUAL', reason = null, actor = 'admin', allowOverwrite = false }) {
+    /**
+     * Guarda el resultado de una partida.
+     *
+     * Nunca sobrescribe: corregir un resultado ya cerrado es `correctGameResult`,
+     * una acción distinta. Que el mismo endpoint sirviera para las dos cosas
+     * dependiendo de un campo del cuerpo convertía un error de tecleo en un
+     * borrado silencioso.
+     */
+    recordGameResult(eventId, { seriesId, gameNumber = 1, teamARounds, teamBRounds, source = 'MANUAL', reason = null, actor = 'admin', stats = null, captureBatchId = null }) {
+      return this._writeResult(eventId, {
+        seriesId, gameNumber, teamARounds, teamBRounds, source, reason, actor, stats, captureBatchId,
+        overwrite: false
+      });
+    },
+
+    /**
+     * Corrige un resultado ya cerrado. Guarda en la auditoría qué había antes y
+     * qué queda: sin eso, tres días después nadie sabe explicar el cambio.
+     */
+    correctGameResult(eventId, { seriesId, gameNumber = 1, teamARounds, teamBRounds, source = 'MANUAL', reason = null, actor = 'admin', stats = null, captureBatchId = null }) {
+      return this._writeResult(eventId, {
+        seriesId, gameNumber, teamARounds, teamBRounds, source, reason, actor, stats, captureBatchId,
+        overwrite: true
+      });
+    },
+
+    _writeResult(eventId, { seriesId, gameNumber, teamARounds, teamBRounds, source, reason, actor, overwrite, stats, captureBatchId }) {
       if (!RESULT_SOURCES.includes(source)) {
         throw new CompetitionError('Origen de resultado desconocido.', 'UNKNOWN_RESULT_SOURCE');
       }
-      const a = Number(teamARounds);
-      const b = Number(teamBRounds);
-      if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
-        throw new CompetitionError('Las rondas deben ser números enteros.', 'INVALID_ROUNDS');
-      }
-      if (a === b) {
-        throw new CompetitionError('Una partida de Valorant no acaba en empate.', 'INVALID_ROUNDS');
-      }
-      if (!reason || !String(reason).trim()) {
+      // Una captura confirmada es su propia justificación: lleva las imágenes
+      // detrás. Lo que se teclea a mano, no.
+      const motivoObligatorio = overwrite || source !== 'SCREENSHOT';
+      if (motivoObligatorio && (!reason || !String(reason).trim())) {
         throw new CompetitionError('Hace falta un motivo.', 'REASON_REQUIRED');
       }
+
+      const marcador = validateValorantScore(teamARounds, teamBRounds, this.getSettings(eventId).scorePolicy);
+      if (!marcador.ok) throw new CompetitionError(marcador.message, marcador.code);
+      const a = Number(teamARounds);
+      const b = Number(teamBRounds);
 
       const guardar = connection.transaction(() => {
         const serie = connection.prepare('SELECT * FROM valorant_series WHERE id=? AND event_id=?')
@@ -381,19 +676,33 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           .get(seriesId, gameNumber);
         if (!juego) throw new CompetitionError('Esa partida no existe.', 'GAME_NOT_FOUND', 404);
 
-        // No se pisa un resultado cerrado por accidente: corregir es otra acción.
-        if (juego.status === 'COMPLETED' && !allowOverwrite) {
+        // El resultado pertenece a serie + partida + MAPA. Sin mapa asignado no
+        // se sabe de qué partida es, y con capturas eso importa todavía más.
+        if (!juego.map_key) {
           throw new CompetitionError(
-            'Esa partida ya tiene resultado. Para cambiarlo hay que corregirlo expresamente.',
-            'RESULT_ALREADY_RECORDED', 409);
+            'Asigna el mapa antes de registrar el resultado.', 'MAP_REQUIRED', 409);
         }
 
-        const ganador = a > b ? serie.team_a_id : serie.team_b_id;
+        if (juego.status === 'COMPLETED' && !overwrite) {
+          throw new CompetitionError(
+            'Esa partida ya tiene resultado. Corregirlo es otra acción.',
+            'RESULT_ALREADY_RECORDED', 409);
+        }
+        if (juego.status !== 'COMPLETED' && overwrite) {
+          throw new CompetitionError(
+            'Esa partida todavía no tiene resultado que corregir.', 'RESULT_NOT_RECORDED', 409);
+        }
+
+        // El ganador sale del marcador. Aceptarlo de fuera permitiría registrar
+        // un 13-8 perdido.
+        const ganador = marcador.winner === 'a' ? serie.team_a_id : serie.team_b_id;
         connection.prepare(`
           UPDATE valorant_games
           SET team_a_rounds=?, team_b_rounds=?, winner_team_id=?, result_source=?,
               status='COMPLETED', updated_at=${NOW}
           WHERE id=?`).run(a, b, ganador, source, juego.id);
+
+        if (stats) this._replaceGameStats(juego.id, serie, stats, captureBatchId);
 
         // La serie se cierra cuando alguien llega a los mapas necesarios.
         const necesarios = Math.floor(serie.best_of / 2) + 1;
@@ -410,12 +719,23 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             `UPDATE valorant_series SET status='WAITING_RESULT', updated_at=${NOW} WHERE id=?`
           ).run(seriesId);
         }
-        return ganador;
+
+        return {
+          ganador,
+          antes: juego.status === 'COMPLETED'
+            ? { teamARounds: juego.team_a_rounds, teamBRounds: juego.team_b_rounds, source: juego.result_source }
+            : null
+        };
       });
 
-      const ganador = guardar();
-      registrar(eventId, actor, allowOverwrite ? 'RESULT_CORRECTED' : 'RESULT_RECORDED',
-        `series:${seriesId}`, reason, { gameNumber, teamARounds: a, teamBRounds: b, source, winnerTeamId: ganador });
+      const { ganador, antes } = guardar();
+      registrar(eventId, actor, overwrite ? 'RESULT_CORRECTED' : 'RESULT_RECORDED',
+        `series:${seriesId}`, reason, {
+          gameNumber, teamARounds: a, teamBRounds: b, source, winnerTeamId: ganador,
+          overtime: marcador.overtime,
+          ...(captureBatchId ? { captureBatchId } : {}),
+          ...(antes ? { previous: antes } : {})
+        });
       return this.getSeries(eventId, seriesId);
     },
 
@@ -574,6 +894,10 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
 
 module.exports = {
   migrateValorantCompetition,
+  QUALIFIERS,
+  REGENERATE_CONFIRMATION,
+  PRIMARY_TIEBREAKER,
+  SECONDARY_TIEBREAKERS,
   createValorantCompetitionStore,
   CompetitionError,
   RESULT_SOURCES,

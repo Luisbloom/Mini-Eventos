@@ -122,12 +122,17 @@
         : 'Motivo del resultado manual (queda registrado):');
       if (!motivo || !motivo.trim()) return;
       try {
-        await api(`/api/admin/events/${evento.id}/competition/result`, {
+        // Crear y corregir son rutas distintas: ningún campo del cuerpo puede
+        // convertir la una en la otra.
+        const ruta = corregir
+          ? `/api/admin/events/${evento.id}/competition/result/correct`
+          : `/api/admin/events/${evento.id}/competition/result`;
+        await api(ruta, {
           method: 'POST',
           body: JSON.stringify({
             seriesId: serie.id, gameNumber: juego.gameNumber,
             teamARounds: Number(rondasA.value), teamBRounds: Number(rondasB.value),
-            reason: motivo.trim(), correct: corregir
+            reason: motivo.trim()
           })
         });
         aviso('Resultado guardado.');
@@ -227,21 +232,50 @@
 
   // ------------------------------------------------------------ acciones
 
-  async function generar(rehacer = false) {
-    if (rehacer && !confirm(
-      '¿Rehacer el calendario?\n\nSe borran TODOS los partidos y resultados de la fase regular.')) return;
-    const motivo = rehacer ? prompt('Motivo (queda registrado):') : null;
-    if (rehacer && (!motivo || !motivo.trim())) return;
-
+  async function generar() {
     try {
-      await api(`/api/admin/events/${evento.id}/competition/generate`, {
-        method: 'POST',
-        body: JSON.stringify({ force: rehacer, reason: motivo ? motivo.trim() : null })
-      });
-      aviso(rehacer ? 'Calendario rehecho.' : 'Fase regular generada.');
+      await api(`/api/admin/events/${evento.id}/competition/generate`, { method: 'POST' });
+      aviso('Fase regular generada.');
       await cargar(evento);
     } catch (error) {
       aviso(error.message || 'No se ha podido generar la fase regular.', true);
+    }
+  }
+
+  /**
+   * Rehacer borra los partidos y sus resultados, y no se puede deshacer. Por eso
+   * dice cuántos se van a perder y hay que escribir la palabra: un botón que
+   * sólo pide «¿seguro?» se acaba pulsando sin leerlo.
+   */
+  async function rehacer() {
+    const jugados = (estado.matchdays || []).reduce(
+      (total, jornada) => total + jornada.series.filter((s) => s.status === 'COMPLETED').length, 0);
+
+    const advertencia = jugados > 0
+      ? `Se borrarán TODOS los partidos y los ${jugados} resultados ya registrados.`
+      : 'Se borrarán todos los partidos del calendario.';
+    if (!confirm(`¿Rehacer el calendario?\n\n${advertencia}\n\nEsto no se puede deshacer.`)) return;
+
+    const motivo = prompt('Motivo (queda registrado):');
+    if (!motivo || !motivo.trim()) return;
+
+    const confirmacion = prompt('Escribe REGENERATE para confirmar:');
+    if (confirmacion !== 'REGENERATE') {
+      aviso('Rehacer cancelado: la confirmación no coincide.');
+      return;
+    }
+
+    try {
+      const hecho = await api(`/api/admin/events/${evento.id}/competition/regenerate`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: motivo.trim(), confirmation: 'REGENERATE' })
+      });
+      aviso(hecho.discardedResults
+        ? `Calendario rehecho. Se han descartado ${hecho.discardedResults} resultados.`
+        : 'Calendario rehecho.');
+      await cargar(evento);
+    } catch (error) {
+      aviso(error.message || 'No se ha podido rehacer el calendario.', true);
     }
   }
 
@@ -285,8 +319,8 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     id('save-league-maps')?.addEventListener('click', guardarMapas);
-    id('generate-league')?.addEventListener('click', () => generar(false));
-    id('regenerate-league')?.addEventListener('click', () => generar(true));
+    id('generate-league')?.addEventListener('click', () => generar());
+    id('regenerate-league')?.addEventListener('click', () => rehacer());
   });
 
   window.addEventListener('jartiland:event-selected', (suceso) => {

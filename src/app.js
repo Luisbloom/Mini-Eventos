@@ -925,25 +925,60 @@ function createApp({
     } catch (error) { next(error); }
   });
 
-  /** Sólo con el draft terminado: sin equipos completos no hay liga que generar. */
+  /** Los equipos del evento, comprobando que el draft ha terminado. */
+  function teamsReadyForSeason(id, response) {
+    const draft = database.valorant.getDraft(id);
+    if (!draft || draft.status !== 'COMPLETED') {
+      sendError(response, 409, 'DRAFT_NOT_COMPLETED',
+        'La fase regular se genera cuando el draft ha terminado.');
+      return null;
+    }
+    const teams = database.valorant.listTeams(id);
+    if (teams.some((team) => team.members.length !== draft.teamSize)) {
+      sendError(response, 409, 'TEAMS_INCOMPLETE', 'Hay equipos incompletos.');
+      return null;
+    }
+    return teams;
+  }
+
+  /**
+   * Genera la fase regular. Nunca borra: si ya existe, 409. Un `force` en el
+   * cuerpo no hace nada aquí a propósito — rehacer tiene su propia ruta.
+   */
   app.post('/api/admin/events/:id/competition/generate', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
-      const draft = database.valorant.getDraft(id);
-      if (!draft || draft.status !== 'COMPLETED') {
-        return sendError(response, 409, 'DRAFT_NOT_COMPLETED',
-          'La fase regular se genera cuando el draft ha terminado.');
-      }
-      const teams = database.valorant.listTeams(id);
-      if (teams.some((team) => team.members.length !== draft.teamSize)) {
-        return sendError(response, 409, 'TEAMS_INCOMPLETE', 'Hay equipos incompletos.');
-      }
+      const teams = teamsReadyForSeason(id, response);
+      if (!teams) return;
 
       const series = database.valorantCompetition.generateRegularSeason(
-        id, teams.map((team) => team.id),
-        { force: request.body?.force === true, reason: request.body?.reason ?? null });
+        id, teams.map((team) => team.id));
       draftStream.publish(id, 'competition_updated');
       response.status(201).json({ series, matchdays: database.valorantCompetition.matchdays(id) });
+    } catch (error) { next(error); }
+  });
+
+  /**
+   * Rehace el calendario y BORRA los resultados. Ruta aparte y con confirmación
+   * escrita: un booleano suelto en un cuerpo JSON no puede tirar la fase regular.
+   */
+  app.post('/api/admin/events/:id/competition/regenerate', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const teams = teamsReadyForSeason(id, response);
+      if (!teams) return;
+
+      const hecho = database.valorantCompetition.regenerateRegularSeason(
+        id, teams.map((team) => team.id), {
+          reason: request.body?.reason ?? null,
+          confirmation: request.body?.confirmation ?? null
+        });
+      draftStream.publish(id, 'competition_updated');
+      response.json({
+        series: hecho.series,
+        discardedResults: hecho.discardedResults,
+        matchdays: database.valorantCompetition.matchdays(id)
+      });
     } catch (error) { next(error); }
   });
 
@@ -960,9 +995,16 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  const resultadoYTabla = (id, series) => ({
+    series,
+    standings: database.valorantCompetition.standings(id, { teams: database.valorant.listTeams(id) })
+  });
+
   /**
-   * Resultado manual: es el respaldo de emergencia, no la vía normal. La vía
-   * principal será la captura, en el bloque siguiente.
+   * Resultado manual: el respaldo de emergencia, no la vía normal.
+   *
+   * Sólo crea. Ni `correct`, ni `allowOverwrite`, ni `winnerTeamId` del cuerpo
+   * se leen: ningún campo puede convertir una creación en una sobrescritura.
    */
   app.post('/api/admin/events/:id/competition/result', (request, response, next) => {
     const id = parseId(request.params.id);
@@ -973,13 +1015,27 @@ function createApp({
         teamARounds: request.body?.teamARounds,
         teamBRounds: request.body?.teamBRounds,
         source: 'MANUAL',
-        reason: request.body?.reason,
-        allowOverwrite: request.body?.correct === true
+        reason: request.body?.reason
       });
       draftStream.publish(id, 'competition_updated');
-      response.json({ series, standings: database.valorantCompetition.standings(id, {
-        teams: database.valorant.listTeams(id)
-      }) });
+      response.json(resultadoYTabla(id, series));
+    } catch (error) { next(error); }
+  });
+
+  /** Corregir un resultado ya cerrado. Otra acción, otra ruta, otro registro. */
+  app.post('/api/admin/events/:id/competition/result/correct', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const series = database.valorantCompetition.correctGameResult(id, {
+        seriesId: request.body?.seriesId,
+        gameNumber: request.body?.gameNumber ?? 1,
+        teamARounds: request.body?.teamARounds,
+        teamBRounds: request.body?.teamBRounds,
+        source: 'MANUAL',
+        reason: request.body?.reason
+      });
+      draftStream.publish(id, 'competition_updated');
+      response.json(resultadoYTabla(id, series));
     } catch (error) { next(error); }
   });
 
