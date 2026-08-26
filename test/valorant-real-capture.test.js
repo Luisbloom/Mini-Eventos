@@ -569,3 +569,80 @@ describe('cabeceras que el OCR junta o rompe', () => {
     assert.equal(luis.assists, 1);
   });
 });
+
+// ================================================== LECTURAS POCO FIABLES
+
+describe('un dato que el OCR no supo leer', () => {
+  /*
+    El cliente junta K/D/A en una sola celda y, en su tipografía, Tesseract
+    confunde la barra con un siete: «30 / 15 / 3» llega como «30/15/73». El
+    número resultante es perfectamente escribible, así que no se puede descartar
+    por su tamaño: quien lo leyó tiene que decir que no está seguro.
+
+    Lo que NO se hace es corregir el 73 hasta el 3. Se usa la fuente que sí lo
+    leyó bien, y se conserva lo que decía la otra.
+  */
+  const obs = (source, value, reliable = true) => ({ source, captureId: 1, value, reliable });
+
+  it('A · las dos fiables y de acuerdo: sin nota y sin conflicto', () => {
+    const r = reconcileField('assists', [obs('VALORANT', 3), obs('TRACKER', 3)]);
+    assert.equal(r.value, 3);
+    assert.equal(r.conflict, null);
+    assert.equal(r.uncertain, null);
+    assert.equal(r.fallback, undefined, 'no hace falta que nadie cubra a nadie');
+  });
+
+  it('B · una dudosa y otra limpia: manda la limpia, y se guarda la otra', () => {
+    const r = reconcileField('assists', [obs('VALORANT', 73, false), obs('TRACKER', 3)]);
+
+    assert.equal(r.value, 3, 'el dato sale de la lectura limpia');
+    assert.equal(r.canonicalSource, 'TRACKER');
+    assert.equal(r.conflict, null, 'una lectura dudosa no discrepa: reconoce no saber');
+    assert.equal(r.fallback.code, 'OCR_SOURCE_FALLBACK');
+    assert.deepEqual(r.fallback.discarded, [{ source: 'VALORANT', value: 73 }]);
+
+    // Y el 73 no se pierde: sigue ahí, marcado como no fiable.
+    const descartada = r.observations.find((o) => o.source === 'VALORANT');
+    assert.equal(descartada.value, 73);
+    assert.equal(descartada.reliable, false);
+  });
+
+  it('C · las dos fiables y distintas: eso SÍ es un conflicto', () => {
+    const r = reconcileField('assists', [obs('VALORANT', 4), obs('TRACKER', 3)]);
+    assert.ok(r.conflict, 'dos lecturas limpias que no cuadran hay que mirarlas');
+    assert.deepEqual(r.conflict.values.sort(), [3, 4]);
+    assert.equal(r.fallback, undefined);
+  });
+
+  it('D · sólo una lectura y dudosa: se marca, NO se adivina', () => {
+    const r = reconcileField('assists', [obs('VALORANT', 73, false)]);
+
+    assert.equal(r.uncertain.code, 'FIELD_UNCERTAIN');
+    assert.equal(r.conflict, null);
+    // Se enseña lo leído para poder corregirlo, pero nadie lo da por bueno.
+    assert.equal(r.value, 73);
+    assert.notEqual(r.value, 3, 'inventar el 3 a partir del 73 sería peor que no saberlo');
+  });
+
+  it('E · un número grande PERO leído con seguridad: sigue siendo conflicto', () => {
+    // Que la cifra sea rara no la vuelve dudosa. Sólo lo es si quien la leyó
+    // dice que no pudo separarla bien.
+    const r = reconcileField('assists', [obs('VALORANT', 73), obs('TRACKER', 3)]);
+    assert.ok(r.conflict, 'sin marca de duda, 73 contra 3 es una discrepancia');
+    assert.equal(r.fallback, undefined);
+    assert.equal(r.uncertain, null);
+  });
+
+  it('la duda no ablanda la tolerancia del campo', () => {
+    // El ACS tolera 1 entre fuentes; las bajas, ninguna.
+    assert.equal(reconcileField('acs', [obs('VALORANT', 212), obs('TRACKER', 213)]).conflict, null);
+    assert.ok(reconcileField('kills', [obs('VALORANT', 18), obs('TRACKER', 19)]).conflict);
+  });
+
+  it('faltar sigue sin ser lo mismo que dudar', () => {
+    const r = reconcileField('assists', [obs('TRACKER', 3), obs('VALORANT', null)]);
+    assert.equal(r.value, 3);
+    assert.equal(r.conflict, null);
+    assert.equal(r.fallback, undefined, 'no hay nada que descartar: no lo vio');
+  });
+});

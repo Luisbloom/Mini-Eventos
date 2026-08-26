@@ -137,6 +137,8 @@ function mergeCaptures(capturas) {
 
   const conflictos = [];
   const variaciones = [];
+  const respaldos = [];
+  const inciertos = [];
 
   const conciliar = (field, observaciones) => {
     const resultado = reconcileField(field, observaciones);
@@ -198,17 +200,21 @@ function mergeCaptures(capturas) {
     const stats = {};
     const observaciones = {};
 
+    const quien = identidad.riotId ?? identidad.gameName;
+
     for (const campo of [...STAT_FIELDS, 'agent']) {
       const resultado = reconcileField(campo, miembros.map((miembro) => ({
-        source: miembro.source, captureId: miembro.captureId, value: miembro.jugador[campo] ?? null
+        source: miembro.source,
+        captureId: miembro.captureId,
+        value: miembro.jugador[campo] ?? null,
+        // Quien leyó el dato dice si pudo hacerlo con seguridad.
+        reliable: !(miembro.jugador.unreliable || []).includes(campo)
       })));
 
-      if (resultado.conflict) {
-        conflictos.push({ ...resultado.conflict, player: identidad.riotId ?? identidad.gameName });
-      }
-      if (resultado.variance) {
-        variaciones.push({ ...resultado.variance, player: identidad.riotId ?? identidad.gameName });
-      }
+      if (resultado.conflict) conflictos.push({ ...resultado.conflict, player: quien });
+      if (resultado.variance) variaciones.push({ ...resultado.variance, player: quien });
+      if (resultado.fallback) respaldos.push({ ...resultado.fallback, player: quien });
+      if (resultado.uncertain) inciertos.push({ ...resultado.uncertain, player: quien });
 
       stats[campo] = resultado.value;
       // Se guarda lo que dijo CADA fuente, también la que no manda: sin eso no
@@ -248,6 +254,10 @@ function mergeCaptures(capturas) {
     conflicts: conflictos,
     // Discrepancias conocidas y admitidas: se registran, pero no bloquean.
     variances: variaciones,
+    // Una fuente ha cubierto lo que la otra no supo leer. Tampoco bloquea.
+    fallbacks: respaldos,
+    // Nadie pudo leerlo con seguridad: esto SÍ hay que mirarlo.
+    uncertain: inciertos,
     captureCount: conFuente.length
   };
 }

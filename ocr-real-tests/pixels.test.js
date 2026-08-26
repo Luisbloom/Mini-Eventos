@@ -291,25 +291,41 @@ describe('los píxeles originales de la partida de Bind', () => {
         'el ACS nunca puede salir como conflicto duro');
     });
 
-    it('lo que de verdad decide el resultado sale sin discrepancias', (contexto) => {
-      /*
-        El cliente lee mal la tercera cifra de la celda «K / D / A»: la barra se
-        le cuela como un 7 y AlbertoYT19 sale con 73 asistencias en vez de 3.
-        El sistema lo detecta y lo manda a revisión, que es exactamente lo que
-        tiene que hacer: dos fuentes discrepan y lo resuelve una persona.
-
-        Lo que NO puede fallar es nada de lo que decide quién gana.
-      */
+    it('NINGÚN conflicto duro', (contexto) => {
       const fusion = fusionar();
       contexto.diagnostic(`conflictos: ${JSON.stringify(fusion.conflicts)}`);
+      assert.deepEqual(fusion.conflicts, [],
+        `no puede quedar ninguna discrepancia sin resolver: ${JSON.stringify(fusion.conflicts)}`);
+    });
 
-      const criticos = ['map', 'score', 'teamARounds', 'teamBRounds', 'kills', 'deaths'];
-      for (const campo of criticos) {
-        assert.equal(fusion.conflicts.some((c) => c.field === campo), false,
-          `no puede haber discrepancia en ${campo}`);
+    it('la celda K/D/A mal leída se cubre con la otra fuente', (contexto) => {
+      /*
+        El cliente junta K/D/A en una celda y su barra se lee como un siete:
+        AlbertoYT19 sale con 73 asistencias en vez de 3, y choripanXd343 con 75
+        en vez de 5. El parser lo marca como lectura dudosa, así que NO compite
+        de igual a igual con la de Tracker, que sí está bien leída.
+
+        Y el 73 no se corrige hasta el 3: se usa el 3 de Tracker y se conserva
+        el 73 como lo que es, una observación descartada.
+      */
+      const fusion = fusionar();
+      contexto.diagnostic(`respaldos: ${fusion.fallbacks
+        .map((f) => `${f.player}.${f.field}<-${f.usedSource}`).join(' ')}`);
+
+      for (const [nombre, esperado, leido] of [['AlbertoYT19', 3, 73], ['choripanXd343', 5, 75]]) {
+        const jugador = buscar(fusion.players, nombre);
+        assert.equal(jugador.assists, esperado, `${nombre}: asistencias`);
+
+        const observaciones = jugador.observations?.assists ?? [];
+        assert.equal(observaciones.find((o) => o.source === 'TRACKER')?.value, esperado);
+        const descartada = observaciones.find((o) => o.source === 'VALORANT');
+        assert.equal(descartada?.value, leido, 'lo que leyó el cliente no se pierde');
+        assert.equal(descartada?.reliable, false, 'y queda marcado como no fiable');
       }
-      assert.equal(fusion.conflicts.every((c) => c.field === 'assists'), true,
-        `sólo se esperaban discrepancias de asistencias: ${JSON.stringify(fusion.conflicts)}`);
+
+      assert.ok(fusion.fallbacks.some((f) => f.field === 'assists'
+        && f.code === 'OCR_SOURCE_FALLBACK' && f.usedSource === 'TRACKER'));
+      assert.deepEqual(fusion.uncertain, [], 'con dos fuentes no queda nada a ciegas');
     });
 
     it('Luisbloom queda con lo que aporta cada fuente', (contexto) => {
@@ -367,6 +383,9 @@ describe('los píxeles originales de la partida de Bind', () => {
       });
       contexto.diagnostic(`estado ${preview.status} · avisos ${JSON.stringify(preview.issues.map((i) => i.code))}`);
 
+      assert.equal(preview.status, 'READY',
+        `el lote real tiene que poder importarse sin tocar nada: ${JSON.stringify(preview.issues)}`);
+      assert.deepEqual(preview.issues, []);
       assert.equal(preview.map, 'bind');
       assert.equal(preview.teamARounds, 13);
       assert.equal(preview.teamBRounds, 10);
@@ -387,7 +406,11 @@ describe('los píxeles originales de la partida de Bind', () => {
         roster, expectedMap: 'bind', teamAId: 27, teamBId: 31
       });
       assert.ok(preview.notes.length >= 5);
-      assert.equal(preview.notes.every((n) => n.code === 'ROUNDING_VARIANCE'), true);
+      assert.equal(preview.notes.every((n) =>
+        ['ROUNDING_VARIANCE', 'OCR_SOURCE_FALLBACK'].includes(n.code)), true,
+      `notas inesperadas: ${JSON.stringify([...new Set(preview.notes.map((n) => n.code))])}`);
+      assert.ok(preview.notes.some((n) => n.code === 'ROUNDING_VARIANCE'));
+      assert.ok(preview.notes.some((n) => n.code === 'OCR_SOURCE_FALLBACK'));
       assert.equal(preview.issues.some((i) => i.field === 'acs'), false);
     });
 
@@ -422,8 +445,23 @@ describe('los píxeles originales de la partida de Bind', () => {
      * La misma captura reescalada tiene que leerse igual. Si algo dependiera de
      * una coordenada concreta de esta resolución, aquí se caería.
      */
-    /** Cuántas filas se exigen a cada escala. */
-    const MINIMO_FILAS = { 0.75: 9, 1.25: 10 };
+    /**
+     * Cuántas filas se exigen a cada escala.
+     *
+     * Tracker aguanta las diez a las tres, porque el preprocesado lleva toda
+     * captura a un ancho de trabajo mínimo: cuanto más pequeña llega, más se
+     * agranda.
+     *
+     * ⚠️ El cliente al 75% se queda en nueve, y no por el ajuste: 1629px
+     * reducidos a 1222 pierden detalle que ningún reescalado posterior
+     * devuelve. Se probaron anchos de trabajo de 3800, 4200 y 4600 y ninguno lo
+     * recupera —el de 4600 además rompía el 125%—. Queda dicho aquí en vez de
+     * escondido en un número más flojo.
+     */
+    const MINIMO_FILAS = {
+      0.75: { tracker: 10, cliente: 9 },
+      1.25: { tracker: 10, cliente: 10 }
+    };
 
     for (const escala of [0.75, 1.25]) {
       it(`al ${Math.round(escala * 100)}% aguanta lo esencial`, async (contexto) => {
@@ -456,10 +494,10 @@ describe('los píxeles originales de la partida de Bind', () => {
           nada de lo anterior se mueva, que es lo que demostraría que hay una
           coordenada fija escondida.
         */
-        assert.ok(t.parsed.players.length >= minimo,
-          `tracker: ${t.parsed.players.length} filas, esperaba ${minimo}`);
-        assert.ok(c.parsed.players.length >= minimo,
-          `cliente: ${c.parsed.players.length} filas, esperaba ${minimo}`);
+        assert.ok(t.parsed.players.length >= minimo.tracker,
+          `tracker: ${t.parsed.players.length} filas, esperaba ${minimo.tracker}`);
+        assert.ok(c.parsed.players.length >= minimo.cliente,
+          `cliente: ${c.parsed.players.length} filas, esperaba ${minimo.cliente}`);
 
         if (escala >= 1) {
           assert.deepEqual([...c.parsed.scorePair].sort((a, b) => a - b), [10, 13]);

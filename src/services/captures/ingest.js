@@ -42,9 +42,10 @@ const LOW_CONFIDENCE = 0.72;
 const PERFILES = Object.freeze({
   [KINDS.TRACKER_MATCH]: {
     tabla: { upscale: 4, threshold: 160 },
-    // Medido sobre la captura real: a 140 la fila de cabeceras da doce columnas
-    // y a 160 sólo nueve. Se pierden +/-, K/D y DD justo por ahí.
-    cabecera: { upscale: 3, threshold: 140 }
+    // Medido sobre la captura real: por aquí la fila de cabeceras da doce
+    // columnas y la pasada de tabla sólo nueve. Se recuperan +/-, K/D y DDΔ,
+    // que son las columnas estrechas de la derecha.
+    cabecera: { upscale: 3, threshold: 150 }
   },
   [KINDS.VALORANT_SCOREBOARD]: {
     tabla: { upscale: 4, threshold: 160 },
@@ -64,6 +65,16 @@ const PERFILES = Object.freeze({
 const MAX_ANCHO = 5000;
 
 /**
+ * A qué ancho quiere trabajar el OCR, como mínimo.
+ *
+ * El escalado no puede ser sólo un multiplicador: una captura que llega ya
+ * pequeña acaba con el texto por debajo de lo que el motor resuelve, y se
+ * pierden filas. Con un objetivo mínimo, cuanto más pequeña llega la imagen,
+ * más se agranda — y las dos acaban leyéndose a una resolución comparable.
+ */
+const ANCHO_OBJETIVO = 3800;
+
+/**
  * Prepara la imagen. No sustituye al original: el archivo guardado sigue siendo
  * el que subieron, esto es sólo lo que ve el OCR.
  *
@@ -72,7 +83,10 @@ const MAX_ANCHO = 5000;
  */
 async function preprocess(buffer, { upscale = 2, threshold = null, crop = null } = {}) {
   const { width = 1280 } = await sharp(buffer).metadata();
-  const destino = Math.min(MAX_ANCHO, Math.round(width * upscale));
+  // El multiplicador del perfil es el suelo; si con él no se llega al ancho de
+  // trabajo, se sube. Nada de esto depende de que el fichero mida lo de hoy.
+  const factor = Math.max(upscale, ANCHO_OBJETIVO / width);
+  const destino = Math.min(MAX_ANCHO, Math.round(width * factor));
   const escala = destino / width;
 
   /*
@@ -310,6 +324,23 @@ function buildPreview(lecturas, contexto) {
       code: variacion.code, field: variacion.field, player: variacion.player ?? null,
       values: variacion.values, difference: variacion.difference
     });
+  }
+
+  // Tampoco bloquea que una fuente cubra lo que la otra no supo leer: el dato
+  // sale de una lectura limpia, sólo que de la otra captura.
+  for (const respaldo of fusion.fallbacks ?? []) {
+    notas.push({
+      code: respaldo.code, field: respaldo.field, player: respaldo.player ?? null,
+      usedSource: respaldo.usedSource, discarded: respaldo.discarded
+    });
+  }
+
+  // Esto SÍ: nadie ha podido leerlo con seguridad y no hay segunda fuente.
+  for (const incierto of fusion.uncertain ?? []) {
+    aviso('FIELD_UNCERTAIN',
+      `No se ha podido leer con seguridad ${incierto.field}`
+      + `${incierto.player ? ` de ${incierto.player}` : ''}: compruébalo.`,
+      { field: incierto.field, player: incierto.player ?? null });
   }
 
   const desconocidas = lecturas.filter((lectura) => lectura.sourceKind === KINDS.UNKNOWN);

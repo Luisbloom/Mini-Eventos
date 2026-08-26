@@ -152,22 +152,29 @@ function nameColumnStart(filas, limite) {
  * La distancia admitida es proporcional al ancho de la imagen, no un número de
  * píxeles: con un umbral fijo, la misma captura a otra resolución pierde la
  * última columna y parece que falla el parser.
+ *
+ * Devuelve además QUÉ campos no se han podido leer con seguridad. Un número mal
+ * leído que se presenta como si fuera bueno es peor que un hueco.
  */
-function readRow(linea, cabecera, ancho) {
+function readRow(linea, cabecera, ancho, { anchoPorCaracter = null } = {}) {
   const stats = {};
+  const dudosos = new Set();
   const margen = ancho * 0.045;
 
-  const candidatos = linea.words
-    .map((palabra) => ({
-      texto: palabra.text,
-      center: centroX(palabra),
-      usado: false
-    }));
+  const candidatos = linea.words.map((palabra) => ({
+    texto: palabra.text,
+    center: centroX(palabra),
+    ancho: palabra.bbox.x1 - palabra.bbox.x0,
+    usado: false
+  }));
 
   for (const columna of cabecera.columns) {
     if (columna.field === 'kda') {
-      const kda = leerKda(candidatos, columna, ancho);
-      if (kda) Object.assign(stats, kda);
+      const kda = leerKda(candidatos, columna, ancho, anchoPorCaracter);
+      if (kda) {
+        Object.assign(stats, kda.values);
+        if (!kda.reliable) for (const campo of Object.keys(kda.values)) dudosos.add(campo);
+      }
       continue;
     }
 
@@ -190,49 +197,101 @@ function readRow(linea, cabecera, ancho) {
     }
   }
 
-  return stats;
+  return { stats, unreliable: [...dudosos] };
 }
 
 /**
  * La celda agrupada del cliente: «28 / 9 / 7».
  *
- * ⚠️ El OCR la parte de formas muy distintas según cómo caigan las barras:
- * entera («28/9/7»), en tres números sueltos, o con la barra pegada a un dígito
- * («28/», «/9», «28 / 9»). Por eso no se buscan «números»: se junta todo el
- * texto de esa columna y se leen los grupos de dígitos que haya.
+ * ⚠️ En la tipografía del cliente, Tesseract confunde la barra con un SIETE.
+ * Medido sobre la captura real: «30 / 15 / 3» llega como «30/15/73» y «6/18/5»
+ * como «6/18/75». El número que sale es perfectamente escribible —73 asistencias
+ * no es imposible— así que NO se puede descartar por ser grande.
+ *
+ * Lo que sí delata la lectura es la geometría: un carácter de más hace que la
+ * celda gaste menos ancho por carácter que las demás filas de esa misma columna.
+ * Con ese contraste se marca como no fiable, y quien decide después es la
+ * reconciliación, que tiene otra fuente para el mismo dato.
+ *
+ * @returns {null | {values: object, reliable: boolean, reason: string|null}}
  */
-function leerKda(candidatos, columna, ancho) {
+function leerKda(candidatos, columna, ancho, anchoPorCaracter = null) {
   const margen = ancho * 0.06;
   const juntos = candidatos
     .filter((dato) => !dato.usado && Math.abs(dato.center - columna.center) <= margen)
     .sort((uno, otro) => uno.center - otro.center);
   if (juntos.length === 0) return null;
 
-  // Se junta en el orden en que estaban y se sacan los grupos de dígitos.
   const texto = juntos.map((dato) => dato.texto).join(' ');
   const grupos = texto.match(/\d+/g);
   if (!grupos || grupos.length < 3) return null;
 
-  // Con exactamente tres, no hay duda.
   let tres = grupos.slice(0, 3);
 
   if (grupos.length > 3) {
-    // Con más, la lectura no es fiable: una barra confundida con un 1 mete un
-    // número de más y colocarlos a ciegas daría un K/D/A inventado.
+    // Con más de tres, la lectura sólo vale si las dos barras están puestas y
+    // cada tramo trae un número. Si no, colocarlos a ciegas sería inventar.
     const separadores = (texto.match(/\//g) || []).length;
     if (separadores !== 2) return null;
-    // Con las dos barras bien leídas se puede repartir por ellas.
     const porBarra = texto.split('/').map((trozo) => (trozo.match(/\d+/g) || []));
     if (porBarra.length !== 3 || porBarra.some((trozo) => trozo.length !== 1)) return null;
     tres = porBarra.map((trozo) => trozo[0]);
   }
 
   for (const dato of juntos) dato.usado = true;
+  const values = { kills: numero(tres[0]), deaths: numero(tres[1]), assists: numero(tres[2]) };
+
+  /*
+    Si el motor ha devuelto la celda en varias piezas, ha sabido dónde acaba
+    cada número: los separadores están resueltos y la lectura es limpia.
+    El problema aparece cuando la escupe entera, porque ahí la frontera entre
+    dígito y barra es justo lo que no ha decidido.
+  */
+  if (juntos.length > 1) return { values, reliable: true, reason: null };
+
+  const comprimida = celdaComprimida(juntos, anchoPorCaracter);
   return {
-    kills: numero(tres[0]),
-    deaths: numero(tres[1]),
-    assists: numero(tres[2])
+    values,
+    reliable: !comprimida,
+    reason: comprimida ? 'AMBIGUOUS_KDA_SEPARATOR' : null
   };
+}
+
+/** Si la celda gasta menos ancho por carácter del que gastan sus vecinas. */
+function celdaComprimida(juntos, anchoPorCaracter) {
+  if (!anchoPorCaracter) return false;
+  const caracteres = juntos.reduce((total, dato) => total + dato.texto.length, 0);
+  const anchoTotal = juntos.reduce((total, dato) => total + dato.ancho, 0);
+  if (caracteres === 0) return false;
+  // Por debajo del 90% de lo habitual sobran caracteres: el motor ha leído un
+  // separador DOS veces, como barra y como siete.
+  return (anchoTotal / caracteres) < anchoPorCaracter * 0.9;
+}
+
+/**
+ * Lo que gasta por carácter una columna, en mediana de sus filas.
+ *
+ * Se miden SÓLO las celdas que llegaron de una pieza. Una troceada mete piezas
+ * estrechas —la barra, un «1»— que bajan la media sin que sobre nada, y la
+ * compararía contra un listón que no le corresponde.
+ */
+function anchoTipicoDeColumna(filas, columna, ancho) {
+  const margen = ancho * 0.06;
+  const medidas = [];
+
+  for (const fila of filas) {
+    const dentro = fila.words.filter((palabra) =>
+      Math.abs(centroX(palabra) - columna.center) <= margen);
+    if (dentro.length !== 1) continue;
+    const caracteres = dentro.reduce((total, palabra) => total + palabra.text.length, 0);
+    const suma = dentro.reduce((total, palabra) => total + (palabra.bbox.x1 - palabra.bbox.x0), 0);
+    if (caracteres >= 3) medidas.push(suma / caracteres);
+  }
+
+  // Sin filas suficientes no hay «normal» con el que comparar.
+  if (medidas.length < 4) return null;
+  medidas.sort((uno, otro) => uno - otro);
+  return medidas[Math.floor(medidas.length / 2)];
 }
 
 /**
@@ -272,6 +331,7 @@ function mergeContinuationLines(lines, { esContinuacion }) {
 }
 
 module.exports = {
-  findHeader, nameLimit, nameColumnStart, readRow, mergeContinuationLines, numero, esNumero,
+  findHeader, nameLimit, nameColumnStart, readRow, anchoTipicoDeColumna,
+  mergeContinuationLines, numero, esNumero,
   anchoDe, centroX, centroY, alto, normalizeHeader
 };

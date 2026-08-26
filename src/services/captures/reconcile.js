@@ -80,11 +80,12 @@ const presente = (valor) => valor !== null && valor !== undefined && valor !== '
 /**
  * Concilia las observaciones de un campo.
  *
+ * Una observación puede venir marcada como NO FIABLE por quien la leyó: el OCR
+ * sabe cuándo no ha podido separar bien una celda. Eso no es lo mismo que un
+ * valor distinto, y no puede tratarse igual.
+ *
  * @param {string} field
- * @param {Array<{source: string, captureId: number, value: *}>} observaciones
- * @returns {{
- *   value: *, observations: Array, conflict: null|object, variance: null|object, canonicalSource: string|null
- * }}
+ * @param {Array<{source: string, captureId: number, value: *, reliable?: boolean}>} observaciones
  */
 function reconcileField(field, observaciones) {
   const politica = policyFor(field);
@@ -92,31 +93,86 @@ function reconcileField(field, observaciones) {
 
   if (conDato.length === 0) {
     // Nadie lo vio. Null, no cero: faltar no es valer cero.
-    return { value: null, observations: [], conflict: null, variance: null, canonicalSource: null };
+    return {
+      value: null, observations: [], conflict: null, variance: null,
+      uncertain: null, canonicalSource: null
+    };
   }
 
   // Si el campo sólo lo enseña una fuente, lo que diga otra no se compara: no
   // son la misma medida aunque se llamen igual.
-  const utiles = politica.only
+  const competentes = politica.only
     ? conDato.filter((obs) => politica.only.includes(obs.source))
     : conDato;
-  if (utiles.length === 0) {
-    return { value: null, observations: conDato, conflict: null, variance: null, canonicalSource: null };
+  if (competentes.length === 0) {
+    return {
+      value: null, observations: conDato, conflict: null, variance: null,
+      uncertain: null, canonicalSource: null
+    };
   }
 
-  const elegido = elegirCanonico(utiles, politica);
-  const desacuerdo = comprobarDesacuerdo(field, utiles, politica);
+  // Todas se conservan, fiables o no: sin ellas no se puede averiguar después
+  // por qué un número no cuadraba.
+  const todas = competentes.map((obs) => ({
+    source: obs.source, captureId: obs.captureId, value: obs.value,
+    ...(obs.reliable === false ? { reliable: false } : {})
+  }));
+
+  const fiables = competentes.filter((obs) => obs.reliable !== false);
+
+  /*
+    ⚠️ Una lectura marcada como dudosa NO se compara de igual a igual con una
+    limpia. Si se hiciera, un «73» que en realidad era «3» saldría como
+    discrepancia entre fuentes, y no lo es: es una fuente que ha reconocido no
+    haber sabido leerlo.
+
+    Pero tampoco se corrige el 73 hasta el 3, que sería inventar. Simplemente se
+    usa la que sí se leyó bien, y se anota de dónde ha salido.
+  */
+  if (fiables.length > 0 && fiables.length < competentes.length) {
+    const elegido = elegirCanonico(fiables, politica);
+    const desacuerdo = comprobarDesacuerdo(field, fiables, politica);
+    return {
+      value: elegido.value,
+      canonicalSource: elegido.source,
+      observations: todas,
+      conflict: desacuerdo.conflict,
+      variance: desacuerdo.variance,
+      // No es un problema: es una fuente cubriendo el hueco de la otra.
+      fallback: {
+        field, code: 'OCR_SOURCE_FALLBACK', usedSource: elegido.source,
+        discarded: competentes
+          .filter((obs) => obs.reliable === false)
+          .map((obs) => ({ source: obs.source, value: obs.value }))
+      },
+      uncertain: null
+    };
+  }
+
+  // Si NINGUNA es fiable, no hay de dónde sacar el dato. Se enseña lo leído
+  // para que se pueda corregir, pero marcado: nunca se da por bueno solo.
+  if (fiables.length === 0) {
+    const elegido = elegirCanonico(competentes, politica);
+    return {
+      value: elegido.value,
+      canonicalSource: elegido.source,
+      observations: todas,
+      conflict: null,
+      variance: null,
+      uncertain: { field, code: 'FIELD_UNCERTAIN', sources: competentes.map((obs) => obs.source) }
+    };
+  }
+
+  const elegido = elegirCanonico(fiables, politica);
+  const desacuerdo = comprobarDesacuerdo(field, fiables, politica);
 
   return {
     value: elegido.value,
     canonicalSource: elegido.source,
-    // Se conservan TODAS, también la que no manda: sin eso no se puede
-    // averiguar después por qué un número no cuadraba.
-    observations: utiles.map((obs) => ({
-      source: obs.source, captureId: obs.captureId, value: obs.value
-    })),
+    observations: todas,
     conflict: desacuerdo.conflict,
-    variance: desacuerdo.variance
+    variance: desacuerdo.variance,
+    uncertain: null
   };
 }
 

@@ -21,8 +21,10 @@
  */
 
 const { KINDS } = require('./classify');
+const { validateValorantScore } = require('../valorant-score');
 const {
-  findHeader, nameLimit, nameColumnStart, readRow, mergeContinuationLines, numero, esNumero,
+  findHeader, nameLimit, nameColumnStart, readRow, anchoTipicoDeColumna,
+  mergeContinuationLines, numero, esNumero,
   anchoDe, centroX, alto, normalizeHeader
 } = require('./layout');
 
@@ -198,7 +200,7 @@ function unirFilasPartidas(filas, cabecera, ancho) {
   const limite = nameLimit(cabecera);
 
   const describir = (fila) => {
-    const stats = readRow(fila, cabecera, ancho);
+    const { stats } = readRow(fila, cabecera, ancho);
     return {
       datos: stats.acs !== undefined || stats.kills !== undefined,
       // El agente no cuenta como nombre: va en su propio renglon.
@@ -303,16 +305,22 @@ function marcadorPorFranja(lines, ancho) {
   for (let i = 0; i < lines.length - 1; i++) {
     const arriba = primerNumeroALaIzquierda(lines[i], ancho);
     const abajo = primerNumeroALaIzquierda(lines[i + 1], ancho);
-    if (arriba === null || abajo === null) continue;
-    if (arriba === abajo) continue;                       // no hay empates
-    if (Math.max(arriba, abajo) < 13) continue;           // nadie ha ganado
-    if (Math.max(arriba, abajo) > 30) continue;
+    if (!arriba || !abajo) continue;
+    if (arriba.valor === abajo.valor) continue;                 // no hay empates
+    if (Math.max(arriba.valor, abajo.valor) < 13) continue;     // nadie ha ganado
+    if (Math.max(arriba.valor, abajo.valor) > 30) continue;
 
-    // Los dos tanteos tienen que estar en la misma columna.
-    const desviacion = Math.abs(lines[i].words[0].bbox.x0 - lines[i + 1].words[0].bbox.x0);
-    if (desviacion > ancho * 0.06) continue;
+    /*
+      Los dos tanteos tienen que estar EN LA MISMA COLUMNA, y lo que se compara
+      es dónde está cada número, no dónde empieza su renglón. Comparando el
+      renglón, dos líneas cualesquiera que empiecen igual —el icono de la
+      izquierda, por ejemplo— pasan el filtro y se llevan números que no son el
+      marcador.
+    */
+    const desviacion = Math.abs(arriba.x - abajo.x);
+    if (desviacion > ancho * 0.03) continue;
 
-    return [arriba, abajo];
+    return [arriba.valor, abajo.valor];
   }
   return null;
 }
@@ -322,15 +330,20 @@ function primerNumeroALaIzquierda(linea, ancho) {
   for (const palabra of linea.words) {
     if (centroX(palabra) > ancho * 0.33) return null;
     const valor = numero(palabra.text);
-    if (valor !== null) return valor;
+    if (valor !== null) return { valor, x: palabra.bbox.x0 };
   }
   return null;
 }
 
-/** Un marcador creíble: alguien llegó a la meta y no hay empate. */
+/**
+ * Un marcador que de verdad puede salir de una partida de Valorant.
+ *
+ * Se usa el mismo reglamento que valida los resultados que se guardan, en vez
+ * de un rango a ojo: así un «35 : 5» que el OCR se saque de la nada no pasa por
+ * marcador, porque no se puede llegar a 35 con el rival en 5.
+ */
 const marcadorPlausible = (par) =>
-  Array.isArray(par) && par[0] !== par[1] && Math.max(...par) >= 13 && Math.min(...par) >= 0
-  && Math.max(...par) <= 40;
+  Array.isArray(par) && par.length === 2 && validateValorantScore(par[0], par[1]).ok;
 
 // ============================================================ CLIENTE VALORANT
 
@@ -376,14 +389,19 @@ function parseValorantScoreboard(ocr, opciones = {}) {
   const filas = unirFilasPartidas(conAgente, cabecera, ancho);
 
   const conDatos = filas.filter((fila) => {
-    const stats = readRow(fila, cabecera, ancho);
+    const { stats } = readRow(fila, cabecera, ancho);
     return stats.acs !== undefined || stats.kills !== undefined;
   });
+  // Lo que gasta por carácter la celda agrupada en las demás filas: con eso se
+  // detecta la que trae un carácter de más.
+  const columnaKda = cabecera.columns.find((columna) => columna.field === 'kda');
+  const anchoPorCaracter = columnaKda
+    ? anchoTipicoDeColumna(conDatos, columnaKda, ancho) : null;
   const inicioNombre = nameColumnStart(conDatos, nameLimit(cabecera));
 
   const jugadores = [];
   for (const fila of filas) {
-    const stats = readRow(fila, cabecera, ancho);
+    const { stats, unreliable } = readRow(fila, cabecera, ancho, { anchoPorCaracter });
     // Sin ACS ni bajas no es una fila de jugador: será un pie de tabla.
     if (stats.acs === undefined && stats.kills === undefined) continue;
 
@@ -399,7 +417,9 @@ function parseValorantScoreboard(ocr, opciones = {}) {
       // El cliente no separa equipos: quién juega con quién sale del roster.
       visualTeam: null,
       confidence: fila.confidence / 100,
-      ...stats
+      ...stats,
+      // Campos que el motor no ha podido leer con seguridad.
+      unreliable
     });
   }
 
@@ -443,14 +463,17 @@ function parseTrackerMatch(ocr, opciones = {}) {
   const limite = cabecera ? cabecera.index : lines.length;
   const arriba = lines.slice(0, limite);
 
-  let par = marcadorPorFranja(arriba, ancho);
-  if (!marcadorPlausible(par)) {
-    par = null;
-    for (const linea of arriba) {
-      const candidato = parMarcador(linea.text);
-      if (marcadorPlausible(candidato)) { par = candidato; break; }
-    }
+  /*
+    Primero el «13 : 10» del encabezado: cuando se lee, es inequívoco, porque
+    trae el separador puesto. La franja de rondas es el respaldo — siempre está,
+    pero hay que deducir cuáles de sus números son el marcador.
+  */
+  let par = null;
+  for (const linea of arriba) {
+    const candidato = parMarcador(linea.text);
+    if (marcadorPlausible(candidato)) { par = candidato; break; }
   }
+  if (!marcadorPlausible(par)) par = marcadorPorFranja(arriba, ancho);
 
   if (!cabecera) {
     return {
@@ -474,7 +497,7 @@ function parseTrackerMatch(ocr, opciones = {}) {
 
   // Las filas con datos definen dónde empieza la columna del nombre.
   const conDatos = lines.slice(cabecera.index + 1).filter((linea) => {
-    const stats = readRow(linea, cabecera, ancho);
+    const { stats } = readRow(linea, cabecera, ancho);
     return stats.acs !== undefined || stats.kills !== undefined;
   });
   const inicioNombre = nameColumnStart(conDatos, nameLimit(cabecera));
@@ -483,7 +506,7 @@ function parseTrackerMatch(ocr, opciones = {}) {
     const seccion = CABECERA_EQUIPO.exec(normalizeHeader(linea.text));
     if (seccion) { ladoActual = seccion[1]; continue; }
 
-    const stats = readRow(linea, cabecera, ancho);
+    const { stats, unreliable } = readRow(linea, cabecera, ancho);
     if (stats.acs === undefined && stats.kills === undefined) continue;
 
     const nombre = recortarRuido(palabrasDeNombre(linea, cabecera, inicioNombre));
@@ -497,7 +520,8 @@ function parseTrackerMatch(ocr, opciones = {}) {
       confidence: linea.confidence / 100,
       // Hace falta para repartir los equipos cuando sus cabeceras no se leen.
       top: linea.bbox.y0,
-      ...stats
+      ...stats,
+      unreliable
     });
   }
 
