@@ -493,6 +493,78 @@ describe('eliminatorias de Valorant', () => {
     });
   });
 
+  describe('series al mejor de cinco', () => {
+    function hastaGranFinalBo5() {
+      const contexto = ligaMontada(4);
+      jugarLiga(contexto);
+      const { database, event, equipos } = contexto;
+      database.valorantPlayoffs.setGrandFinalBestOf(event.id, 5, { actor: 'prueba BO5' });
+      database.valorantPlayoffs.generate(event.id, equipos);
+      const dame = (slot) => porSlot(database.valorantPlayoffs.listSeries(event.id), slot);
+
+      const semi1 = dame(SLOTS.UPPER_SEMI_1);
+      const semi2 = dame(SLOTS.UPPER_SEMI_2);
+      ganarSerie(database, event, semi1.id, semi1.teamAId);
+      ganarSerie(database, event, semi2.id, semi2.teamAId);
+
+      const lowerRound = dame(SLOTS.LOWER_ROUND_1);
+      ganarSerie(database, event, lowerRound.id, lowerRound.teamAId);
+      const upperFinal = dame(SLOTS.UPPER_FINAL);
+      ganarSerie(database, event, upperFinal.id, upperFinal.teamAId);
+      const lowerFinal = dame(SLOTS.LOWER_FINAL);
+      ganarSerie(database, event, lowerFinal.id, lowerFinal.teamAId);
+
+      return { ...contexto, grandFinal: dame(SLOTS.GRAND_FINAL), dame };
+    }
+
+    function playSequence(database, event, series, winnerSides) {
+      const maps = ['ascent', 'bind', 'haven', 'lotus', 'split'];
+      winnerSides.forEach((side, index) => {
+        const gameNumber = index + 1;
+        database.valorantCompetition.assignMap(event.id, {
+          seriesId: series.id, gameNumber, mapKey: maps[index]
+        });
+        database.valorantCompetition.recordGameResult(event.id, {
+          seriesId: series.id, gameNumber,
+          teamARounds: side === 'a' ? 13 : 6,
+          teamBRounds: side === 'b' ? 13 : 6,
+          reason: 'secuencia BO5'
+        });
+      });
+      return database.valorantPlayoffs.getSeries(event.id, series.id);
+    }
+
+    for (const [score, sequence, statuses] of [
+      ['3-0', ['a', 'a', 'a'], ['COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED', 'NOT_NEEDED']],
+      ['3-1', ['a', 'b', 'a', 'a'], ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED']],
+      ['3-2', ['a', 'b', 'a', 'b', 'a'], ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED']]
+    ]) {
+      it(`${score} exige tres victorias y marca sólo lo que no hace falta`, () => {
+        const { database, event, grandFinal } = hastaGranFinalBo5();
+        const completed = playSequence(database, event, grandFinal, sequence);
+        assert.equal(completed.bestOf, 5);
+        assert.equal(completed.winnerTeamId, grandFinal.teamAId);
+        assert.deepEqual(completed.games.map((game) => game.status), statuses);
+      });
+    }
+
+    it('la reposición de una Gran Final BO5 también es BO5 y termina al 3-0', () => {
+      const { database, event, grandFinal, dame } = hastaGranFinalBo5();
+      const firstFinal = playSequence(database, event, grandFinal, ['b', 'b', 'b']);
+      assert.equal(firstFinal.bestOf, 5);
+      assert.deepEqual(firstFinal.games.map((game) => game.status),
+        ['COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED', 'NOT_NEEDED']);
+
+      const reset = dame(SLOTS.GRAND_FINAL_RESET);
+      assert.ok(reset);
+      assert.equal(reset.bestOf, 5);
+      const completedReset = playSequence(database, event, reset, ['a', 'a', 'a']);
+      assert.equal(completedReset.winnerTeamId, reset.teamAId);
+      assert.deepEqual(completedReset.games.map((game) => game.status),
+        ['COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED', 'NOT_NEEDED']);
+    });
+  });
+
   // ================================================ RECORRIDO COMPLETO
 
   describe('el cuadro entero', () => {
@@ -922,6 +994,133 @@ describe('eliminatorias de Valorant', () => {
           .series.find((s) => s.slot === SLOTS.UPPER_SEMI_1).seriesScore,
         { a: 1, b: 0 });
       assert.equal(app !== appConOcr, true);
+    });
+  });
+
+  describe('recorrido pre-deploy de seis equipos', () => {
+    it('va de 30 inscritos a campeón con captura, reset y auditoría reconstruible', async () => {
+      const contexto = ligaMontada(6);
+      const { database, event, equipos, gente, directorio } = contexto;
+      const regular = jugarLiga(contexto);
+      assert.equal(gente.length, 30);
+      assert.equal(equipos.length, 6);
+      assert.equal(equipos.every((team) => team.members.length === 5), true);
+      assert.equal(database.valorantCompetition.listSeries(event.id, 'REGULAR').length, 15);
+      assert.equal(regular.complete, true);
+      const top4 = regular.standings.slice(0, 4).map((row) => row.teamId);
+
+      database.valorantPlayoffs.generate(event.id, equipos, { actor: 'orquestador-predeploy' });
+      const dame = (slot) => porSlot(database.valorantPlayoffs.listSeries(event.id), slot);
+      const semi1 = dame(SLOTS.UPPER_SEMI_1);
+      const semi2 = dame(SLOTS.UPPER_SEMI_2);
+      database.valorantCompetition.assignMap(event.id, {
+        seriesId: semi1.id, gameNumber: 1, mapKey: 'ascent'
+      });
+
+      const teamA = equipos.find((team) => team.id === semi1.teamAId);
+      const teamB = equipos.find((team) => team.id === semi1.teamBId);
+      const players = [...teamA.members, ...teamB.members];
+      const col = (value, width) => String(value).padEnd(width);
+      const lines = [
+        'VALORANT COMPETITIVE',
+        'ASCENT',
+        `${teamA.name.toUpperCase()}  13`,
+        `${teamB.name.toUpperCase()}  6`,
+        '',
+        `${col('PLAYER', 24)}${col('AGENT', 10)}${col('ACS', 6)}${col('K', 5)}${col('D', 5)}A`,
+        ...players.map((member, index) =>
+          `${col(member.displayName, 24)}${col('Raze', 10)}${col(280 - index * 8, 6)}`
+          + `${col(22 - index, 5)}${col(10 + index, 5)}${3 + (index % 4)}`)
+      ];
+      const app = createApp({
+        database,
+        adminToken: ADMIN,
+        ocrProvider: createFakeProvider(lines.join('\n')),
+        captureStorageRoot: path.join(directorio, 'predeploy-uploads')
+      });
+      const image = await renderScreenshot(lines);
+      const upload = await request(app)
+        .post(`/api/admin/events/${event.id}/competition/captures`)
+        .set('Authorization', `Bearer ${ADMIN}`)
+        .field('seriesId', String(semi1.id))
+        .field('gameNumber', '1')
+        .attach('captures', image, { filename: 'upper-semi-1.png', contentType: 'image/png' });
+      assert.equal(upload.status, 201, JSON.stringify(upload.body));
+      assert.equal(upload.body.preview.map, 'ascent');
+      assert.deepEqual(
+        [upload.body.preview.teamARounds, upload.body.preview.teamBRounds],
+        [13, 6]
+      );
+      const preview = upload.body.preview;
+      const confirmed = await request(app)
+        .post(`/api/admin/events/${event.id}/competition/captures/${upload.body.batch.id}/confirm`)
+        .set('Authorization', `Bearer ${ADMIN}`)
+        .send({
+          mapKey: preview.map,
+          teamARounds: preview.teamARounds,
+          teamBRounds: preview.teamBRounds,
+          players: preview.players.filter((player) => player.participantId).map((player) => ({
+            participantId: player.participantId,
+            agent: player.agent,
+            acs: player.acs,
+            kills: player.kills,
+            deaths: player.deaths,
+            assists: player.assists
+          }))
+        });
+      assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+      assert.equal(database.valorantPlayoffs.getSeries(event.id, semi1.id).games[0].resultSource, 'SCREENSHOT');
+
+      database.valorantCompetition.assignMap(event.id, {
+        seriesId: semi1.id, gameNumber: 2, mapKey: 'bind'
+      });
+      database.valorantCompetition.recordGameResult(event.id, {
+        seriesId: semi1.id, gameNumber: 2,
+        teamARounds: 13, teamBRounds: 7, reason: 'cierre manual de semifinal'
+      });
+      ganarSerie(database, event, semi2.id, semi2.teamAId);
+      database.valorantCompetition.correctGameResult(event.id, {
+        seriesId: semi2.id, gameNumber: 1,
+        teamARounds: 13, teamBRounds: 8,
+        reason: 'corrección auditada de rondas', actor: 'revisor-predeploy'
+      });
+
+      const lowerRound = dame(SLOTS.LOWER_ROUND_1);
+      ganarSerie(database, event, lowerRound.id, lowerRound.teamAId);
+      const fourth = lowerRound.teamBId;
+      const upperFinal = dame(SLOTS.UPPER_FINAL);
+      ganarSerie(database, event, upperFinal.id, upperFinal.teamAId);
+      const lowerFinal = dame(SLOTS.LOWER_FINAL);
+      ganarSerie(database, event, lowerFinal.id, lowerFinal.teamAId);
+      const third = lowerFinal.teamBId;
+
+      const grandFinal = dame(SLOTS.GRAND_FINAL);
+      ganarSerie(database, event, grandFinal.id, grandFinal.teamBId);
+      const reset = dame(SLOTS.GRAND_FINAL_RESET);
+      assert.ok(reset);
+      ganarSerie(database, event, reset.id, reset.teamAId);
+
+      const finalTable = database.valorantPlayoffs.standings(event.id);
+      assert.equal(finalTable.status, 'COMPLETED');
+      assert.equal(finalTable.placements.length, 4);
+      assert.equal(finalTable.placements.find((row) => row.teamId === fourth).position, 4);
+      assert.equal(finalTable.placements.find((row) => row.teamId === third).position, 3);
+      assert.equal(finalTable.placements.find((row) => row.position === 1).teamId, finalTable.champion);
+      assert.equal(finalTable.placements.find((row) => row.position === 2).teamId, finalTable.runnerUp);
+      assert.deepEqual(new Set(finalTable.placements.map((row) => row.teamId)), new Set(top4));
+      assert.equal(finalTable.placements.some((row) => row.teamId === regular.standings[4].teamId), false);
+      assert.equal(finalTable.placements.some((row) => row.teamId === regular.standings[5].teamId), false);
+
+      const auditResponse = await admin(app, 'get', `/api/admin/events/${event.id}/audit`).expect(200);
+      const audit = auditResponse.body.audit;
+      const details = (entry) => typeof entry.details === 'string' ? JSON.parse(entry.details) : entry.details;
+      assert.equal(audit.find((entry) => entry.action === 'PLAYOFFS_GENERATED').actor, 'orquestador-predeploy');
+      assert.ok(audit.some((entry) => entry.action === 'RESULT_RECORDED' && details(entry)?.source === 'MANUAL'));
+      assert.ok(audit.some((entry) => entry.action === 'RESULT_RECORDED' && details(entry)?.source === 'SCREENSHOT'));
+      assert.ok(audit.some((entry) => entry.action === 'RESULT_CORRECTED'
+        && entry.reason === 'corrección auditada de rondas'));
+      assert.ok(audit.some((entry) => entry.action === 'PLAYOFF_BRACKET_ADVANCED'));
+      assert.ok(audit.some((entry) => entry.action === 'PLAYOFF_RESET_CREATED'));
     });
   });
 
