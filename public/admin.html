@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
     <link rel="apple-touch-icon" href="/images/logo.png">
-    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><link rel="stylesheet" href="/admin-league.css"><link rel="stylesheet" href="/admin-captures.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script><script src="/admin-league.js" defer></script><script src="/admin-captures.js" defer></script>
+    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><link rel="stylesheet" href="/admin-league.css"><link rel="stylesheet" href="/admin-captures.css"><link rel="stylesheet" href="/admin-playoffs.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script><script src="/admin-league.js" defer></script><script src="/admin-captures.js" defer></script><script src="/admin-playoffs.js" defer></script>
   </head>
   <body class="admin-page">
     <div class="grain" aria-hidden="true"></div>
@@ -109,6 +109,32 @@
               </div>
             </div>
           </section>
+
+          <section id="playoffs-admin-section" class="admin-section" hidden>
+            <header class="admin-section-heading"><div><span>12 / ELIMINATORIAS</span><h2>Cuadro final</h2><p>Los cuatro primeros, a doble eliminación. Hacen falta dos derrotas para quedar fuera.</p></div><span id="playoffs-state" class="draft-admin-state">SIN GENERAR</span></header>
+
+            <div id="playoffs-format-block" class="draft-admin-block">
+              <div class="mini-heading"><h3>FORMATO</h3><span>Se fija antes de empezar</span></div>
+              <div class="draft-format">
+                <label for="playoffs-gf-format">Gran final</label>
+                <select id="playoffs-gf-format">
+                  <option value="3">Al mejor de 3 mapas</option>
+                  <option value="5">Al mejor de 5 mapas</option>
+                </select>
+                <p class="draft-format-note">Las demás rondas se juegan al mejor de 3.</p>
+              </div>
+            </div>
+
+            <div class="draft-admin-actions">
+              <button id="generate-playoffs" type="button" disabled>GENERAR PLAYOFFS</button>
+            </div>
+            <p id="playoffs-feedback" role="status" aria-live="polite"></p>
+
+            <div id="playoffs-bracket" class="playoffs-bracket" hidden></div>
+
+            <ul id="playoffs-placements" class="playoff-places" hidden></ul>
+          </section>
+
 
 
           <section id="reporter-simulator-section" class="admin-section" hidden>

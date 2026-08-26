@@ -47,7 +47,14 @@
         </div>
       </section>
 
-      <section class="draft-section" aria-labelledby="standings-title">
+      <nav class="league-nav" aria-label="Secciones de la competición">
+        <a href="#clasificacion">Clasificación</a>
+        <a href="#calendario">Fase regular</a>
+        <a id="nav-playoffs" href="#playoffs-section" hidden>Eliminatorias</a>
+        <a href="#players-section">Estadísticas</a>
+      </nav>
+
+      <section class="draft-section" id="clasificacion" aria-labelledby="standings-title">
         <header class="section-bar"><div><p class="section-index">01 / CLASIFICACIÓN</p><h2 id="standings-title">La tabla</h2></div></header>
         <div class="league-table-wrap">
           <table id="public-standings" class="public-standings"></table>
@@ -55,13 +62,20 @@
         <p id="league-tie-note" class="captain-hint" hidden></p>
       </section>
 
-      <section class="draft-section" aria-labelledby="calendar-title">
+      <section class="draft-section" id="calendario" aria-labelledby="calendar-title">
         <header class="section-bar"><div><p class="section-index">02 / CALENDARIO</p><h2 id="calendar-title">Las jornadas</h2></div></header>
         <div id="public-matchdays" class="public-matchdays"></div>
       </section>
 
+      <section id="playoffs-section" class="draft-section" aria-labelledby="playoffs-title" hidden>
+        <header class="section-bar"><div><p class="section-index">03 / ELIMINATORIAS</p><h2 id="playoffs-title">El cuadro final</h2></div><span id="playoffs-status" class="bracket-status"></span></header>
+        <p class="captain-hint">Doble eliminación entre los cuatro primeros: hacen falta dos derrotas para quedar fuera.</p>
+        <div id="public-bracket" class="public-bracket"></div>
+        <ol id="public-placements" class="public-placements" hidden></ol>
+      </section>
+
       <section id="players-section" class="draft-section" aria-labelledby="players-title" hidden>
-        <header class="section-bar"><div><p class="section-index">03 / JUGADORES</p><h2 id="players-title">Estadísticas</h2></div></header>
+        <header class="section-bar"><div><p class="section-index">04 / JUGADORES</p><h2 id="players-title">Estadísticas</h2></div></header>
         <div class="league-table-wrap">
           <table id="public-players" class="public-standings public-players"></table>
         </div>

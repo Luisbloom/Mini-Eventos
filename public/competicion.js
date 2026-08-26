@@ -195,6 +195,137 @@ function pintarJugadores() {
     : 'Los promedios se calculan sólo sobre las partidas con ese dato disponible.';
 }
 
+
+// ---------------------------------------------------- eliminatorias
+
+/** Las zonas del cuadro, en el orden en que se leen. */
+const ZONAS = [
+  ['UPPER', 'Cuadro alto'],
+  ['LOWER', 'Cuadro bajo'],
+  ['GRAND', 'Gran final']
+];
+
+function tarjetaDeSerie(serie) {
+  const tarjeta = document.createElement('article');
+  tarjeta.className = 'bracket-series';
+  if (serie.status === 'COMPLETED') tarjeta.classList.add('is-done');
+  if (!serie.teamA || !serie.teamB) tarjeta.classList.add('is-tbd');
+
+  const cabecera = document.createElement('header');
+  const titulo = document.createElement('strong');
+  titulo.textContent = serie.label;
+  const formato = document.createElement('span');
+  formato.textContent = serie.status === 'COMPLETED'
+    ? 'BO' + serie.bestOf + ' \u00b7 FINAL' : 'BO' + serie.bestOf;
+  cabecera.append(titulo, formato);
+  tarjeta.append(cabecera);
+
+  // El marcador de la serie son MAPAS ganados, no las rondas de un mapa.
+  const marcador = serie.seriesScore || { a: 0, b: 0 };
+
+  for (const [lado, equipo] of [['a', serie.teamA], ['b', serie.teamB]]) {
+    const fila = document.createElement('div');
+    fila.className = 'bracket-team';
+    if (equipo && serie.winnerTeamId === equipo.teamId) fila.classList.add('is-winner');
+
+    const quien = document.createElement('span');
+    // Mientras no se sepa, se dice. Nunca un rival inventado.
+    quien.textContent = equipo
+      ? (equipo.seed ? '#' + equipo.seed + ' ' : '') + (equipo.name || 'Equipo ' + equipo.teamId)
+      : 'Por determinar';
+    if (!equipo) quien.classList.add('is-pending');
+
+    const mapas = document.createElement('b');
+    mapas.textContent = String(marcador[lado]);
+    fila.append(quien, mapas);
+    tarjeta.append(fila);
+  }
+
+  const jugados = serie.games.filter((juego) => juego.status === 'COMPLETED');
+  const sinJugar = serie.games.filter((juego) => juego.status === 'NOT_NEEDED');
+
+  if (jugados.length || sinJugar.length) {
+    const lista = document.createElement('ul');
+    lista.className = 'bracket-games';
+
+    for (const juego of jugados) {
+      const fila = document.createElement('li');
+      const mapa = document.createElement('span');
+      mapa.textContent = nombreDeMapa(juego.mapKey);
+      const rondas = document.createElement('b');
+      rondas.textContent = juego.teamARounds + '\u2013' + juego.teamBRounds;
+      fila.append(mapa, rondas);
+      lista.append(fila);
+    }
+    // Un mapa que no hizo falta jugar se dice, en vez de dejarlo pendiente
+    // para siempre y hacer creer que falta algo.
+    for (const juego of sinJugar) {
+      const fila = document.createElement('li');
+      fila.className = 'is-not-needed';
+      fila.textContent = 'Mapa ' + juego.gameNumber + ' \u2014 no necesario';
+      lista.append(fila);
+    }
+    tarjeta.append(lista);
+  }
+
+  return tarjeta;
+}
+
+const RESULTADO_PUBLICO = {
+  CHAMPION: 'Campeon', RUNNER_UP: 'Subcampeon',
+  ELIMINATED: 'Eliminado', ACTIVE: 'Sigue en juego'
+};
+
+function pintarEliminatorias() {
+  const cuadro = estado.playoffs;
+  const seccion = byId('playoffs-section');
+  const enlace = byId('nav-playoffs');
+
+  const hay = Boolean(cuadro && cuadro.generated);
+  seccion.hidden = !hay;
+  enlace.hidden = !hay;
+  if (!hay) return;
+
+  const terminado = cuadro.status === 'COMPLETED';
+  byId('playoffs-status').textContent = terminado ? 'TERMINADO' : 'EN JUEGO';
+  byId('playoffs-status').className = 'bracket-status ' + (terminado ? 'is-ready' : 'is-review');
+
+  /*
+    En pantalla ancha, las dos ramas una al lado de la otra; en movil, una sola
+    columna de tarjetas en el orden en que se juegan. Dibujar las lineas de un
+    cuadro en un movil sale ilegible, y algo ilegible no informa de nada.
+  */
+  byId('public-bracket').replaceChildren(...ZONAS.flatMap(([zona, titulo]) => {
+    const series = cuadro.series.filter((serie) => serie.bracket === zona);
+    if (!series.length) return [];
+
+    const bloque = document.createElement('section');
+    bloque.className = 'bracket-zone is-' + zona.toLowerCase();
+    const cabecera = document.createElement('h3');
+    cabecera.textContent = titulo;
+    bloque.append(cabecera, ...series
+      .sort((uno, otro) => uno.round - otro.round)
+      .map(tarjetaDeSerie));
+    return [bloque];
+  }));
+
+  const puestos = byId('public-placements');
+  const conPuesto = (cuadro.placements || []).filter((fila) => fila.position);
+  puestos.hidden = conPuesto.length === 0;
+  puestos.replaceChildren(...conPuesto.map((fila) => {
+    const linea = document.createElement('li');
+    linea.className = 'bracket-place is-' + fila.result.toLowerCase().replace(/_/g, '-');
+    const puesto = document.createElement('b');
+    puesto.textContent = fila.position + '\u00ba';
+    const quien = document.createElement('span');
+    quien.textContent = fila.name || ('Equipo ' + fila.teamId);
+    const nota = document.createElement('small');
+    nota.textContent = RESULTADO_PUBLICO[fila.result] || '';
+    linea.append(puesto, quien, nota);
+    return linea;
+  }));
+}
+
 // ------------------------------------------------------------ clasificación
 
 const COLUMNAS = [
@@ -341,6 +472,7 @@ function pintar() {
 
   pintarClasificacion();
   pintarCalendario();
+  pintarEliminatorias();
   pintarJugadores();
 }
 
