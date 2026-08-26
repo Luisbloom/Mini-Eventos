@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "demo:valorant": "node tools/demo/valorant-visual-demo.js",
     "init-db": "node src/init-db.js",
     "test": "node --test \"test/*.test.js\"",
     "test:ocr-real": "node --test \"ocr-real-tests/*.test.js\""
