@@ -213,14 +213,54 @@ function migrateValorantCompetition(connection) {
     );
   `);
 
-  migrateExtraStats(connection);
-  migratePlayoffSeries(connection);
-  migrateSkippedGames(connection);
+  migrateLegacyValorantSchema(connection);
+}
 
-  // Cuántos mapas se juega la gran final. Se fija antes de empezar.
-  const ajustes = connection.pragma('table_info(valorant_settings)').map((c) => c.name);
-  if (!ajustes.includes('grand_final_best_of')) {
-    connection.exec('ALTER TABLE valorant_settings ADD COLUMN grand_final_best_of INTEGER NOT NULL DEFAULT 3');
+/**
+ * Reconstruye las tablas legacy sin activar los ON DELETE CASCADE de sus hijos.
+ *
+ * SQLite no permite cambiar `foreign_keys` dentro de una transacción: sería un
+ * no-op. Por eso se pausa antes de abrir la transacción, se valida el grafo aún
+ * dentro de ella y se restaura siempre al terminar, también si algo falla.
+ */
+function migrateLegacyValorantSchema(connection) {
+  if (connection.inTransaction) {
+    throw new CompetitionError(
+      'La migración Valorant necesita ejecutarse fuera de otra transacción.',
+      'VALORANT_MIGRATION_TRANSACTION_ACTIVE', 500);
+  }
+
+  const foreignKeysEnabled = Boolean(connection.pragma('foreign_keys', { simple: true }));
+  if (foreignKeysEnabled) connection.pragma('foreign_keys = OFF');
+
+  try {
+    connection.transaction(() => {
+      migrateExtraStats(connection);
+      migratePlayoffSeries(connection);
+      migrateSkippedGames(connection);
+
+      // Cuántos mapas se juega la gran final. Se fija antes de empezar.
+      const ajustes = connection.pragma('table_info(valorant_settings)').map((c) => c.name);
+      if (!ajustes.includes('grand_final_best_of')) {
+        connection.exec('ALTER TABLE valorant_settings ADD COLUMN grand_final_best_of INTEGER NOT NULL DEFAULT 3');
+      }
+
+      const violations = connection.pragma('foreign_key_check');
+      if (violations.length > 0) {
+        throw new CompetitionError(
+          'La migración Valorant dejaría relaciones rotas.',
+          'VALORANT_MIGRATION_FOREIGN_KEY_FAILED', 500);
+      }
+    })();
+  } finally {
+    if (foreignKeysEnabled) connection.pragma('foreign_keys = ON');
+  }
+
+  const violations = connection.pragma('foreign_key_check');
+  if (violations.length > 0) {
+    throw new CompetitionError(
+      'La migración Valorant dejó relaciones rotas.',
+      'VALORANT_MIGRATION_FOREIGN_KEY_FAILED', 500);
   }
 }
 
@@ -246,8 +286,7 @@ function migratePlayoffSeries(connection) {
   const columnas = connection.pragma('table_info(valorant_series)').map((c) => c.name);
   if (columnas.includes('bracket_slot')) return;
 
-  const rehacer = connection.transaction(() => {
-    connection.exec(`
+  connection.exec(`
       CREATE TABLE valorant_series_nueva (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id INTEGER NOT NULL,
@@ -285,8 +324,6 @@ function migratePlayoffSeries(connection) {
       ALTER TABLE valorant_series_nueva RENAME TO valorant_series;
       CREATE INDEX IF NOT EXISTS idx_series_event_stage ON valorant_series(event_id, stage, matchday);
     `);
-  });
-  rehacer();
 }
 
 /**
@@ -301,19 +338,16 @@ function migrateSkippedGames(connection) {
     "SELECT sql FROM sqlite_master WHERE type='table' AND name='valorant_games'").get();
   if (!definicion || definicion.sql.includes('NOT_NEEDED')) return;
 
-  const rehacer = connection.transaction(() => {
-    connection.exec(definicion.sql
-      .replace('CREATE TABLE valorant_games', 'CREATE TABLE valorant_games_nueva')
-      .replace("'PENDING','WAITING_RESULT','COMPLETED','REVIEW_REQUIRED'",
-        "'PENDING','WAITING_RESULT','COMPLETED','REVIEW_REQUIRED','NOT_NEEDED'"));
-    connection.exec(`
+  connection.exec(definicion.sql
+    .replace('CREATE TABLE valorant_games', 'CREATE TABLE valorant_games_nueva')
+    .replace("'PENDING','WAITING_RESULT','COMPLETED','REVIEW_REQUIRED'",
+      "'PENDING','WAITING_RESULT','COMPLETED','REVIEW_REQUIRED','NOT_NEEDED'"));
+  connection.exec(`
       INSERT INTO valorant_games_nueva SELECT * FROM valorant_games;
       DROP TABLE valorant_games;
       ALTER TABLE valorant_games_nueva RENAME TO valorant_games;
       CREATE INDEX IF NOT EXISTS idx_stats_participant ON valorant_player_game_stats(participant_id);
     `);
-  });
-  rehacer();
 }
 
 function migrateExtraStats(connection) {
