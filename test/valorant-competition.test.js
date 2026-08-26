@@ -610,8 +610,8 @@ describe('fase regular de Valorant', () => {
     it('la fase regular tiene su propia dirección', async () => {
       const { app, event } = montar();
       const pagina = await request(app).get(`/eventos/${event.slug}/competicion`).expect(200);
-      assert.match(pagina.text, /competicion\.js/);
-      assert.match(pagina.text, /public-standings/);
+      assert.match(pagina.text, /competition-pages\.js/);
+      assert.match(pagina.text, /competition-content/);
 
       // Y sigue sirviendo la del draft, que comparte prefijo.
       const draft = await request(app).get(`/eventos/${event.slug}/draft`).expect(200);

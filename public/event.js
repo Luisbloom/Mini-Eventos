@@ -41,7 +41,7 @@ function configureModules(event) {
   }
   byId('information-link').href = `/eventos/${encodeURIComponent(event.slug)}/informacion`;
   // El draft y la fase regular son páginas propias, no anclas de esta.
-  byId('draft-link').href = `/eventos/${encodeURIComponent(event.slug)}/draft`;
+  byId('draft-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion/draft`;
   byId('league-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
   const labels = { draft: 'Draft', information: 'Información', participants: 'Participantes', leaderboard: 'Clasificación', matches: 'Resultados', registration: 'Inscripción', competition: 'Fases', schedule: 'Agenda', prizes: 'Premios' };
   byId('module-list').replaceChildren(...Object.entries(event.modules).filter(([key,enabled]) => enabled&&!(key==='leaderboard'&&event.modules.competition)).map(([key]) => {

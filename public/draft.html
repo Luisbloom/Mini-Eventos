@@ -12,10 +12,12 @@
     <link rel="apple-touch-icon" href="/images/logo.png">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/draft.css">
+    <link rel="stylesheet" href="/competition-pages.css">
     <script src="/draft-view.js" defer></script>
     <script src="/draft.js" defer></script>
   </head>
   <body class="draft-page">
+    <a class="skip-link" href="#draft-main">Saltar al contenido</a>
     <div class="grain" aria-hidden="true"></div>
 
     <header class="topbar">
@@ -25,12 +27,21 @@
       </a>
       <nav class="primary-nav" aria-label="Navegación principal">
         <a id="back-to-event" href="/">Volver al evento</a>
-        <a class="active" href="#draft" aria-current="page">Draft</a>
+        <a id="back-to-competition" href="/">Centro de competición</a>
       </nav>
       <div class="broadcast" aria-live="polite">
         <span id="draft-dot" class="live-dot loading"></span><span id="draft-connection">CONECTANDO</span>
       </div>
     </header>
+
+    <nav class="competition-nav" aria-label="Navegación de la competición">
+      <a id="draft-nav-hub" href="/">Resumen</a>
+      <a id="draft-nav-draft" class="active" href="#draft" aria-current="page">Draft</a>
+      <a id="draft-nav-regular" href="/">Fase regular</a>
+      <a id="draft-nav-playoffs" href="/">Playoffs</a>
+      <a id="draft-nav-stats" href="/">Estadísticas</a>
+      <a id="draft-nav-results" href="/">Resultados</a>
+    </nav>
 
     <main id="draft-main" class="draft-main" hidden>
       <section class="draft-hero" aria-labelledby="draft-title">
@@ -74,7 +85,7 @@
         <header class="section-bar"><div><p class="section-index">04 / TU EQUIPO</p><h2 id="team-name-title">Ponle nombre</h2></div></header>
         <form id="team-name-form" class="team-name-form" novalidate>
           <label for="team-name">Nombre del equipo</label>
-          <input id="team-name" maxlength="32" autocomplete="off" required>
+          <input id="team-name" name="teamName" maxlength="32" autocomplete="off" required>
           <small>Entre 2 y 32 caracteres. Lo verá todo el mundo.</small>
           <button type="submit">GUARDAR NOMBRE <span aria-hidden="true">→</span></button>
           <p id="team-name-feedback" role="status"></p>

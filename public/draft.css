@@ -1,7 +1,7 @@
 /* Draft en directo. Misma identidad que el resto de Mini Eventos: fondo oscuro,
    acento del evento y tipografía condensada. El acento lo pone el evento. */
 
-.draft-page { --event-accent: #ff4655; }
+.draft-page { --event-accent: #ff4655; --phase-accent: var(--event-accent); --phase-rgb: 255, 70, 85; }
 .draft-main { width: min(1540px, 100%); margin: 0 auto; padding: 0 var(--portal-pad, clamp(1.25rem, 4vw, 3.5rem)) 5rem; }
 
 .draft-hero { position: relative; padding: clamp(3rem, 6vw, 5.5rem) 0 3rem; border-bottom: 1px solid var(--line); }
@@ -63,6 +63,7 @@
 
 /* --- modal -------------------------------------------------------------- */
 .pick-dialog { width: min(420px, calc(100vw - 2.5rem)); padding: 0; border: 1px solid var(--event-accent); background: var(--surface); color: var(--paper); }
+.pick-dialog { overscroll-behavior: contain; }
 .pick-dialog::backdrop { background: rgba(5, 8, 10, .78); }
 .pick-dialog form { padding: 1.5rem; }
 .pick-dialog h3 { font: 1.5rem/1.15 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }

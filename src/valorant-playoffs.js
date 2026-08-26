@@ -457,6 +457,7 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
           round: serie.matchday,
           bestOf: serie.bestOf,
           status: serie.status,
+          scheduledAt: serie.scheduledAt,
           // Vacío mientras no se sepa: nunca un participante inventado.
           teamA: equipo(serie.teamAId, serie.teamASeed),
           teamB: equipo(serie.teamBId, serie.teamBSeed),
@@ -468,7 +469,19 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
             mapKey: juego.mapKey,
             teamARounds: juego.teamARounds,
             teamBRounds: juego.teamBRounds,
-            status: juego.status
+            status: juego.status,
+            verifiedByCapture: juego.resultSource === 'SCREENSHOT',
+            stats: juego.status === 'COMPLETED'
+              ? competition.listGameStats(juego.id).map((fila) => ({
+                participantId: fila.participantId,
+                teamId: fila.teamId,
+                agent: fila.agent,
+                acs: fila.acs, kills: fila.kills, deaths: fila.deaths, assists: fila.assists,
+                plusMinus: fila.plusMinus, adr: fila.adr,
+                hsPercent: fila.hsPercent, kastPercent: fila.kastPercent,
+                firstKills: fila.firstKills, firstDeaths: fila.firstDeaths
+              }))
+              : []
           }))
         }))
       };

@@ -1188,6 +1188,7 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           id: serie.id,
           status: serie.status,
           bestOf: serie.bestOf,
+          scheduledAt: serie.scheduledAt,
           teamA: { teamId: serie.teamAId, name: nombre.get(serie.teamAId) ?? null },
           teamB: { teamId: serie.teamBId, name: nombre.get(serie.teamBId) ?? null },
           winnerTeamId: serie.winnerTeamId,
@@ -1197,6 +1198,7 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             teamARounds: juego.teamARounds,
             teamBRounds: juego.teamBRounds,
             status: juego.status,
+            verifiedByCapture: juego.resultSource === 'SCREENSHOT',
             // Sólo lo confirmado. Nada de confianza, texto del OCR ni rutas de
             // archivo: eso es material de administración.
             stats: juego.status === 'COMPLETED'

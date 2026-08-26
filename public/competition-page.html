@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Competición de Valorant de Mini Eventos Jartiland">
+    <title>Competición · Mini Eventos Jartiland</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
+    <link rel="apple-touch-icon" href="/images/logo.png">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/competition-pages.css">
+    <script src="/competition-view.js" defer></script>
+    <script src="/competition-renderers.js" defer></script>
+    <script src="/competition-pages.js" defer></script>
+  </head>
+  <body class="competition-page" data-view="loading">
+    <a class="skip-link" href="#competition-content">Saltar al contenido</a>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="competition-topbar">
+      <a class="brand" href="/" aria-label="Mini Eventos Jartiland">
+        <img class="brand-logo" src="/images/logo-96.png" alt="" aria-hidden="true" width="40" height="40" decoding="async">
+        <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
+      </a>
+      <a id="competition-event-link" class="competition-back" href="/">Volver al evento <span aria-hidden="true">↗</span></a>
+      <div class="broadcast" aria-live="polite">
+        <span id="competition-dot" class="live-dot loading"></span>
+        <span id="competition-connection">CONECTANDO</span>
+      </div>
+    </header>
+
+    <nav id="competition-nav" class="competition-nav" aria-label="Navegación de la competición"></nav>
+
+    <main id="competition-main" class="competition-main" hidden>
+      <header id="competition-hero" class="competition-hero">
+        <div>
+          <p id="competition-eyebrow" class="competition-eyebrow">COMPETICIÓN</p>
+          <h1 id="competition-title">Valorant</h1>
+          <p id="competition-subtitle" class="competition-subtitle"></p>
+        </div>
+        <dl id="competition-kpis" class="competition-kpis"></dl>
+      </header>
+      <div id="competition-content" class="competition-content" aria-live="polite"></div>
+    </main>
+
+    <section id="competition-loading" class="competition-state">
+      <span class="competition-loader" aria-hidden="true"></span>
+      <div><strong>CARGANDO COMPETICIÓN…</strong><p>Recuperando equipos, jornadas y resultados.</p></div>
+    </section>
+
+    <section id="competition-error" class="competition-state is-error" hidden>
+      <span aria-hidden="true">!</span>
+      <div><strong id="competition-error-title">NO DISPONIBLE</strong><p id="competition-error-copy"></p></div>
+      <a id="competition-error-back" href="/">Volver al evento</a>
+    </section>
+
+    <dialog id="competition-stats-dialog" class="competition-dialog">
+      <header>
+        <div><span>DATOS DEL MAPA</span><h2 id="dialog-title">Partido</h2><p id="dialog-score"></p></div>
+        <button id="dialog-close" type="button" aria-label="Cerrar detalle">×</button>
+      </header>
+      <div class="competition-table-scroll"><table id="dialog-table" class="competition-table"></table></div>
+    </dialog>
+  </body>
+</html>

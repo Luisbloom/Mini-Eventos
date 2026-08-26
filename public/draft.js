@@ -197,6 +197,14 @@ async function pedirEstado() {
   draft = await estado.json();
   me = yo;
   byId('back-to-event').href = `/eventos/${encodeURIComponent(slug)}`;
+  const competition = `/eventos/${encodeURIComponent(slug)}/competicion`;
+  byId('back-to-competition').href = competition;
+  byId('draft-nav-hub').href = competition;
+  byId('draft-nav-draft').href = `${competition}/draft`;
+  byId('draft-nav-regular').href = `${competition}/fase-regular`;
+  byId('draft-nav-playoffs').href = `${competition}/playoffs`;
+  byId('draft-nav-stats').href = `${competition}/estadisticas`;
+  byId('draft-nav-results').href = `${competition}/resultados`;
   pintar();
   setConnection('live', draft.status === 'ACTIVE' ? 'EN DIRECTO' : 'CONECTADO');
   return true;

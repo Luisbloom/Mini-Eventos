@@ -66,10 +66,13 @@ describe('demo visual reproducible de Valorant', () => {
     assert.equal(publicState.body.playerStats.length, 30);
     assert.equal(publicState.body.playoffs.generated, true);
     assert.ok(publicState.body.playoffs.series.length >= 6);
+    assert.equal(publicState.body.matchdays[0].series[0].games[0].stats.length, 10);
+    assert.equal(publicState.body.matchdays[0].series[0].games[0].verifiedByCapture, false);
 
     const slots = new Map(publicState.body.playoffs.series.map((series) => [series.slot, series]));
     assert.equal(slots.get('UPPER_SEMI_1').status, 'COMPLETED');
     assert.equal(slots.get('UPPER_SEMI_2').status, 'COMPLETED');
+    assert.equal(slots.get('UPPER_SEMI_1').games[0].stats.length, 10);
     assert.ok(slots.get('UPPER_FINAL').teamA);
     assert.ok(slots.get('UPPER_FINAL').teamB);
     assert.ok(slots.get('LOWER_ROUND_1').teamA);
