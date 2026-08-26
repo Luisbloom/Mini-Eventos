@@ -983,13 +983,32 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             'Esa partida todavía no tiene resultado que corregir.', 'RESULT_NOT_RECORDED', 409);
         }
 
+        // El ganador sale del marcador. Aceptarlo de fuera permitiría registrar
+        // un 13-8 perdido.
+        const oldGameWinner = juego.winner_team_id ?? null;
+        const newGameWinner = marcador.winner === 'a' ? serie.team_a_id : serie.team_b_id;
+        const necesarios = Math.floor(serie.best_of / 2) + 1;
+        const prospectiveWins = new Map();
+        const games = connection.prepare(
+          'SELECT id,status,winner_team_id FROM valorant_games WHERE series_id=? ORDER BY game_number'
+        ).all(seriesId);
+        for (const row of games) {
+          const winner = row.id === juego.id
+            ? newGameWinner
+            : (row.status === 'COMPLETED' ? row.winner_team_id : null);
+          if (winner) prospectiveWins.set(winner, (prospectiveWins.get(winner) ?? 0) + 1);
+        }
+        const newSeriesWinner = [...prospectiveWins.entries()]
+          .find(([, wins]) => wins >= necesarios)?.[0] ?? null;
+        const oldSeriesWinner = serie.winner_team_id ?? null;
+        const seriesWinnerChanges = oldSeriesWinner !== newSeriesWinner;
+
         /*
-          ⚠️ Corregir un resultado de la eliminatoria puede cambiar quién ganó la
-          serie, y con ello quién juega las siguientes. Si alguna de esas ya se
-          ha empezado a jugar, rehacer el cuadro dejaría partidos disputados por
-          equipos que nunca debieron llegar ahí. Se bloquea y se dice por qué.
+          ⚠️ Sólo un cambio prospectivo del ganador de la SERIE puede alterar el
+          cuadro. Corregir rondas, o incluso un mapa manteniendo el mismo ganador
+          final, no toca participantes downstream y no debe quedar bloqueado.
         */
-        if (overwrite && serie.stage === 'PLAYOFFS' && playoffs) {
+        if (overwrite && seriesWinnerChanges && serie.stage === 'PLAYOFFS' && playoffs) {
           const iniciadas = playoffs.startedDependents(eventId, serie.bracket_slot);
           if (iniciadas.length > 0) {
             throw new CompetitionError(
@@ -999,44 +1018,37 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           }
         }
 
-        // El ganador sale del marcador. Aceptarlo de fuera permitiría registrar
-        // un 13-8 perdido.
-        const ganador = marcador.winner === 'a' ? serie.team_a_id : serie.team_b_id;
         connection.prepare(`
           UPDATE valorant_games
           SET team_a_rounds=?, team_b_rounds=?, winner_team_id=?, result_source=?,
               status='COMPLETED', updated_at=${NOW}
-          WHERE id=?`).run(a, b, ganador, source, juego.id);
+          WHERE id=?`).run(a, b, newGameWinner, source, juego.id);
 
         if (stats) this._replaceGameStats(juego.id, serie, stats, captureBatchId);
 
         // La serie se cierra cuando alguien llega a los mapas necesarios.
-        const necesarios = Math.floor(serie.best_of / 2) + 1;
-        const ganados = connection.prepare(
-          "SELECT winner_team_id id, COUNT(*) total FROM valorant_games WHERE series_id=? AND status='COMPLETED' GROUP BY winner_team_id"
-        ).all(seriesId);
-        const campeon = ganados.find((fila) => fila.total >= necesarios);
-        if (campeon) {
+        if (newSeriesWinner) {
           connection.prepare(
             `UPDATE valorant_series SET status='COMPLETED', winner_team_id=?, updated_at=${NOW} WHERE id=?`
-          ).run(campeon.id, seriesId);
+          ).run(newSeriesWinner, seriesId);
         } else {
           connection.prepare(
-            `UPDATE valorant_series SET status='WAITING_RESULT', updated_at=${NOW} WHERE id=?`
+            `UPDATE valorant_series SET status='WAITING_RESULT', winner_team_id=NULL, updated_at=${NOW} WHERE id=?`
           ).run(seriesId);
         }
 
         // El cuadro se mueve DENTRO de la transacción: si el resultado no
         // entra, tampoco avanza nadie de ronda.
         if (serie.stage === 'PLAYOFFS' && playoffs) {
-          if (overwrite) playoffs.clearDownstream(eventId, serie.bracket_slot);
+          if (overwrite && seriesWinnerChanges) playoffs.clearDownstream(eventId, serie.bracket_slot);
           playoffs.propagate(eventId, { actor });
           playoffs.ensureResetIfNeeded(eventId, { actor });
           playoffs.markUnneededGames(eventId);
         }
 
         return {
-          ganador,
+          ganador: newGameWinner,
+          oldGameWinner,
           antes: juego.status === 'COMPLETED'
             ? { teamARounds: juego.team_a_rounds, teamBRounds: juego.team_b_rounds, source: juego.result_source }
             : null

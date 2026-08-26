@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const BetterSqlite3 = require('better-sqlite3');
 const request = require('supertest');
 const { openDatabase } = require('../src/database');
 const { createApp } = require('../src/app');
@@ -21,6 +22,29 @@ const { renderScreenshot } = require('./helpers/fake-screenshot');
 const { SLOTS } = require('../src/services/playoffs/bracket');
 
 const ADMIN = 'token-de-pruebas';
+
+const TIE_PROFILES = Object.freeze({
+  '1/2': {
+    winners: [1, 2, 3, 4, 0, 2, 3, 4, 5, 3, 4, 5, 4, 5, 5],
+    margins: [10, 12, 10, 6, 2, 7, 2, 10, 13, 5, 13, 3, 4, 3, 8]
+  },
+  '2/3': {
+    winners: [1, 2, 3, 0, 5, 2, 3, 4, 5, 3, 4, 5, 4, 5, 5],
+    margins: [8, 8, 10, 5, 12, 3, 9, 7, 7, 3, 7, 4, 8, 10, 13]
+  },
+  '3/4': {
+    winners: [1, 2, 0, 4, 5, 2, 3, 4, 5, 3, 4, 5, 4, 5, 5],
+    margins: [2, 7, 2, 11, 4, 8, 5, 10, 13, 11, 3, 4, 6, 11, 5]
+  },
+  '4/5': {
+    winners: [1, 0, 3, 4, 5, 2, 3, 4, 5, 3, 4, 5, 4, 5, 5],
+    margins: [8, 10, 2, 13, 8, 11, 8, 12, 4, 7, 12, 3, 8, 9, 2]
+  },
+  '5/6': {
+    winners: [1, 2, 3, 4, 0, 2, 3, 4, 5, 3, 4, 5, 4, 5, 5],
+    margins: [6, 13, 10, 2, 13, 2, 6, 6, 10, 7, 9, 2, 8, 13, 8]
+  }
+});
 
 describe('eliminatorias de Valorant', () => {
   const directorios = [];
@@ -100,6 +124,37 @@ describe('eliminatorias de Valorant', () => {
     return database.valorantCompetition.standings(event.id, { teams: equipos });
   }
 
+  /** Juega un round robin real cuyo único empate relevante cae en la frontera indicada. */
+  function jugarPerfilEmpate(contexto, profile) {
+    const { database, event, equipos } = contexto;
+    database.valorantCompetition.setSettings(event.id, {
+      tiebreakers: ['wins', 'round_diff'], actor: 'prueba de empates'
+    });
+    const pairs = [];
+    for (let a = 0; a < equipos.length; a++) {
+      for (let b = a + 1; b < equipos.length; b++) pairs.push([a, b]);
+    }
+    const series = database.valorantCompetition.listSeries(event.id);
+    pairs.forEach(([a, b], index) => {
+      const teamA = equipos[a].id;
+      const teamB = equipos[b].id;
+      const serie = series.find((row) => (
+        (row.teamAId === teamA && row.teamBId === teamB)
+        || (row.teamAId === teamB && row.teamBId === teamA)
+      ));
+      const winner = equipos[profile.winners[index]].id;
+      const loserRounds = 13 - profile.margins[index];
+      const winnerIsA = serie.teamAId === winner;
+      database.valorantCompetition.recordGameResult(event.id, {
+        seriesId: serie.id,
+        teamARounds: winnerIsA ? 13 : loserRounds,
+        teamBRounds: winnerIsA ? loserRounds : 13,
+        reason: 'perfil de empate reproducible'
+      });
+    });
+    return database.valorantCompetition.standings(event.id, { teams: equipos });
+  }
+
   /** Gana una serie de eliminatoria, mapa a mapa, hasta cerrarla. */
   function ganarSerie(database, event, seriesId, teamId, { mapas = ['ascent', 'bind', 'haven', 'lotus', 'split'] } = {}) {
     let serie = database.valorantPlayoffs.getSeries(event.id, seriesId);
@@ -160,6 +215,39 @@ describe('eliminatorias de Valorant', () => {
       const respuesta = await admin(app, 'post', `/api/admin/events/${event.id}/playoffs/generate`, {});
       assert.equal(respuesta.status, 409);
       assert.equal(respuesta.body.error.code, 'PLAYOFF_SEEDING_UNRESOLVED');
+    });
+
+    for (const [boundary, position] of [['1/2', 1], ['2/3', 2], ['3/4', 3], ['4/5', 4]]) {
+      it(`rechaza un empate ${boundary} porque afecta al top 4`, () => {
+        const contexto = ligaMontada(6);
+        const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES[boundary]);
+        assert.equal(tabla.standings[position - 1].tieRequiresAdmin, true);
+        assert.equal(tabla.standings[position].tieRequiresAdmin, true);
+        assert.throws(
+          () => contexto.database.valorantPlayoffs.generate(contexto.event.id, contexto.equipos),
+          (error) => error.code === 'PLAYOFF_SEEDING_UNRESOLVED'
+        );
+      });
+    }
+
+    it('permite un empate 5/6 y conserva el top 4 derivado', () => {
+      const contexto = ligaMontada(6);
+      const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES['5/6']);
+      const top4 = tabla.standings.slice(0, 4).map((row) => row.teamId);
+      assert.equal(tabla.standings[4].tieRequiresAdmin, true);
+      assert.equal(tabla.standings[5].tieRequiresAdmin, true);
+
+      contexto.database.valorantPlayoffs.generate(contexto.event.id, contexto.equipos);
+      const series = contexto.database.valorantPlayoffs.listSeries(contexto.event.id);
+      const semi1 = porSlot(series, SLOTS.UPPER_SEMI_1);
+      const semi2 = porSlot(series, SLOTS.UPPER_SEMI_2);
+      assert.deepEqual(
+        [semi1.teamAId, semi2.teamAId, semi2.teamBId, semi1.teamBId],
+        top4
+      );
+      const playoffTeams = new Set(series.flatMap((row) => [row.teamAId, row.teamBId]).filter(Boolean));
+      assert.equal(playoffTeams.has(tabla.standings[4].teamId), false);
+      assert.equal(playoffTeams.has(tabla.standings[5].teamId), false);
     });
 
     it('no se genera dos veces', async () => {
@@ -560,6 +648,34 @@ describe('eliminatorias de Valorant', () => {
       return { ...contexto, semi };
     }
 
+    function conFinalAltaJugada({ semi1MapWinners = ['a', 'a'] } = {}) {
+      const contexto = ligaMontada(4);
+      jugarLiga(contexto);
+      const { database, event, equipos } = contexto;
+      database.valorantPlayoffs.generate(event.id, equipos);
+      const dame = (slot) => porSlot(database.valorantPlayoffs.listSeries(event.id), slot);
+      const semi1 = dame(SLOTS.UPPER_SEMI_1);
+      const semi2 = dame(SLOTS.UPPER_SEMI_2);
+
+      semi1MapWinners.forEach((side, index) => {
+        const gameNumber = index + 1;
+        database.valorantCompetition.assignMap(event.id, {
+          seriesId: semi1.id, gameNumber, mapKey: ['ascent', 'bind', 'haven'][index]
+        });
+        const winner = side === 'a' ? semi1.teamAId : semi1.teamBId;
+        database.valorantCompetition.recordGameResult(event.id, {
+          seriesId: semi1.id, gameNumber,
+          teamARounds: winner === semi1.teamAId ? 13 : 6,
+          teamBRounds: winner === semi1.teamBId ? 13 : 6,
+          reason: 'semifinal preparada'
+        });
+      });
+      ganarSerie(database, event, semi2.id, semi2.teamAId);
+      const finalAlta = dame(SLOTS.UPPER_FINAL);
+      ganarSerie(database, event, finalAlta.id, finalAlta.teamAId);
+      return { ...contexto, semi1, finalAlta, dame };
+    }
+
     it('una corrección que no cambia el ganador se acepta', () => {
       const { database, event, semi } = conSemiJugada();
       const corregida = database.valorantCompetition.correctGameResult(event.id, {
@@ -568,6 +684,33 @@ describe('eliminatorias de Valorant', () => {
       });
       assert.equal(corregida.games[0].teamBRounds, 9);
       assert.equal(corregida.games[0].winnerTeamId, semi.teamAId, 'sigue ganando el mismo');
+    });
+
+    it('permite corregir rondas sin cambiar ganador aunque el downstream esté completado', () => {
+      const { database, event, semi1, dame } = conFinalAltaJugada();
+      const downstreamBefore = dame(SLOTS.UPPER_FINAL);
+      const corrected = database.valorantCompetition.correctGameResult(event.id, {
+        seriesId: semi1.id, gameNumber: 1,
+        teamARounds: 13, teamBRounds: 9, reason: 'rondas corregidas'
+      });
+      assert.equal(corrected.winnerTeamId, semi1.teamAId);
+      assert.equal(corrected.games[0].teamBRounds, 9);
+      assert.deepEqual(dame(SLOTS.UPPER_FINAL), downstreamBefore);
+      assert.equal(dame(SLOTS.UPPER_FINAL).winnerTeamId, downstreamBefore.winnerTeamId);
+    });
+
+    it('permite cambiar el ganador de un mapa si el ganador final de serie no cambia', () => {
+      const { database, event, semi1, dame } = conFinalAltaJugada({
+        semi1MapWinners: ['a', 'b', 'a']
+      });
+      const downstreamBefore = dame(SLOTS.UPPER_FINAL);
+      const corrected = database.valorantCompetition.correctGameResult(event.id, {
+        seriesId: semi1.id, gameNumber: 2,
+        teamARounds: 13, teamBRounds: 7, reason: 'mapa asignado al lado incorrecto'
+      });
+      assert.equal(corrected.games[1].winnerTeamId, semi1.teamAId);
+      assert.equal(corrected.winnerTeamId, semi1.teamAId);
+      assert.deepEqual(dame(SLOTS.UPPER_FINAL), downstreamBefore);
     });
 
     it('una corrección que cambia el ganador, sin nada jugado después, se acepta', () => {
@@ -634,6 +777,8 @@ describe('eliminatorias de Valorant', () => {
         seriesId: finalAlta.id, gameNumber: 1,
         teamARounds: 13, teamBRounds: 8, reason: 'ya en juego'
       });
+      const semiBefore = database.valorantPlayoffs.getSeries(event.id, semi1.id);
+      const downstreamBefore = dame(SLOTS.UPPER_FINAL);
 
       // Ahora corregir la semifinal cambiaría quién debía jugar ese partido.
       assert.throws(() => database.valorantCompetition.correctGameResult(event.id, {
@@ -643,9 +788,8 @@ describe('eliminatorias de Valorant', () => {
 
       // Y no se ha tocado nada: el resultado sigue como estaba.
       const intacta = database.valorantPlayoffs.getSeries(event.id, semi1.id);
-      assert.equal(intacta.winnerTeamId, semi1.teamAId);
-      assert.equal(dame(SLOTS.UPPER_FINAL).teamAId, semi1.teamAId);
-      assert.equal(dame(SLOTS.UPPER_FINAL).games[0].status, 'COMPLETED');
+      assert.deepEqual(intacta, semiBefore);
+      assert.deepEqual(dame(SLOTS.UPPER_FINAL), downstreamBefore);
     });
 
     it('queda registrado quién corrigió y por qué', async () => {
@@ -659,6 +803,47 @@ describe('eliminatorias de Valorant', () => {
       const correccion = auditoria.body.audit.find((fila) => fila.action === 'RESULT_CORRECTED');
       assert.equal(correccion.reason, 'ajuste de rondas');
       assert.ok(auditoria.body.audit.some((fila) => fila.action === 'PLAYOFFS_GENERATED'));
+    });
+  });
+
+  describe('invariante de los huecos del cuadro', () => {
+    it('no sobrescribe un equipo distinto ya presente en el destino', () => {
+      const contexto = ligaMontada(4);
+      jugarLiga(contexto);
+      const { database, event, equipos, directorio } = contexto;
+      database.valorantPlayoffs.generate(event.id, equipos);
+      const series = database.valorantPlayoffs.listSeries(event.id);
+      const semi = porSlot(series, SLOTS.UPPER_SEMI_1);
+      const finalAlta = porSlot(series, SLOTS.UPPER_FINAL);
+
+      const raw = new BetterSqlite3(path.join(directorio, 'tournament.db'));
+      raw.prepare('UPDATE valorant_series SET team_a_id=? WHERE id=?')
+        .run(semi.teamBId, finalAlta.id);
+      raw.close();
+
+      database.valorantCompetition.assignMap(event.id, {
+        seriesId: semi.id, gameNumber: 1, mapKey: 'ascent'
+      });
+      database.valorantCompetition.recordGameResult(event.id, {
+        seriesId: semi.id, gameNumber: 1,
+        teamARounds: 13, teamBRounds: 6, reason: 'primer mapa'
+      });
+      database.valorantCompetition.assignMap(event.id, {
+        seriesId: semi.id, gameNumber: 2, mapKey: 'bind'
+      });
+
+      assert.throws(() => database.valorantCompetition.recordGameResult(event.id, {
+        seriesId: semi.id, gameNumber: 2,
+        teamARounds: 13, teamBRounds: 6, reason: 'segundo mapa'
+      }), (error) => error.code === 'BRACKET_SLOT_CONFLICT');
+
+      const intactSemi = database.valorantPlayoffs.getSeries(event.id, semi.id);
+      assert.equal(intactSemi.status, 'WAITING_RESULT');
+      assert.equal(intactSemi.games[1].status, 'WAITING_RESULT');
+      assert.equal(
+        porSlot(database.valorantPlayoffs.listSeries(event.id), SLOTS.UPPER_FINAL).teamAId,
+        semi.teamBId
+      );
     });
   });
 

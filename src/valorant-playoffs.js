@@ -28,6 +28,22 @@ const STAGE = 'PLAYOFFS';
 /** Cuántos mapas se juega cada ronda. La gran final se configura aparte. */
 const DEFAULT_BEST_OF = 3;
 const GRAND_FINAL_BEST_OF = Object.freeze([3, 5]);
+const PLAYOFF_QUALIFIERS = 4;
+
+function unresolvedTieGroups(standings) {
+  const groups = [];
+  let current = [];
+  for (const row of standings) {
+    if (row.tieRequiresAdmin) {
+      current.push(row);
+    } else if (current.length) {
+      groups.push(current);
+      current = [];
+    }
+  }
+  if (current.length) groups.push(current);
+  return groups;
+}
 
 class PlayoffError extends Error {
   constructor(message, code = 'PLAYOFF_ERROR', status = 400) {
@@ -174,8 +190,10 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
         si afecta a los cuatro primeros o a la frontera con el quinto; un empate
         entre el quinto y el sexto no cambia nada del cuadro.
       */
-      const afectados = tabla.standings.slice(0, 5);
-      if (afectados.some((fila) => fila.tieRequiresAdmin)) {
+      const gruposSinResolver = unresolvedTieGroups(tabla.standings);
+      const afectaClasificacion = gruposSinResolver.some((grupo) =>
+        grupo.some((fila) => fila.position <= PLAYOFF_QUALIFIERS));
+      if (afectaClasificacion) {
         return {
           ok: false, code: 'PLAYOFF_SEEDING_UNRESOLVED',
           message: 'Hay un empate sin resolver que afecta a los clasificados. Resuélvelo antes de generar el cuadro.'
@@ -261,11 +279,19 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
         const destino = porSlot.get(slot);
         if (!destino || !teamId) return;
         const columna = lado === 'a' ? 'team_a_id' : 'team_b_id';
-        if (destino[lado === 'a' ? 'teamAId' : 'teamBId'] === teamId) return;
+        const propiedad = lado === 'a' ? 'teamAId' : 'teamBId';
+        const actual = destino[propiedad];
+        if (actual === teamId) return;
+        if (actual !== null && actual !== undefined) {
+          throw new PlayoffError(
+            `El hueco ${slot}.${lado} ya pertenece a otro equipo.`,
+            'BRACKET_SLOT_CONFLICT', 409);
+        }
 
         connection.prepare(
           `UPDATE valorant_series SET ${columna}=?, updated_at=${NOW} WHERE id=?`)
           .run(teamId, destino.id);
+        destino[propiedad] = teamId;
         movimientos.push({ slot, side: lado, teamId });
       };
 
