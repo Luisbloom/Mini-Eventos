@@ -608,4 +608,3 @@ INSERT INTO sqlite_sequence (name,seq) VALUES ('valorant_player_game_stats',20);
 INSERT INTO sqlite_sequence (name,seq) VALUES ('valorant_capture_batches',1);
 INSERT INTO sqlite_sequence (name,seq) VALUES ('valorant_captures',2);
 COMMIT;
-
