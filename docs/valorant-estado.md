@@ -8,6 +8,22 @@ lo que cambia entre un torneo y otro son los módulos del evento, no el código.
 
 ---
 
+## Hardening pre-deploy — 26 de agosto de 2026
+
+- Una base poblada creada con el código real anterior a playoffs (`f29f88a`)
+  migra sin perder series, partidas, resultados, estadísticas, capturas ni IDs.
+- La migración se puede abrir dos veces y `foreign_key_check` queda vacío.
+- Los empates 1/2, 2/3, 3/4 y 4/5 bloquean el cuadro; un empate sólo 5/6 no
+  altera el top 4 y se permite.
+- Las correcciones sólo bloquean si cambia el ganador final de la serie y ya se
+  ha jugado downstream. Los slots nunca sobrescriben otro equipo en silencio.
+- BO5 cubierto en 3-0, 3-1 y 3-2; Gran Final y reset conservan objetivo de tres
+  victorias y marcan mapas sobrantes como `NOT_NEEDED`.
+
+Estado: **software preparado para revisión visual final; no desplegado**.
+
+---
+
 ## Lo que ya funciona
 
 | Pieza | Estado |
@@ -20,10 +36,12 @@ lo que cambia entre un torneo y otro son los módulos del evento, no el código.
 | Fase regular: todos contra todos | Completo |
 | Mapas configurables y asignación manual | Completo |
 | Clasificación con desempates configurables | Completo |
+| Resultados por capturas y OCR local | Completo |
+| Playoffs de doble eliminación y reset | Completo |
 | Resultado manual como respaldo | Completo |
 | Avisos en directo (SSE) para las dos fases | Completo |
 
-**253 pruebas de backend y 121 del Reporter. Cero fallos.**
+**448 pruebas de backend, 27 de OCR real y 121 del Reporter. Cero fallos.**
 
 ---
 
@@ -53,8 +71,8 @@ Serie y partida son cosas distintas desde el principio. Un BO1 es una serie con
 una partida y un BO3 la misma serie con tres, así que pasar a BO3 en los
 playoffs no obliga a rehacer nada.
 
-Cada resultado guarda **de dónde salió**: `SCREENSHOT` (la vía prevista, todavía
-por construir), `MANUAL` (el respaldo que ya existe), `RIOT` y `HENRIK`.
+Cada resultado guarda **de dónde salió**: `SCREENSHOT` (la vía principal),
+`MANUAL` (el respaldo), `RIOT` y `HENRIK`.
 
 El ganador **lo calcula el servidor** a partir de las rondas. Aceptar un ganador
 enviado desde fuera permitiría registrar un 13-8 perdido.
@@ -110,8 +128,6 @@ del aviso: lo que puede filtrar es el `data:`.
 
 ## Lo que falta
 
-- **Lectura de capturas de pantalla** para los resultados. Es la vía prevista;
-  ahora mismo sólo existe el respaldo manual.
-- **Playoffs**: el modelo de series ya sirve para BO3/BO5, pero el cuadro no
-  está construido.
-- Nada de esto está desplegado ni abierto al público.
+- Revisión visual final del panel y la página pública.
+- Prueba física con capturas tomadas durante una partida real del torneo.
+- El despliegue sigue pendiente y no forma parte de este hardening.
