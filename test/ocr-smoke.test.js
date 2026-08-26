@@ -43,7 +43,7 @@ describe('OCR real', () => {
     const imagen = await renderScreenshot(lineas);
 
     provider = createTesseractProvider();
-    const bruto = await provider.recognize(await preprocess(imagen));
+    const bruto = await provider.recognize((await preprocess(imagen)).buffer);
     const ocr = normalizeResult(bruto);
 
     assert.ok(ocr.words.length > 40, `pocas palabras leídas: ${ocr.words.length}`);
@@ -96,7 +96,7 @@ describe('OCR real', () => {
 
     const leer = async (words) => {
       const png = await renderWords(words);
-      const ocr = normalizeResult(await provider.recognize(await preprocess(png)));
+      const ocr = normalizeResult(await provider.recognize((await preprocess(png)).buffer));
       const tipo = classifyCapture(ocr);
       return { ocr, kind: tipo.kind, parsed: parseCapture(tipo.kind, ocr) };
     };

@@ -119,6 +119,34 @@ function columnasDeLinea(linea) {
 }
 
 /**
+ * Dónde empieza de verdad la columna del nombre.
+ *
+ * A la izquierda del nombre hay retrato, insignia de nivel y rango, y el OCR
+ * saca de ahí basura corta y variable («Ph», «GS r», «x.»). Filtrarla por su
+ * texto sería adivinar; filtrarla por su posición no, porque en una tabla
+ * **todos los nombres empiezan en la misma x**.
+ *
+ * Se toma, de cada fila, dónde empieza su palabra más larga, y se usa la
+ * mediana: así una fila con el nombre mal leído no arrastra a las demás.
+ */
+function nameColumnStart(filas, limite) {
+  const inicios = [];
+
+  for (const fila of filas) {
+    const dentro = fila.words.filter((palabra) => centroX(palabra) < limite);
+    if (dentro.length === 0) continue;
+    const masLarga = dentro.reduce((mejor, palabra) =>
+      palabra.text.length > mejor.text.length ? palabra : mejor, dentro[0]);
+    // Una palabra de una o dos letras no identifica una columna.
+    if (masLarga.text.length >= 4) inicios.push(masLarga.bbox.x0);
+  }
+
+  if (inicios.length < 3) return null;      // sin filas suficientes, no se adivina
+  inicios.sort((uno, otro) => uno - otro);
+  return inicios[Math.floor(inicios.length / 2)];
+}
+
+/**
  * Reparte los números de una fila entre las columnas, por cercanía horizontal.
  *
  * La distancia admitida es proporcional al ancho de la imagen, no un número de
@@ -244,6 +272,6 @@ function mergeContinuationLines(lines, { esContinuacion }) {
 }
 
 module.exports = {
-  findHeader, nameLimit, readRow, mergeContinuationLines, numero, esNumero,
+  findHeader, nameLimit, nameColumnStart, readRow, mergeContinuationLines, numero, esNumero,
   anchoDe, centroX, centroY, alto, normalizeHeader
 };

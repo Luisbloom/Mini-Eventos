@@ -88,7 +88,15 @@ const COLUMN_ALIASES = Object.freeze({
  */
 const NAME_HEADERS = Object.freeze(new Set([
   'PLAYER', 'JUGADOR', 'AGENT', 'AGENTE',
-  'ORDENADO DE FORMA INDIVIDUAL', 'ORDENADO INDIVIDUALMENTE'
+  'ORDENADO DE FORMA INDIVIDUAL', 'ORDENADO INDIVIDUALMENTE',
+  /*
+    En Tracker la cabecera de equipo va en el MISMO renglón que la de columnas:
+    «Team A • Avg. Rank: Silver I   Current Rank  ACS  K  D  A  …».
+    Sin reconocer «TEAM A» como una unidad, esa «A» suelta encaja con el alias
+    de asistencias, se toma por columna de datos y el nombre del jugador se
+    recorta hasta desaparecer.
+  */
+  'TEAM A', 'TEAM B', 'EQUIPO A', 'EQUIPO B'
 ]));
 
 const SPACER_HEADERS = Object.freeze(new Set([

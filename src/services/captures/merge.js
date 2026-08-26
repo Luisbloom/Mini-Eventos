@@ -59,7 +59,70 @@ function agruparJugadores(apariciones) {
     if (!grupos.has(clave)) grupos.set(clave, []);
     grupos.get(clave).push(aparicion);
   }
+
+  emparejarSueltos(grupos);
   return grupos;
+}
+
+/** Cuánto se parecen dos nombres, de 0 a 1. */
+function similitud(uno, otro) {
+  if (uno === otro) return 1;
+  if (!uno.length || !otro.length) return 0;
+  let anterior = Array.from({ length: otro.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= uno.length; i++) {
+    const actual = [i];
+    for (let j = 1; j <= otro.length; j++) {
+      actual[j] = Math.min(anterior[j] + 1, actual[j - 1] + 1,
+        anterior[j - 1] + (uno[i - 1] === otro[j - 1] ? 0 : 1));
+    }
+    anterior = actual;
+  }
+  return 1 - anterior[otro.length] / Math.max(uno.length, otro.length);
+}
+
+/**
+ * Junta los que han quedado sueltos en una sola captura.
+ *
+ * Las dos capturas son de la MISMA partida, así que enseñan a las mismas diez
+ * personas. Si un nombre aparece sólo en una y otro nombre parecido sólo en la
+ * otra, es casi seguro la misma persona leída de dos formas: en la captura real
+ * «Alvlp10» sale como «Atvip10» en una de las dos.
+ *
+ * ⚠️ Sólo se emparejan sueltos, y sólo si el parecido es MUTUAMENTE el mejor.
+ * Sin esas dos condiciones se estarían fusionando jugadores distintos.
+ */
+const PARECIDO_MINIMO = 0.66;
+
+function emparejarSueltos(grupos) {
+  const sueltos = [...grupos.entries()]
+    .filter(([, miembros]) => new Set(miembros.map((m) => m.source)).size === 1)
+    .map(([clave, miembros]) => ({
+      clave, miembros, source: miembros[0].source,
+      nombre: String(miembros[0].jugador.gameName || '').toLowerCase()
+    }))
+    .filter((suelto) => suelto.nombre.length >= 4);
+
+  const mejorDe = (suelto) => sueltos
+    .filter((otro) => otro.source !== suelto.source)
+    .map((otro) => ({ otro, puntos: similitud(suelto.nombre, otro.nombre) }))
+    .sort((uno, otro) => otro.puntos - uno.puntos)[0];
+
+  const usados = new Set();
+  for (const suelto of sueltos) {
+    if (usados.has(suelto.clave)) continue;
+    const mejor = mejorDe(suelto);
+    if (!mejor || mejor.puntos < PARECIDO_MINIMO) continue;
+    if (usados.has(mejor.otro.clave)) continue;
+
+    // Tiene que ser recíproco: si el candidato se parece más a un tercero, no.
+    const reciproco = mejorDe(mejor.otro);
+    if (!reciproco || reciproco.otro.clave !== suelto.clave) continue;
+
+    grupos.set(suelto.clave, [...suelto.miembros, ...mejor.otro.miembros]);
+    grupos.delete(mejor.otro.clave);
+    usados.add(suelto.clave);
+    usados.add(mejor.otro.clave);
+  }
 }
 
 /**
