@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "init-db": "node src/init-db.js",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\"",
+    "test:ocr-real": "node --test \"ocr-real-tests/*.test.js\""
   },
   "engines": {
     "node": ">=20"
