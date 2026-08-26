@@ -7,6 +7,7 @@ const { createCompetitionStore, migrateCompetition } = require('./competition-st
 const { createValorantStore, migrateValorant } = require('./valorant-store');
 const { createValorantCompetitionStore, migrateValorantCompetition } = require('./valorant-competition');
 const { createValorantCaptureStore } = require('./valorant-captures');
+const { createValorantPlayoffStore } = require('./valorant-playoffs');
 const { fingerprintReport } = require('./services/report-fingerprint');
 const { normalizeFriendCode, describeFriendCode, friendCodeError } = require('./services/friend-code');
 const {
@@ -513,6 +514,13 @@ function openDatabase(dbPath) {
   const valorantCaptures = createValorantCaptureStore(connection, {
     audit: (...args) => valorant.recordAudit(...args)
   });
+  const valorantPlayoffs = createValorantPlayoffStore(connection, {
+    audit: (...args) => valorant.recordAudit(...args),
+    competition: valorantCompetition
+  });
+  // Un resultado de eliminatoria entra por el mismo sitio que los demás; lo que
+  // cambia es que además mueve el cuadro.
+  valorantCompetition.attachPlayoffs(valorantPlayoffs);
   return {
     path: dbPath,
     getDefaultEvent: defaultEvent,
@@ -638,6 +646,7 @@ function openDatabase(dbPath) {
     valorant,
     valorantCompetition,
     valorantCaptures,
+    valorantPlayoffs,
     ping() { return pingStatement.get().ok === 1; },
     close() { if (connection.open) connection.close(); }
   };

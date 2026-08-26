@@ -214,6 +214,14 @@ function migrateValorantCompetition(connection) {
   `);
 
   migrateExtraStats(connection);
+  migratePlayoffSeries(connection);
+  migrateSkippedGames(connection);
+
+  // Cuántos mapas se juega la gran final. Se fija antes de empezar.
+  const ajustes = connection.pragma('table_info(valorant_settings)').map((c) => c.name);
+  if (!ajustes.includes('grand_final_best_of')) {
+    connection.exec('ALTER TABLE valorant_settings ADD COLUMN grand_final_best_of INTEGER NOT NULL DEFAULT 3');
+  }
 }
 
 /**
@@ -223,6 +231,91 @@ function migrateValorantCompetition(connection) {
  * Se añaden con ALTER TABLE y no recreando la tabla: donde ya hay resultados
  * guardados, recrearla los borraría.
  */
+/**
+ * Prepara la tabla de series para las eliminatorias.
+ *
+ * Hacen falta dos cosas que la fase regular no necesitaba: que un partido pueda
+ * existir SIN saber todavía quién lo juega —la final alta no tiene rivales
+ * hasta que acaban las semis— y un identificador estable del hueco del cuadro.
+ *
+ * ⚠️ Como `team_a_id` nació NOT NULL, no basta con añadir columnas: hay que
+ * rehacer la tabla. Se hace copiando lo que hubiera, que borrarla se llevaría
+ * por delante los partidos ya jugados.
+ */
+function migratePlayoffSeries(connection) {
+  const columnas = connection.pragma('table_info(valorant_series)').map((c) => c.name);
+  if (columnas.includes('bracket_slot')) return;
+
+  const rehacer = connection.transaction(() => {
+    connection.exec(`
+      CREATE TABLE valorant_series_nueva (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id INTEGER NOT NULL,
+        stage TEXT NOT NULL DEFAULT 'REGULAR',
+        matchday INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        bracket_slot TEXT,
+        team_a_id INTEGER,
+        team_b_id INTEGER,
+        team_a_seed INTEGER,
+        team_b_seed INTEGER,
+        best_of INTEGER NOT NULL DEFAULT 1 CHECK (best_of IN (1,3,5)),
+        status TEXT NOT NULL DEFAULT 'PENDING'
+          CHECK (status IN ('PENDING','READY','WAITING_RESULT','COMPLETED','REVIEW_REQUIRED')),
+        winner_team_id INTEGER,
+        scheduled_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (${NOW}),
+        updated_at TEXT NOT NULL DEFAULT (${NOW}),
+        CHECK (team_a_id IS NULL OR team_b_id IS NULL OR team_a_id != team_b_id),
+        UNIQUE(event_id, stage, matchday, position),
+        UNIQUE(event_id, stage, bracket_slot),
+        FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+        FOREIGN KEY(team_a_id) REFERENCES teams(id) ON DELETE CASCADE,
+        FOREIGN KEY(team_b_id) REFERENCES teams(id) ON DELETE CASCADE
+      );
+
+      INSERT INTO valorant_series_nueva
+        (id, event_id, stage, matchday, position, team_a_id, team_b_id,
+         best_of, status, winner_team_id, scheduled_at, created_at, updated_at)
+      SELECT id, event_id, stage, matchday, position, team_a_id, team_b_id,
+             best_of, status, winner_team_id, scheduled_at, created_at, updated_at
+      FROM valorant_series;
+
+      DROP TABLE valorant_series;
+      ALTER TABLE valorant_series_nueva RENAME TO valorant_series;
+      CREATE INDEX IF NOT EXISTS idx_series_event_stage ON valorant_series(event_id, stage, matchday);
+    `);
+  });
+  rehacer();
+}
+
+/**
+ * Una partida que ya no hace falta jugar.
+ *
+ * En un BO3 que acaba 2-0 el tercer mapa no se juega nunca. Dejarlo en
+ * PENDING para siempre hace creer que falta algo; y no es lo mismo que
+ * cancelarlo a mano, así que tiene su propio estado.
+ */
+function migrateSkippedGames(connection) {
+  const definicion = connection.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='valorant_games'").get();
+  if (!definicion || definicion.sql.includes('NOT_NEEDED')) return;
+
+  const rehacer = connection.transaction(() => {
+    connection.exec(definicion.sql
+      .replace('CREATE TABLE valorant_games', 'CREATE TABLE valorant_games_nueva')
+      .replace("'PENDING','WAITING_RESULT','COMPLETED','REVIEW_REQUIRED'",
+        "'PENDING','WAITING_RESULT','COMPLETED','REVIEW_REQUIRED','NOT_NEEDED'"));
+    connection.exec(`
+      INSERT INTO valorant_games_nueva SELECT * FROM valorant_games;
+      DROP TABLE valorant_games;
+      ALTER TABLE valorant_games_nueva RENAME TO valorant_games;
+      CREATE INDEX IF NOT EXISTS idx_stats_participant ON valorant_player_game_stats(participant_id);
+    `);
+  });
+  rehacer();
+}
+
 function migrateExtraStats(connection) {
   const columnas = connection.pragma('table_info(valorant_player_game_stats)').map((c) => c.name);
   const nuevas = [
@@ -245,6 +338,9 @@ function migrateExtraStats(connection) {
 
 function createValorantCompetitionStore(connection, { audit } = {}) {
   const registrar = audit || (() => {});
+  // Las eliminatorias se enganchan después, al abrir la base: así hay UN solo
+  // camino para aplicar un resultado, venga de una captura o de la mano.
+  let playoffs = null;
 
   const toSeries = (row) => row && {
     id: row.id,
@@ -322,6 +418,9 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
 
   const store = {
     CompetitionError,
+
+    /** Las eliminatorias avisan de que existen; el resultado sigue entrando por aquí. */
+    attachPlayoffs(store2) { playoffs = store2; },
     RESULT_SOURCES,
     TIEBREAKERS,
     DEFAULT_MAP_POOL,
@@ -559,7 +658,7 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
 
     // -------------------------------------------------------- mapas por serie
 
-    assignMap(eventId, { seriesId, gameNumber = 1, mapKey, actor = 'admin' }) {
+    assignMap(eventId, { seriesId, gameNumber = 1, mapKey, actor = 'admin', allowRepeat = false }) {
       const serie = connection.prepare('SELECT * FROM valorant_series WHERE id=? AND event_id=?')
         .get(seriesId, eventId);
       if (!serie) throw new CompetitionError('La serie no existe.', 'SERIES_NOT_FOUND', 404);
@@ -568,6 +667,22 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       if (!this.enabledMapKeys(eventId).includes(clave)) {
         throw new CompetitionError(
           'Ese mapa no está habilitado para este torneo.', 'MAP_NOT_ENABLED');
+      }
+
+      /*
+        Dentro de una misma serie no se repite mapa: jugar dos veces el mismo
+        en un BO3 no es un formato, es un despiste. No hay vetos ni sorteo; lo
+        elige la organización, sólo que sin repetir.
+      */
+      if (!allowRepeat) {
+        const repetido = connection.prepare(
+          'SELECT game_number FROM valorant_games WHERE series_id=? AND map_key=? AND game_number!=?'
+        ).get(seriesId, clave, gameNumber);
+        if (repetido) {
+          throw new CompetitionError(
+            `Ese mapa ya está asignado al mapa ${repetido.game_number} de esta serie.`,
+            'MAP_ALREADY_IN_SERIES');
+        }
       }
 
       const cambio = connection.prepare(
@@ -834,6 +949,22 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             'Esa partida todavía no tiene resultado que corregir.', 'RESULT_NOT_RECORDED', 409);
         }
 
+        /*
+          ⚠️ Corregir un resultado de la eliminatoria puede cambiar quién ganó la
+          serie, y con ello quién juega las siguientes. Si alguna de esas ya se
+          ha empezado a jugar, rehacer el cuadro dejaría partidos disputados por
+          equipos que nunca debieron llegar ahí. Se bloquea y se dice por qué.
+        */
+        if (overwrite && serie.stage === 'PLAYOFFS' && playoffs) {
+          const iniciadas = playoffs.startedDependents(eventId, serie.bracket_slot);
+          if (iniciadas.length > 0) {
+            throw new CompetitionError(
+              'No se puede corregir: el cuadro ya ha avanzado sobre este resultado '
+              + `(${iniciadas.map((s) => s.slot).join(', ')}).`,
+              'BRACKET_DEPENDENCY_LOCKED', 409);
+          }
+        }
+
         // El ganador sale del marcador. Aceptarlo de fuera permitiría registrar
         // un 13-8 perdido.
         const ganador = marcador.winner === 'a' ? serie.team_a_id : serie.team_b_id;
@@ -859,6 +990,15 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           connection.prepare(
             `UPDATE valorant_series SET status='WAITING_RESULT', updated_at=${NOW} WHERE id=?`
           ).run(seriesId);
+        }
+
+        // El cuadro se mueve DENTRO de la transacción: si el resultado no
+        // entra, tampoco avanza nadie de ronda.
+        if (serie.stage === 'PLAYOFFS' && playoffs) {
+          if (overwrite) playoffs.clearDownstream(eventId, serie.bracket_slot);
+          playoffs.propagate(eventId, { actor });
+          playoffs.ensureResetIfNeeded(eventId, { actor });
+          playoffs.markUnneededGames(eventId);
         }
 
         return {

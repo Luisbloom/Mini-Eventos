@@ -20,6 +20,7 @@ const { ValorantError } = require('./valorant-store');
 const { createDraftStream } = require('./services/draft-stream');
 const { CompetitionError: ValorantCompetitionError } = require('./valorant-competition');
 const { CaptureError } = require('./valorant-captures');
+const { PlayoffError } = require('./valorant-playoffs');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
 } = require('./services/captures/storage');
@@ -904,8 +905,11 @@ function createApp({
     try {
       const event = publicDraftEventFromSlug(request, response);
       if (!event) return;
-      response.json(database.valorantCompetition.publicCompetitionState(
-        event.id, database.valorant.listTeams(event.id)));
+      const teams = database.valorant.listTeams(event.id);
+      response.json({
+        ...database.valorantCompetition.publicCompetitionState(event.id, teams),
+        playoffs: database.valorantPlayoffs.publicState(event.id, teams)
+      });
     } catch (error) { next(error); }
   });
 
@@ -1418,6 +1422,54 @@ function createApp({
       } catch (error) { next(error); }
     });
 
+
+  // ==================================================== eliminatorias
+
+  /** Cómo va el cuadro y si se puede generar ya. */
+  app.get('/api/admin/events/:id/playoffs', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const teams = database.valorant.listTeams(id);
+      const existe = database.valorantPlayoffs.exists(id);
+      response.json({
+        generated: existe,
+        grandFinalBestOf: database.valorantPlayoffs.grandFinalBestOf(id),
+        // Mientras no exista, se dice si ya se puede y, si no, por qué no.
+        readiness: existe ? null : database.valorantPlayoffs.seedsFromRegularSeason(id, teams),
+        series: existe ? database.valorantPlayoffs.listSeries(id) : [],
+        standings: existe ? database.valorantPlayoffs.standings(id) : null,
+        teams
+      });
+    } catch (error) { next(error); }
+  });
+
+  /** A cuántos mapas se juega la gran final. Antes de empezar. */
+  app.put('/api/admin/events/:id/playoffs/format', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const bestOf = database.valorantPlayoffs.setGrandFinalBestOf(id, request.body?.bestOf);
+      draftStream.publish(id, 'competition_updated');
+      response.json({ grandFinalBestOf: bestOf });
+    } catch (error) { next(error); }
+  });
+
+  /**
+   * Monta el cuadro.
+   *
+   * Los emparejamientos NO llegan del navegador: los deriva el servidor de la
+   * clasificación. Y no se genera con la liga a medias ni con un empate que
+   * afecte a los cuatro primeros, porque sembrar al azar decide quién entra.
+   */
+  app.post('/api/admin/events/:id/playoffs/generate', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const series = database.valorantPlayoffs.generate(id, database.valorant.listTeams(id));
+      draftStream.publish(id, 'competition_updated');
+      response.status(201).json({
+        series, standings: database.valorantPlayoffs.standings(id)
+      });
+    } catch (error) { next(error); }
+  });
   // ---------------------------------------------------- draft: administración
   app.get('/api/admin/events/:id/draft', (request, response, next) => {
     const id = parseId(request.params.id);
@@ -1516,6 +1568,7 @@ function createApp({
     if (error instanceof ValorantError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof ValorantCompetitionError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof CaptureError) return sendError(response, error.status || 400, error.code, error.message);
+    if (error instanceof PlayoffError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof UploadError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof multer.MulterError) {
       const code = error.code === 'LIMIT_FILE_SIZE' ? 'FILE_TOO_LARGE'
