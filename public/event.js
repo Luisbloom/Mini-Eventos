@@ -142,7 +142,7 @@ loadEvent();
 /* ------------------------------------------------------------------ Discord
  * Inscripción de los torneos por equipos. Sustituye al formulario genérico
  * cuando el evento lleva el módulo de draft: aquí la identidad la pone Discord
- * y lo único que escribe la persona es su Riot ID.
+ * y la persona completa únicamente su perfil de juego.
  */
 
 const ERRORES_INSCRIPCION = {
@@ -206,16 +206,32 @@ function pasoCerrado(etiqueta) {
   return `<div class="discord-note">
       <strong>${escaparTexto(etiqueta || 'Inscripciones cerradas')}</strong>
       <p>Las inscripciones todavía no están abiertas. Tu cuenta ya está conectada:
-         cuando abran, sólo tendrás que poner tu Riot ID.</p>
+         cuando abran, sólo tendrás que completar tu perfil de jugador.</p>
     </div>`;
 }
 
-function pasoFormulario() {
+function pasoFormulario(event) {
+  const ranks = event.valorantPeakRanks?.length ? event.valorantPeakRanks : ['Sin rango'];
+  const rankOptions = ranks
+    .map((rank) => `<option value="${escaparTexto(rank)}">${escaparTexto(rank)}</option>`).join('');
   return `<form id="riot-form" class="riot-form" novalidate>
-      <label for="riot-id">Riot ID</label>
-      <input id="riot-id" name="riotId" autocomplete="off" spellcheck="false"
-             placeholder="Luisbloom#NANO" required>
-      <small>Lo tienes arriba a la derecha en el cliente de Riot. Lleva almohadilla.</small>
+      <div class="riot-field">
+        <label for="riot-id">Riot ID</label>
+        <input id="riot-id" name="riotId" autocomplete="off" spellcheck="false"
+               placeholder="Luisbloom#NANO" required>
+        <small>Lo tienes arriba a la derecha en el cliente de Riot. Lleva almohadilla.</small>
+      </div>
+      <div class="riot-field">
+        <label for="peak-rank">Rango máximo alcanzado</label>
+        <select id="peak-rank" name="peakRank" required>${rankOptions}</select>
+        <small>Selecciona el rango más alto que hayas alcanzado en competitivo.</small>
+      </div>
+      <div class="riot-field">
+        <label for="player-bio">Sobre ti <span>Opcional</span></label>
+        <textarea id="player-bio" name="playerBio" rows="4" maxlength="160"
+          placeholder="Cuánto tiempo llevas jugando, roles preferidos o algún comentario…"></textarea>
+        <div class="riot-field-meta"><small>Este texto sólo lo verá la organización.</small><span id="player-bio-count">0 / 160</span></div>
+      </div>
       <button type="submit">INSCRIBIRME <span aria-hidden="true">→</span></button>
       <p id="riot-feedback" role="status"></p>
     </form>`;
@@ -229,6 +245,8 @@ function pasoInscrito(datos) {
         <strong>INSCRIPCIÓN REALIZADA</strong>
         <dl>
           <div><dt>Riot ID</dt><dd>${escaparTexto(datos.riotId || '—')}</dd></div>
+          <div><dt>Rango máximo</dt><dd>${escaparTexto(datos.peakRank || 'No indicado')}</dd></div>
+          ${datos.playerBio ? `<div><dt>Sobre ti</dt><dd>${escaparTexto(datos.playerBio)}</dd></div>` : ''}
           <div><dt>Estado</dt><dd>${escaparTexto(estados[datos.registrationStatus] || datos.registrationStatus || '—')}</dd></div>
         </dl>
       </div>
@@ -260,8 +278,11 @@ async function renderDiscordRegistration(event) {
     case 'login': paso.innerHTML = pasoEntrar(event); return;
     case 'registered': paso.innerHTML = pasoInscrito(datos); return;
     case 'closed': paso.innerHTML = pasoCerrado(datos.registrationLabel); return;
-    default: paso.innerHTML = pasoFormulario();
+    default: paso.innerHTML = pasoFormulario(event);
   }
+  const bio = byId('player-bio');
+  const count = byId('player-bio-count');
+  bio.addEventListener('input', () => { count.textContent = `${bio.value.length} / 160`; });
   byId('riot-form').addEventListener('submit', async (submit) => {
     submit.preventDefault();
     const boton = byId('riot-form').querySelector('button');
@@ -272,8 +293,12 @@ async function renderDiscordRegistration(event) {
       const respuesta = await fetch(`/api/events/${encodeURIComponent(event.slug)}/valorant/registrations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Sólo el Riot ID: quién eres lo resuelve el servidor con la sesión.
-        body: JSON.stringify({ riotId: byId('riot-id').value })
+        // Quién eres lo resuelve el servidor con la sesión; aquí sólo viaja tu perfil de juego.
+        body: JSON.stringify({
+          riotId: byId('riot-id').value,
+          peakRank: byId('peak-rank').value,
+          playerBio: byId('player-bio').value
+        })
       });
       const cuerpo = await respuesta.json().catch(() => ({}));
       if (!respuesta.ok) {

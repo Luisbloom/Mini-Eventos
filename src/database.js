@@ -19,6 +19,7 @@ const {
 const {
   DEFAULT_EVENT,
   DEFAULT_REGISTRATION_FIELDS,
+  VALORANT_PROFILE_FIELDS,
   PARTICIPANT_STATUSES,
   EventValidationError,
   normalizeEvent,
@@ -367,6 +368,31 @@ function openDatabase(dbPath) {
       }
     }
     connection.prepare("INSERT INTO app_settings (setting_key, value_json) VALUES ('friend_code_field_v1', 'true')").run();
+  })();
+
+  // Añade una sola vez el perfil opcional a los eventos de Valorant que ya
+  // existían. INSERT OR IGNORE conserva cualquier campo creado previamente.
+  connection.transaction(() => {
+    const migrationKey = 'valorant_profile_fields_v1';
+    if (connection.prepare('SELECT 1 FROM app_settings WHERE setting_key=?').get(migrationKey)) return;
+    const insert = connection.prepare(`
+      INSERT OR IGNORE INTO event_registration_fields
+        (event_id, field_key, label, field_type, required, placeholder, options_json, position, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const lastPosition = connection.prepare(
+      'SELECT COALESCE(MAX(position),0) AS position FROM event_registration_fields WHERE event_id=?'
+    );
+    for (const event of connection.prepare("SELECT id FROM events WHERE lower(trim(game))='valorant'").all()) {
+      let position = lastPosition.get(event.id).position;
+      for (const field of VALORANT_PROFILE_FIELDS) {
+        position += 1;
+        insert.run(event.id, field.key, field.label, field.type, Number(field.required),
+          field.placeholder, JSON.stringify(field.options), position, Number(field.enabled));
+      }
+    }
+    connection.prepare('INSERT INTO app_settings (setting_key,value_json) VALUES (?,?)')
+      .run(migrationKey, 'true');
   })();
 
   const competitionDefaultId = Number(JSON.parse(

@@ -101,8 +101,8 @@ describe('formato oficial del torneo de Valorant', () => {
     assert.equal(detail.body.event.registration.available, false);
     assert.match(detail.body.event.officialFormat.public.veto, /Antes de cada serie/);
     const blocked = await request(app).post('/api/events/torneo-valorant/registrations')
-      .send({ values: { discord_username: 'nadie', game_name: 'Nadie' } }).expect(403);
-    assert.equal(blocked.body.error.code, 'REGISTRATION_CLOSED');
+      .send({ values: { discord_username: 'nadie', game_name: 'Nadie' } }).expect(404);
+    assert.equal(blocked.body.error.code, 'REGISTRATION_FLOW_UNAVAILABLE');
 
     // La sincronización es una migración, no un proceso que vuelva a pisar
     // decisiones futuras de la organización en cada arranque.

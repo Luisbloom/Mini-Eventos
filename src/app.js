@@ -8,7 +8,7 @@ const helmet = require('helmet');
 const { buildLeaderboard } = require('./leaderboard');
 const { getPublicScoringRules, SCORING_CONFIG } = require('./services/scoring');
 const { InformationValidationError } = require('./tournament-information');
-const { EventValidationError } = require('./events');
+const { EventValidationError, VALORANT_PEAK_RANKS } = require('./events');
 const { CompetitionError } = require('./competition');
 const { createMatchIngestor } = require('./services/match-ingest');
 const {
@@ -242,7 +242,13 @@ function createApp({
         ? database.listRegistrationFields(event.id, { publicOnly: true })
         : [];
       response.set('Cache-Control', 'no-store').json({
-        event: { ...event, officialFormat: officialValorantFormatForSlug(event.slug) },
+        event: {
+          ...event,
+          officialFormat: officialValorantFormatForSlug(event.slug),
+          valorantPeakRanks: String(event.game).trim().toLocaleLowerCase('es') === 'valorant'
+            ? VALORANT_PEAK_RANKS
+            : []
+        },
         registrationFields
       });
     } catch (error) { next(error); }
@@ -252,6 +258,10 @@ function createApp({
     try {
       const event = eventFromSlug(request, response);
       if (!event) return;
+      if (event.modules.draft) {
+        return sendError(response, 404, 'REGISTRATION_FLOW_UNAVAILABLE',
+          'Este evento utiliza inscripción con Discord y Riot ID.');
+      }
       const participant = database.createParticipant(event.id, request.body?.values);
       response.status(201).json({ participant: publicParticipant(participant), message: 'Inscripción recibida. Queda pendiente de confirmación.' });
     } catch (error) { next(error); }
@@ -760,6 +770,8 @@ function createApp({
             participantId: registro?.participantId ?? null,
             registrationStatus: registro?.status ?? null,
             riotId: registro?.riotId ?? null,
+            peakRank: registro?.peakRank ?? null,
+            playerBio: registro?.playerBio ?? null,
             // En un evento sin draft no se inventa un papel que no existe.
             draftRole: event.modules.draft
               ? database.valorant.draftRole(event.id, registro?.participantId)
@@ -791,7 +803,10 @@ function createApp({
         discordAccountId: session.account.id,
         riotId: request.body?.riotId,
         // Lo que el navegador diga sobre identidad se ignora por completo.
-        values: {}
+        values: {
+          peak_rank: request.body?.peakRank ?? 'Sin rango',
+          player_bio: request.body?.playerBio ?? ''
+        }
       }, (eventId, values) => database.createParticipant(eventId, values));
 
       response.status(201).json({ registration: registro });

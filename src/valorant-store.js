@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { parseRiotId, riotIdError } = require('./services/riot-id');
+const { VALORANT_PEAK_RANKS } = require('./events');
 const { officialValorantFormatForSlug } = require('./valorant-event-format');
 
 /**
@@ -462,6 +463,14 @@ function createValorantStore(connection) {
     registerWithDiscord(eventId, { discordAccountId, riotId, values = {} }, createParticipant) {
       const riot = parseRiotId(riotId);
       if (!riot.ok) throw new ValorantError(riotIdError(riot.code), 'INVALID_RIOT_ID');
+      const peakRank = String(values.peak_rank ?? 'Sin rango').trim() || 'Sin rango';
+      if (!VALORANT_PEAK_RANKS.includes(peakRank)) {
+        throw new ValorantError('Selecciona un rango máximo válido.', 'INVALID_PEAK_RANK');
+      }
+      const playerBio = String(values.player_bio ?? '').trim();
+      if (playerBio.length > 160) {
+        throw new ValorantError('El texto sobre ti no puede superar 160 caracteres.', 'PLAYER_BIO_TOO_LONG');
+      }
 
       const cuenta = connection.prepare('SELECT * FROM discord_accounts WHERE id=?').get(discordAccountId);
       if (!cuenta) throw new ValorantError('La sesión no es válida.', 'SESSION_INVALID', 401);
@@ -483,6 +492,8 @@ function createValorantStore(connection) {
         // El nombre visible sale de Discord: no se le pide que lo escriba otra vez.
         const participant = createParticipant(eventId, {
           ...values,
+          peak_rank: peakRank,
+          player_bio: playerBio,
           discord_username: cuenta.username,
           game_name: cuenta.display_name || cuenta.username
         });
@@ -519,15 +530,19 @@ function createValorantStore(connection) {
     /** Lo que se le puede enseñar a su dueño: sin identidades internas. */
     publicRegistration(eventId, discordAccountId) {
       const row = connection.prepare(`
-        SELECT p.id, p.display_name, p.status, p.riot_game_name, p.riot_tag_line
+        SELECT p.id, p.display_name, p.status, p.riot_game_name, p.riot_tag_line,
+               p.field_values_json
         FROM event_participants p WHERE p.event_id=? AND p.discord_account_id=?`)
         .get(eventId, discordAccountId);
       if (!row) return null;
+      const values = JSON.parse(row.field_values_json);
       return {
         participantId: row.id,
         displayName: row.display_name,
         status: row.status,
-        riotId: row.riot_game_name ? `${row.riot_game_name}#${row.riot_tag_line}` : null
+        riotId: row.riot_game_name ? `${row.riot_game_name}#${row.riot_tag_line}` : null,
+        peakRank: values.peak_rank || null,
+        playerBio: values.player_bio || ''
       };
     },
 
