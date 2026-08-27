@@ -74,6 +74,26 @@
 .pick-dialog-actions button:disabled { opacity: .45; cursor: progress; }
 #pick-dialog-feedback { color: var(--coral); font-family: var(--body); font-size: .88rem; }
 
+/* --- estado previo oficial -------------------------------------------- */
+.draft-preview { padding-bottom: 6rem; }
+.draft-preview-hero { position: relative; overflow: hidden; padding: clamp(4rem,8vw,8rem) 0; border-bottom: 1px solid var(--line); }
+.draft-preview-hero::after { content: "16"; position: absolute; z-index: -1; right: 0; bottom: -.08em; color: rgba(255,70,85,.075); font: clamp(12rem,32vw,30rem)/.7 var(--display); }
+.draft-preview-hero h1 { max-width: 1100px; margin-top: 1rem; font-size: clamp(3.6rem,9vw,9rem); line-height: .8; letter-spacing: -.04em; }
+.draft-preview-hero h1 span { color: transparent; -webkit-text-stroke: 1px var(--event-accent); }
+.draft-preview-hero > p:not(.kicker) { max-width: 700px; margin: 2rem 0 0; color: var(--muted); font-size: clamp(1rem,1.5vw,1.25rem); line-height: 1.65; }
+.draft-preview .draft-status { grid-template-columns: repeat(4,1fr); }
+.draft-preview .draft-status dt { color: var(--muted); font: .5rem/1 var(--mono); letter-spacing: .1em; }
+.draft-preview .draft-status dd { margin: .65rem 0 0; font: clamp(1.8rem,3.5vw,3.3rem)/.9 var(--display); }
+.draft-preview-captains,.draft-preview-rounds { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; padding: 1px; background: var(--line); }
+.draft-preview-captains article,.draft-preview-rounds article { display: grid; min-height: 180px; align-content: space-between; padding: 1.3rem; background: var(--surface); }
+.draft-preview-captains span,.draft-preview-rounds span { color: var(--event-accent); font: .6rem/1 var(--mono); letter-spacing: .1em; }
+.draft-preview-captains strong,.draft-preview-rounds strong { font: 1.7rem/1 var(--display); text-transform: uppercase; }
+.draft-preview-captains small,.draft-preview-rounds small { color: var(--muted); font: .5rem/1 var(--mono); letter-spacing: .08em; }
+.draft-preview-copy { max-width: 700px; margin: 0 0 1.5rem; color: var(--muted); line-height: 1.65; }
+.draft-preview-final { padding: clamp(4rem,8vw,8rem) 0; text-align: center; }
+.draft-preview-final h2 { margin: .8rem 0; color: var(--event-accent); font-size: clamp(4rem,10vw,10rem); line-height: .8; }
+.draft-preview-final p:last-child { max-width: 680px; margin: 1.5rem auto 0; color: var(--muted); line-height: 1.65; }
+
 /* --- responsive --------------------------------------------------------- */
 @media (max-width: 1400px) {
   /* Con cinco o seis equipos las tarjetas se quedan estrechas antes: bajan a
@@ -91,4 +111,5 @@
   .draft-history b { grid-column: 2 / -1; }
   .player-card { flex-wrap: wrap; }
   .player-card button { width: 100%; }
+  .draft-preview .draft-status,.draft-preview-captains,.draft-preview-rounds { grid-template-columns: 1fr 1fr; }
 }

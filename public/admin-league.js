@@ -28,6 +28,29 @@
 
   const nombreDe = (teamId) => estado?.teams?.find((e) => e.id === teamId)?.name ?? `Equipo ${teamId}`;
 
+  function pintarFormatoOficial() {
+    const bloque = id('valorant-official-admin');
+    const format = estado?.format;
+    bloque.hidden = !format;
+    if (!format) return;
+    const entries = [
+      ['Jugadores', format.players], ['Equipos', format.teams], ['Capitanes', format.captains],
+      ['Elecciones', format.draftPicks], ['Series RR', format.regularSeason.series],
+      ['Fase regular', `BO${format.regularSeason.bestOf}`], ['Playoffs', `${format.playoffs.teams} · BO${format.playoffs.bestOf}`],
+      ['Gran Final', `BO${format.playoffs.grandFinalBestOf} por defecto`],
+      ['Eliminación', 'Doble + reset']
+    ];
+    id('valorant-official-summary').replaceChildren(...entries.map(([label, value]) => {
+      const wrapper = document.createElement('div');
+      const term = document.createElement('dt'); term.textContent = label;
+      const detail = document.createElement('dd'); detail.textContent = String(value);
+      wrapper.append(term, detail); return wrapper;
+    }));
+    id('league-veto-state').textContent = estado.veto?.status === 'CONFIGURED'
+      ? 'VETO CONFIGURADO'
+      : 'VETO PENDIENTE DE CONFIGURACIÓN';
+  }
+
   // ------------------------------------------------------------- mapas
 
   function pintarMapas() {
@@ -309,6 +332,7 @@
     seccion().hidden = false;
 
     estado = await api(`/api/admin/events/${evento.id}/competition`);
+    pintarFormatoOficial();
     pintarMapas();
     pintarCalendario();
 

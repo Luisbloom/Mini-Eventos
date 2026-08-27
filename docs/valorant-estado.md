@@ -20,7 +20,7 @@ lo que cambia entre un torneo y otro son los módulos del evento, no el código.
 - BO5 cubierto en 3-0, 3-1 y 3-2; Gran Final y reset conservan objetivo de tres
   victorias y marcan mapas sobrantes como `NOT_NEEDED`.
 
-Estado: **software preparado para revisión visual final; no desplegado**.
+Estado: **formato oficial sincronizado con el documento del 23 de agosto de 2026; pendiente de desplegar esta revisión**.
 
 ---
 
@@ -41,14 +41,25 @@ Estado: **software preparado para revisión visual final; no desplegado**.
 | Resultado manual como respaldo | Completo |
 | Avisos en directo (SSE) para las dos fases | Completo |
 
-**448 pruebas de backend, 27 de OCR real y 121 del Reporter. Cero fallos.**
+Las cifras de pruebas se verifican de nuevo antes de cada despliegue; no se
+mantiene aquí un contador que pueda quedar obsoleto.
 
 ---
 
-## El formato ya no está fijado a cuatro equipos
+## Formato del evento oficial
 
-Se juega con **4, 5 o 6 equipos de cinco**. Todo sale de ese número: los
-inscritos que hacen falta, las elecciones del draft y el calendario.
+`torneo-valorant` se juega con **20 participantes exactos**, **4 capitanes** y
+**4 equipos de cinco**. El draft tiene 16 elecciones y sólo se completa cuando
+los cuatro equipos tienen cinco integrantes.
+
+La fase regular es una liga a una vuelta: tres jornadas, seis series BO1 y tres
+series por equipo. Todos pasan a playoffs; la clasificación sólo decide las
+semillas 1 a 4. Los cruces iniciales son 1.º contra 4.º y 2.º contra 3.º.
+Playoffs usa doble eliminación, series BO3, Gran Final BO3 por defecto (BO5
+opcional) y reset si el campeón del lower gana la primera Gran Final. Cada
+equipo juega al menos cinco series en el torneo.
+
+El motor genérico conserva soporte para eventos distintos de 4, 5 o 6 equipos:
 
 | Equipos | Inscritos | Elecciones | Jornadas | Partidos | Descansos |
 |---|---|---|---|---|---|
@@ -56,8 +67,9 @@ inscritos que hacen falta, las elecciones del draft y el calendario.
 | 5 | 25 | 20 | 5 | 10 | uno por jornada |
 | 6 | 30 | 24 | 5 | 15 | — |
 
-Los inscritos confirmados tienen que ser **exactamente** esa cifra. Con 21 para
-cuatro equipos el draft no arranca: alguien se quedaría fuera a mitad.
+Los inscritos confirmados tienen que ser **exactamente** la cifra de su formato.
+En el evento oficial, 21 no es una configuración posible ni una inscripción
+admitida.
 
 El calendario usa el método del círculo. Con un número impar de equipos entra un
 equipo fantasma, y a quien le toque contra él descansa esa jornada; así cada uno
@@ -90,8 +102,9 @@ Columnas: POS, EQUIPO, PJ, V, D, RF, RC, DIF. Clasifican los cuatro primeros.
 **No se guarda: se calcula de los resultados.** Una tabla que se puede derivar y
 además se almacena acaba discrepando de sus propios datos.
 
-Desempates, en el orden que decida la organización: `wins`, `head_to_head`,
-`round_diff`, `rounds_for`.
+En el evento oficial están confirmados `wins`, `head_to_head` y `round_diff`.
+El criterio final sigue pendiente de decisión y la aplicación no inventa uno.
+En otros eventos, el motor conserva `rounds_for` como opción configurable.
 
 El **enfrentamiento directo sólo se aplica entre DOS equipos**. Con tres
 empatados el «le gané a uno» no ordena nada y daría un resultado arbitrario, así
@@ -120,14 +133,18 @@ del aviso: lo que puede filtrar es el `data:`.
 | Qué | Dónde |
 |---|---|
 | Evento | `/eventos/:slug` |
-| Draft en directo | `/eventos/:slug/draft` |
-| Fase regular | `/eventos/:slug/competicion` |
+| Draft en directo | `/eventos/:slug/competicion/draft` |
+| Hub de competición | `/eventos/:slug/competicion` |
+| Liga, clasificación y jornadas | `/eventos/:slug/competicion/fase-regular/...` |
+| Playoffs, estadísticas y resultados | `/eventos/:slug/competicion/...` |
 | Administración | `/admin` — secciones 10 (draft) y 11 (fase regular) |
 
 ---
 
 ## Lo que falta
 
-- Revisión visual final del panel y la página pública.
+- Configurar y anunciar oficialmente el map pool, el veto BO1 y el veto BO3.
+- Decidir el criterio final de desempate.
+- Decidir si la Gran Final será BO3 o BO5.
+- Publicar fechas, horarios, premios y canales oficiales.
 - Prueba física con capturas tomadas durante una partida real del torneo.
-- El despliegue sigue pendiente y no forma parte de este hardening.

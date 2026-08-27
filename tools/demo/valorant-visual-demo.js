@@ -5,15 +5,13 @@ const path = require('node:path');
 const { openDatabase } = require('../../src/database');
 const { SLOTS } = require('../../src/services/playoffs/bracket');
 
-const EVENT_SLUG = 'torneo-valorant-liga';
+const EVENT_SLUG = 'torneo-valorant';
 const ADMIN_TOKEN = 'demo-admin';
 const TEAM_NAMES = Object.freeze([
   'Jarti Phoenix',
   'Nebula Five',
   'Costa Vandal',
-  'Lobos de Bind',
-  'Reyes del Clutch',
-  'Última Ronda'
+  'Lobos de Bind'
 ]);
 const MAPS = Object.freeze(['ascent', 'bind', 'haven', 'lotus', 'split']);
 const AGENTS = Object.freeze([
@@ -84,8 +82,8 @@ function seedValorantDemo(dbPath) {
       description: 'Demo visual completa con draft, liga regular, clasificación y playoffs.',
       status: 'Inscripciones abiertas',
       registrationsOpen: true,
-      minParticipants: 30,
-      maxParticipants: 30,
+      minParticipants: 20,
+      maxParticipants: 20,
       modules: {
         information: true,
         participants: true,
@@ -103,7 +101,7 @@ function seedValorantDemo(dbPath) {
     });
 
     const participants = [];
-    for (let index = 1; index <= 30; index += 1) {
+    for (let index = 1; index <= 20; index += 1) {
       const created = database.createParticipant(event.id, {
         discord_username: `demo.valorant.${String(index).padStart(2, '0')}`,
         game_name: `Jugador ${String(index).padStart(2, '0')}`
@@ -114,14 +112,14 @@ function seedValorantDemo(dbPath) {
     database.updateEvent(event.id, { status: 'En curso', registrationsOpen: false });
 
     database.valorant.configureDraft(event.id, {
-      captains: participants.slice(0, 6).map((participant) => participant.id),
-      teamCount: 6,
+      captains: participants.slice(0, 4).map((participant) => participant.id),
+      teamCount: 4,
       teamSize: 5,
       actor: 'demo-seed'
     });
     database.valorant.startDraft(event.id, { actor: 'demo-seed' });
 
-    for (const participant of participants.slice(6)) {
+    for (const participant of participants.slice(4)) {
       const draft = database.valorant.getDraft(event.id);
       const turn = database.valorant.teamForPick(event.id, draft.currentPick);
       database.valorant.pick(event.id, {

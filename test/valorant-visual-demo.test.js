@@ -40,12 +40,12 @@ describe('demo visual reproducible de Valorant', () => {
       playoffsGenerated: summary.playoffsGenerated,
       playoffCompleted: summary.playoffCompleted
     }, {
-      participants: 30,
+      participants: 20,
       draft: 'COMPLETED',
-      teams: 6,
-      regularSeries: 15,
-      regularCompleted: 15,
-      standings: 6,
+      teams: 4,
+      regularSeries: 6,
+      regularCompleted: 6,
+      standings: 4,
       qualified: 4,
       playoffsGenerated: true,
       playoffCompleted: 2
@@ -59,11 +59,11 @@ describe('demo visual reproducible de Valorant', () => {
     const publicState = await request(app)
       .get(`/api/events/${EVENT_SLUG}/competition-teams`)
       .expect(200);
-    assert.equal(publicState.body.teams.length, 6);
-    assert.equal(publicState.body.seriesTotal, 15);
-    assert.equal(publicState.body.seriesPlayed, 15);
-    assert.equal(publicState.body.standings.length, 6);
-    assert.equal(publicState.body.playerStats.length, 30);
+    assert.equal(publicState.body.teams.length, 4);
+    assert.equal(publicState.body.seriesTotal, 6);
+    assert.equal(publicState.body.seriesPlayed, 6);
+    assert.equal(publicState.body.standings.length, 4);
+    assert.equal(publicState.body.playerStats.length, 20);
     assert.equal(publicState.body.playoffs.generated, true);
     assert.ok(publicState.body.playoffs.series.length >= 6);
     assert.equal(publicState.body.matchdays[0].series[0].games[0].stats.length, 10);

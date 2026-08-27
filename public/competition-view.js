@@ -101,9 +101,10 @@
   }
 
   /** Estado deliberadamente vacío para anunciar la competición sin filtrar su preparación. */
-  function previewCompetitionState() {
+  function previewCompetitionState(format = null) {
     return {
       preview: true,
+      format,
       generated: false,
       complete: false,
       teams: [],
@@ -111,8 +112,9 @@
       matchdays: [],
       playerStats: [],
       maps: [],
+      veto: format?.veto ?? { status: 'VETO_NOT_CONFIGURED', mapPool: null, rules: { bo1: null, bo3: null } },
       seriesPlayed: 0,
-      seriesTotal: 0,
+      seriesTotal: format?.regularSeason?.series ?? 0,
       playoffs: { generated: false, status: 'PENDING', series: [], placements: [] }
     };
   }

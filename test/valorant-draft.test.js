@@ -35,7 +35,7 @@ describe('draft de Valorant', () => {
     };
   }
 
-  function montar({ discord = fakeDiscord() } = {}) {
+  function montar({ discord = fakeDiscord(), slug = 'torneo-valorant' } = {}) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-valorant-'));
     directories.push(directory);
     const database = openDatabase(path.join(directory, 'tournament.db'));
@@ -43,7 +43,7 @@ describe('draft de Valorant', () => {
     const app = createApp({ database, adminToken: ADMIN, discord });
     // El evento de Valorant ya existe en la plataforma; aqui se crea igual.
     const event = database.createEvent({
-      slug: 'torneo-valorant', name: 'Torneo Valorant', game: 'Valorant',
+      slug, name: 'Torneo Valorant', game: 'Valorant',
       description: 'Prueba',
       // El evento real sigue en Próximamente. Aquí se abren las inscripciones
       // porque lo que se prueba es el draft, no la puerta de entrada.
@@ -290,7 +290,7 @@ describe('draft de Valorant', () => {
       assert.throws(() => v.configureDraft(event.id, { captains: [gente[0].id, gente[0].id, gente[1].id, gente[2].id], teamCount: 4, teamSize: 5 }),
         (e) => e.code === 'DUPLICATE_CAPTAIN');
 
-      const pendiente = database.createParticipant(event.id, { discord_username: 'p#d', game_name: 'Pendiente' });
+      const pendiente = database.updateParticipant(gente[19].id, { status: 'pending' });
       assert.throws(() => v.configureDraft(event.id, { captains: [gente[0].id, gente[1].id, gente[2].id, pendiente.id], teamCount: 4, teamSize: 5 }),
         (e) => e.code === 'CAPTAIN_NOT_CONFIRMED');
     });
@@ -337,7 +337,7 @@ describe('draft de Valorant', () => {
       // Con "al menos los necesarios", un inscrito de sobra se quedaría fuera
       // al acabar el draft sin que nadie lo hubiera decidido.
       const prueba = (cuantos) => {
-        const { database, event } = montar();
+        const { database, event } = montar({ slug: cuantos > 20 ? 'valorant-generico-exceso' : 'torneo-valorant' });
         const gente = inscribir(database, event, cuantos);
         database.valorant.configureDraft(event.id, {
           captains: gente.slice(0, 4).map((p) => p.id), teamCount: 4, teamSize: 5

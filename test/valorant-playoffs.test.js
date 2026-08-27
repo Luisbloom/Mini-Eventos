@@ -70,7 +70,8 @@ describe('eliminatorias de Valorant', () => {
     });
 
     const event = database.createEvent({
-      slug: 'torneo-valorant', name: 'Torneo Valorant', game: 'Valorant',
+      slug: teamCount === 4 ? 'torneo-valorant' : `valorant-generico-playoffs-${teamCount}`,
+      name: 'Torneo Valorant', game: 'Valorant',
       description: 'x', status: 'Inscripciones abiertas', registrationsOpen: true,
       modules: { draft: true }, accentColor: '#ff4655', icon: 'crosshair',
       coverImage: '/images/events/x.png'

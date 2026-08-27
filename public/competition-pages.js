@@ -39,7 +39,7 @@
     const eventResponse = await fetch(`/api/events/${slug}`, { cache: 'no-store' });
     const eventBody = await json(eventResponse);
     if (eventBody.event.status === 'Próximamente') {
-      return { event: eventBody.event, state: View.previewCompetitionState(), draft: null };
+      return { event: eventBody.event, state: View.previewCompetitionState(eventBody.event.officialFormat), draft: null };
     }
 
     const [stateResponse, draftResponse] = await Promise.all([

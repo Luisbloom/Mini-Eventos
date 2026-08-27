@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { parseRiotId, riotIdError } = require('./services/riot-id');
+const { officialValorantFormatForSlug } = require('./valorant-event-format');
 
 /**
  * Equipos, draft e identidad de Discord. Convive con la competición individual
@@ -651,6 +652,13 @@ function createValorantStore(connection) {
     configureDraft(eventId, { captains, teamCount, teamSize, actor = 'admin' }) {
       const total = Number(teamCount);
       const size = Number(teamSize);
+      const event = connection.prepare('SELECT slug FROM events WHERE id=?').get(eventId);
+      const official = officialValorantFormatForSlug(event?.slug);
+      if (official && (total !== official.teams || size !== official.teamSize)) {
+        throw new ValorantError(
+          `El evento oficial requiere exactamente ${official.teams} equipos de ${official.teamSize}.`,
+          'OFFICIAL_EVENT_FORMAT_MISMATCH');
+      }
       // Cuatro, cinco o seis equipos de cinco. Con menos no hay liga y con más
       // no da tiempo en una tarde; el límite es deportivo, no técnico.
       if (!TEAM_COUNTS.includes(total)) {
@@ -848,6 +856,24 @@ function createValorantStore(connection) {
 
         const siguiente = draft.currentPick + 1;
         if (siguiente > draft.totalPicks) {
+          const equiposCompletos = connection.prepare(`
+            SELECT COUNT(*) total FROM (
+              SELECT t.id FROM teams t
+              JOIN team_members m ON m.team_id=t.id
+              WHERE t.event_id=?
+              GROUP BY t.id HAVING COUNT(*)=?
+            )`).get(eventId, draft.teamSize).total;
+          const miembros = connection.prepare(
+            'SELECT COUNT(*) total FROM team_members WHERE event_id=?').get(eventId).total;
+          const elecciones = connection.prepare(
+            'SELECT COUNT(*) total FROM draft_picks WHERE draft_id=?').get(draft.id).total;
+          if (equiposCompletos !== draft.teamCount
+              || miembros !== draft.teamCount * draft.teamSize
+              || elecciones !== draft.totalPicks) {
+            throw new ValorantError(
+              'El draft no puede finalizar hasta distribuir exactamente toda la plantilla.',
+              'DRAFT_COMPLETION_INVARIANT', 409);
+          }
           connection.prepare(
             `UPDATE drafts SET status='COMPLETED', current_pick=?, completed_at=${NOW}, updated_at=${NOW},
              current_team_id=NULL WHERE id=?`).run(siguiente, draft.id);

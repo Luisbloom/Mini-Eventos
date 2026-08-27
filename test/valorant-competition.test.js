@@ -29,14 +29,14 @@ describe('fase regular de Valorant', () => {
     directories.splice(0).forEach((d) => fs.rmSync(d, { recursive: true, force: true }));
   });
 
-  function montar() {
+  function montar({ slug = 'torneo-valorant' } = {}) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-liga-'));
     directories.push(directory);
     const database = openDatabase(path.join(directory, 'tournament.db'));
     bases.push(database);
     const app = createApp({ database, adminToken: ADMIN });
     const event = database.createEvent({
-      slug: 'torneo-valorant', name: 'Torneo Valorant', game: 'Valorant',
+      slug, name: 'Torneo Valorant', game: 'Valorant',
       description: 'x', status: 'Inscripciones abiertas', registrationsOpen: true,
       modules: { draft: true },
       accentColor: '#ff4655', icon: 'crosshair', coverImage: '/images/events/x.png'
@@ -45,8 +45,8 @@ describe('fase regular de Valorant', () => {
   }
 
   /** Un draft completo de N equipos, listo para generar la liga. */
-  function draftTerminado(teamCount) {
-    const contexto = montar();
+  function draftTerminado(teamCount, { slug } = {}) {
+    const contexto = montar({ slug: slug ?? (teamCount === 4 ? 'torneo-valorant' : `valorant-generico-${teamCount}`) });
     const { database, event } = contexto;
     const necesarios = teamCount * 5;
 
@@ -189,7 +189,7 @@ describe('fase regular de Valorant', () => {
     }
 
     it('sólo admite cuatro, cinco o seis equipos de cinco', () => {
-      const { database, event } = montar();
+      const { database, event } = montar({ slug: 'valorant-generico-limites' });
       const gente = [];
       for (let i = 1; i <= 20; i++) {
         const creado = database.createParticipant(event.id, {
@@ -211,7 +211,7 @@ describe('fase regular de Valorant', () => {
 
     it('la plantilla tiene que ser exacta para cada tamaño', () => {
       for (const [teamCount, sobrantes] of [[4, 1], [5, 2], [6, 1]]) {
-        const { database, event } = montar();
+        const { database, event } = montar({ slug: `valorant-generico-plantilla-${teamCount}` });
         const total = teamCount * 5 + sobrantes;
         const gente = [];
         for (let i = 1; i <= total; i++) {
@@ -520,6 +520,7 @@ describe('fase regular de Valorant', () => {
         ['get', `/api/admin/events/${event.id}/audit`],
         ['get', `/api/admin/events/${event.id}/competition`],
         ['put', `/api/admin/events/${event.id}/competition/maps`],
+        ['put', `/api/admin/events/${event.id}/competition/veto`],
         ['put', `/api/admin/events/${event.id}/competition/settings`],
         ['post', `/api/admin/events/${event.id}/competition/generate`],
         ['post', `/api/admin/events/${event.id}/competition/map`],
@@ -586,7 +587,7 @@ describe('fase regular de Valorant', () => {
     });
 
     it('con tres empatados no se aplica el directo a ciegas', () => {
-      const { database, event } = draftTerminado(4);
+      const { database, event } = draftTerminado(4, { slug: 'valorant-generico-desempates' });
       const equipos = database.valorant.listTeams(event.id);
       database.valorantCompetition.generateRegularSeason(event.id, equipos.map((e) => e.id));
 
@@ -632,7 +633,7 @@ describe('fase regular de Valorant', () => {
 
   describe('empates que nadie puede deshacer', () => {
     it('se marcan en vez de resolverse a la brava', async () => {
-      const { database, app, event } = draftTerminado(4);
+      const { database, app, event } = draftTerminado(4, { slug: 'valorant-generico-empate-admin' });
       await admin(app, 'post', `/api/admin/events/${event.id}/competition/generate`, {}).expect(201);
       await ponerMapas(app, database, event);
       const equipos = database.valorant.listTeams(event.id);
@@ -764,7 +765,7 @@ describe('fase regular de Valorant', () => {
 
   describe('series de varias partidas', () => {
     it('un BO3 se cierra al segundo mapa, no al tercero', () => {
-      const { database, event } = draftTerminado(4);
+      const { database, event } = draftTerminado(4, { slug: 'valorant-generico-bo3' });
       const equipos = database.valorant.listTeams(event.id);
       const liga = database.valorantCompetition;
 
@@ -912,7 +913,7 @@ describe('fase regular de Valorant', () => {
     });
 
     it('no se rehace lo que no existe', async () => {
-      const { app, event } = draftTerminado(4);
+      const { app, event } = draftTerminado(4, { slug: 'valorant-generico-reglas' });
       const respuesta = await admin(app, 'post',
         `/api/admin/events/${event.id}/competition/regenerate`,
         { reason: 'x', confirmation: 'REGENERATE' });
@@ -1017,7 +1018,7 @@ describe('fase regular de Valorant', () => {
 
   describe('las reglas de la fase no son preferencias', () => {
     it('las victorias van siempre las primeras', async () => {
-      const { app, event } = draftTerminado(4);
+      const { app, event } = draftTerminado(4, { slug: 'valorant-generico-reglas-configurables' });
       const ruta = `/api/admin/events/${event.id}/competition/settings`;
 
       for (const tiebreakers of [

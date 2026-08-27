@@ -94,7 +94,7 @@ Mantener las variables y tipografías de Jartiland. Usar rojo Valorant para comp
 
 - [ ] **Step 1: Build the dashboard hierarchy**
 
-Mostrar estado, formato, progreso, seis equipos, próxima serie pendiente y siete accesos grandes. Los accesos deben incluir resumen y estado, no sólo un icono.
+Mostrar estado, formato, progreso, los cuatro equipos oficiales, próxima serie pendiente y siete accesos grandes. Los accesos deben incluir resumen y estado, no sólo un icono.
 
 - [ ] **Step 2: Handle incomplete competition states**
 
@@ -108,7 +108,7 @@ Si todavía no existe liga o playoff, mantener accesibles las páginas y explica
 
 - [ ] **Step 1: Build the regular-season overview**
 
-Mostrar progreso, top 4, récord de todos los equipos, última jornada y CTA a clasificación/jornadas.
+Mostrar progreso, seeding del 1.º al 4.º —todos avanzan—, récord de los equipos, última jornada y CTA a clasificación/jornadas.
 
 - [ ] **Step 2: Build the full standings**
 

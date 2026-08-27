@@ -235,10 +235,11 @@
 
   function describe(context) {
     const { route, event, state, draft } = context;
+    const format = state.format || event.officialFormat;
     const descriptions = {
       hub: ['CENTRO DE COMPETICIÓN', event.name, 'Todo el torneo, bien separado. Entra directamente en la fase, jornada o ranking que buscas.'],
       regular: ['FASE REGULAR', 'Todos contra todos', 'Una lectura rápida de la liga antes de entrar en la tabla completa o en cada jornada.'],
-      standings: ['FASE REGULAR · CLASIFICACIÓN', 'La tabla', 'Victorias, rondas y corte del Top 4, sin mezclarlo con el calendario.'],
+      standings: ['FASE REGULAR · CLASIFICACIÓN', 'La tabla', 'Victorias, desempates y seeding del 1º al 4º. Todos entran en playoffs.'],
       matchdays: ['FASE REGULAR · JORNADAS', 'El calendario', 'Cada bloque cuenta una jornada. Abre cualquiera para ver sus cruces y mapas.'],
       matchday: [`FASE REGULAR · JORNADA ${route.parameter || '—'}`, `Jornada ${route.parameter || '—'}`, 'Todos los cruces de esta jornada en una única vista.'],
       playoffs: ['ELIMINATORIAS', 'El cuadro final', 'Doble eliminación. El recorrido hacia la gran final, ronda a ronda.'],
@@ -247,28 +248,36 @@
       match: ['DETALLE DE SERIE', 'Partido', 'Marcador, mapas y estadísticas confirmadas de esta serie.']
     };
     const [eyebrow, title, subtitle] = descriptions[route.name] || descriptions.hub;
+    const teamCount = state.teams?.length || draft?.teams?.length || format?.teams || 0;
+    const playerCount = state.playerStats?.length || format?.players || 0;
     const kpis = route.name === 'stats'
-      ? [['JUGADORES', state.playerStats?.length || 0], ['EQUIPOS', state.teams?.length || 0], ['MAPAS', state.seriesPlayed || 0]]
+      ? [['JUGADORES', playerCount], ['EQUIPOS', teamCount], ['MAPAS', state.seriesPlayed || 0]]
       : route.name === 'playoffs'
-        ? [['ESTADO', playoffStatus(state)], ['SERIES', state.playoffs?.series?.length || 0], ['FORMATO', 'DOBLE ELIM.']]
+        ? [['ESTADO', playoffStatus(state)], ['EQUIPOS', format?.playoffs?.teams || teamCount], ['FORMATO', 'DOBLE ELIM.']]
         : route.name === 'hub'
-          ? [['ESTADO', event.status], ['FORMATO', `${state.teams?.length || draft?.teams?.length || 0} × 5 · TOP 4`], ['LIGA', `${state.seriesPlayed || 0}/${state.seriesTotal || 0}`], ['PLAYOFFS', playoffStatus(state)]]
-          : [['ESTADO', event.status], ['EQUIPOS', state.teams?.length || draft?.teams?.length || 0], ['PARTIDOS', `${state.seriesPlayed || 0}/${state.seriesTotal || 0}`]];
+          ? [['ESTADO', event.status], ['FORMATO', `${teamCount} × ${format?.teamSize || 5}`], ['LIGA', `${state.seriesPlayed || 0}/${state.seriesTotal || format?.regularSeason?.series || 0}`], ['PLAYOFFS', 'TODOS CLASIFICAN']]
+          : [['ESTADO', event.status], ['EQUIPOS', teamCount], ['PARTIDOS', `${state.seriesPlayed || 0}/${state.seriesTotal || format?.regularSeason?.series || 0}`]];
     return { eyebrow, title, subtitle, kpis };
   }
 
   function renderHub(context) {
     const root = competitionRoot(context.slug);
     const upcoming = Boolean(context.state.preview);
+    const format = context.state.format || context.event.officialFormat;
     const container = node('div', 'hub-layout');
     const next = View.nextSeries(context.state);
     const spotlight = node('section', 'hub-spotlight');
     const overview = node('article', 'hub-overview');
+    const official = Boolean(format);
     overview.append(
       node('p', 'section-label', 'ESTADO DEL TORNEO'),
-      node('h2', '', upcoming ? 'Próximamente' : context.state.complete ? 'La liga ya tiene Top 4' : 'La competición está en marcha'),
+      node('h2', '', upcoming
+        ? 'Próximamente'
+        : context.state.complete
+          ? official ? 'Seeding confirmado' : 'La liga ya tiene Top 4'
+          : 'La competición está en marcha'),
       node('p', 'section-copy', upcoming
-        ? 'La competición todavía no ha comenzado. Aquí podrás seguir cada fase cuando se publique.'
+        ? `${format?.players || 20} jugadores formarán ${format?.teams || 4} equipos. La liga ordenará el seeding y todos entrarán en el cuadro de doble eliminación.`
         : context.state.complete
         ? 'La fase regular está cerrada. El foco pasa al cuadro de doble eliminación.'
         : 'Sigue el calendario y mira cómo cambia la clasificación con cada resultado.'),
@@ -294,11 +303,11 @@
     const top = context.state.standings?.[0]?.name || 'Sin líder';
     const completeResults = View.allSeries(context.state).filter((series) => series.status === 'COMPLETED').length;
     [
-      { number: '01', title: 'Draft', copy: upcoming ? 'Capitanes, elecciones y equipos se publicarán aquí.' : `${context.draft?.teams?.length || 0} equipos · ${statusLabel(context.draft?.status)}`, status: upcoming ? 'PRÓXIMAMENTE' : statusLabel(context.draft?.status), ready: context.draft?.status === 'COMPLETED', href: `${root}/draft`, accent: 'draft' },
-      { number: '02', title: 'Fase regular', copy: upcoming ? 'La competición todavía no ha comenzado.' : `${context.state.seriesPlayed || 0} de ${context.state.seriesTotal || 0} partidos`, status: upcoming ? 'PRÓXIMAMENTE' : context.state.complete ? 'TERMINADA' : 'EN JUEGO', ready: context.state.generated, href: `${root}/fase-regular`, accent: 'league' },
-      { number: '03', title: 'Clasificación', copy: `Líder actual · ${top}`, status: `${context.state.standings?.length || 0} POSICIONES`, ready: context.state.standings?.length > 0, href: `${root}/fase-regular/clasificacion`, accent: 'standings' },
-      { number: '04', title: 'Jornadas', copy: `${context.state.matchdays?.length || 0} bloques de calendario`, status: context.state.generated ? 'PUBLICADAS' : 'PENDIENTES', ready: context.state.generated, href: `${root}/fase-regular/jornadas`, accent: 'calendar' },
-      { number: '05', title: 'Playoffs', copy: 'Cuadro alto, bajo y gran final', status: playoffStatus(context.state), ready: context.state.playoffs?.generated, href: `${root}/playoffs`, accent: 'playoffs' },
+      { number: '01', title: 'Draft', copy: upcoming ? `${format?.captains || 4} capitanes · ${format?.draftPicks || 16} elecciones` : `${context.draft?.teams?.length || 0} equipos · ${statusLabel(context.draft?.status)}`, status: upcoming ? 'PRÓXIMAMENTE' : statusLabel(context.draft?.status), ready: context.draft?.status === 'COMPLETED', href: `${root}/draft`, accent: 'draft' },
+      { number: '02', title: 'Fase regular', copy: upcoming ? `${format?.regularSeason?.matchdays || 3} jornadas · ${format?.regularSeason?.series || 6} BO1` : `${context.state.seriesPlayed || 0} de ${context.state.seriesTotal || 0} partidos`, status: upcoming ? 'TODOS CONTRA TODOS' : context.state.complete ? 'TERMINADA' : 'EN JUEGO', ready: context.state.generated, href: `${root}/fase-regular`, accent: 'league' },
+      { number: '03', title: 'Clasificación', copy: upcoming ? 'Ordenará el seeding del 1º al 4º' : `Líder actual · ${top}`, status: upcoming ? 'TODOS CLASIFICAN' : `${context.state.standings?.length || 0} POSICIONES`, ready: context.state.standings?.length > 0, href: `${root}/fase-regular/clasificacion`, accent: 'standings' },
+      { number: '04', title: 'Jornadas', copy: `${context.state.matchdays?.length || format?.regularSeason?.matchdays || 0} bloques de calendario`, status: context.state.generated ? 'PUBLICADAS' : 'POR ANUNCIAR', ready: context.state.generated, href: `${root}/fase-regular/jornadas`, accent: 'calendar' },
+      { number: '05', title: 'Playoffs', copy: '1º–4º · 2º–3º · cuadro alto y bajo', status: upcoming ? 'DOBLE ELIMINACIÓN' : playoffStatus(context.state), ready: context.state.playoffs?.generated, href: `${root}/playoffs`, accent: 'playoffs' },
       { number: '06', title: 'Estadísticas', copy: `${context.state.playerStats?.length || 0} jugadores con datos`, status: 'RANKINGS', ready: context.state.playerStats?.length > 0, href: `${root}/estadisticas`, accent: 'stats' },
       { number: '07', title: 'Resultados', copy: `${completeResults} series cerradas`, status: 'MARCADOR', ready: completeResults > 0, href: `${root}/resultados`, accent: 'results' }
     ].forEach((item) => cards.append(phaseCard(context, item)));
@@ -313,7 +322,18 @@
 
   function renderRegular(context) {
     const root = competitionRoot(context.slug);
-    if (context.state.preview) return emptyState('La competición todavía no ha comenzado', 'La fase regular, las jornadas y la clasificación aparecerán cuando arranque el torneo.');
+    if (context.state.preview) {
+      const format = context.state.format || context.event.officialFormat;
+      const section = node('section', 'content-section');
+      section.append(sectionHeader(1, 'FORMATO OFICIAL', 'Todos contra todos', `${format.regularSeason.matchdays} jornadas · ${format.regularSeason.series} series · BO${format.regularSeason.bestOf}`));
+      section.append(node('p', 'competition-notice', 'Cada equipo jugará una vez contra sus tres rivales. Nadie queda eliminado: los cuatro equipos avanzan y la tabla sólo decide el seeding.'));
+      const routes = node('div', 'regular-route-grid');
+      routes.append(
+        phaseCard(context, { number: 'A', title: 'Clasificación', copy: 'Del 1º al 4º. Todos clasifican a playoffs.', status: 'SEEDING', href: `${root}/fase-regular/clasificacion`, accent: 'standings', cta: 'VER FORMATO' }),
+        phaseCard(context, { number: 'B', title: 'Jornadas', copy: `${format.regularSeason.matchdays} jornadas con ${format.regularSeason.matchesPerMatchday} cruces cada una.`, status: 'POR ANUNCIAR', href: `${root}/fase-regular/jornadas`, accent: 'calendar', cta: 'VER CALENDARIO' })
+      );
+      section.append(routes); return section;
+    }
     if (!context.state.generated) return emptyState('La liga todavía no está generada', 'Cuando termine el draft, las jornadas y la tabla aparecerán aquí.', link(`${root}/draft`, 'primary-cta', 'VER DRAFT →'));
     const layout = node('div', 'page-stack');
     const summary = node('section', 'regular-summary');
@@ -321,15 +341,15 @@
     progress.append(node('p', 'section-label', 'PROGRESO'), node('h2', '', context.state.complete ? 'Fase cerrada' : 'Liga en juego'), progressBar(context.state.seriesPlayed, context.state.seriesTotal, 'PARTIDOS DISPUTADOS'));
     const routes = node('div', 'regular-route-grid');
     routes.append(
-      phaseCard(context, { number: 'A', title: 'Clasificación', copy: 'Tabla completa, récord y corte del Top 4.', status: `${context.state.standings.length} EQUIPOS`, ready: true, href: `${root}/fase-regular/clasificacion`, accent: 'standings', cta: 'ABRIR TABLA' }),
+      phaseCard(context, { number: 'A', title: 'Clasificación', copy: context.event.officialFormat ? 'Tabla completa y seeding del 1º al 4º. Todos avanzan.' : 'Tabla completa, récord y corte del Top 4.', status: `${context.state.standings.length} EQUIPOS`, ready: true, href: `${root}/fase-regular/clasificacion`, accent: 'standings', cta: 'ABRIR TABLA' }),
       phaseCard(context, { number: 'B', title: 'Jornadas', copy: 'Cruces y resultados ordenados por fecha de competición.', status: `${context.state.matchdays.length} JORNADAS`, ready: true, href: `${root}/fase-regular/jornadas`, accent: 'calendar', cta: 'VER CALENDARIO' })
     );
     summary.append(progress, routes); layout.append(summary);
     const records = node('section', 'content-section');
-    records.append(sectionHeader(1, 'PULSO DE LA LIGA', 'Récord por equipo', 'Una lectura rápida de victorias y derrotas para los seis equipos.'));
+    records.append(sectionHeader(1, 'PULSO DE LA LIGA', 'Récord por equipo', 'Una lectura rápida de victorias y derrotas para los cuatro equipos.'));
     records.append(recordCards(context)); layout.append(records);
     const tableSection = node('section', 'content-section');
-    tableSection.append(sectionHeader(2, 'VISTA RÁPIDA', 'Top de la liga', 'Los cuatro primeros avanzan al cuadro final.', link(`${root}/fase-regular/clasificacion`, 'text-cta', 'TABLA COMPLETA →')), standingsTable(context, context.state.standings, { limit: 4 }));
+    tableSection.append(sectionHeader(2, 'VISTA RÁPIDA', 'Seeding de la liga', 'Todos avanzan; la posición decide los cruces.', link(`${root}/fase-regular/clasificacion`, 'text-cta', 'TABLA COMPLETA →')), standingsTable(context, context.state.standings, { limit: 4 }));
     layout.append(tableSection);
     const last = [...(context.state.matchdays || [])].reverse().find((day) => day.series.some((series) => series.status === 'COMPLETED')) || context.state.matchdays?.[0];
     if (last) {
@@ -342,14 +362,14 @@
   }
 
   function renderStandings(context) {
-    if (context.state.preview) return emptyState('Clasificación próximamente', 'La tabla aparecerá cuando comience la fase regular.');
+    if (context.state.preview) return emptyState('Clasificación próximamente', 'Los cuatro equipos se ordenarán del 1º al 4º. Todos entran en playoffs; las victorias y los desempates deportivos decidirán el seeding.');
     if (!context.state.standings?.length) return emptyState('Sin clasificación', 'La tabla se calculará en cuanto exista la fase regular.');
     const section = node('section', 'content-section');
     section.append(sectionHeader(1, 'TABLA COMPLETA', 'Clasificación', 'Las victorias mandan. Los desempates usan enfrentamiento directo y diferencia de rondas.'));
     if (context.state.tieRequiresAdmin) section.append(node('p', 'competition-notice is-warning', 'Hay un empate que necesita resolución de la organización.'));
     section.append(standingsTable(context));
     const legend = node('div', 'table-legend');
-    legend.append(badge('TOP 4', 'qualified'), node('span', '', 'Clasifica a playoffs'), badge('DESEMPATE', 'warning'), node('span', '', 'Orden pendiente de decisión'));
+    legend.append(badge('1º–4º', 'qualified'), node('span', '', 'Todos clasifican a playoffs'), badge('DESEMPATE', 'warning'), node('span', '', 'Orden pendiente de decisión'));
     section.append(legend); return section;
   }
 
@@ -369,7 +389,13 @@
   }
 
   function renderMatchdays(context) {
-    if (context.state.preview) return emptyState('Jornadas próximamente', 'El calendario se publicará antes de comenzar la fase regular.');
+    if (context.state.preview) {
+      const section = node('section', 'content-section');
+      section.append(sectionHeader(1, 'CALENDARIO OFICIAL', 'Tres jornadas', 'Dos enfrentamientos por jornada. Los equipos concretos se publicarán tras el draft.'));
+      const grid = node('div', 'matchday-grid');
+      for (let day = 1; day <= 3; day += 1) grid.append(phaseCard(context, { number: String(day).padStart(2, '0'), title: `Jornada ${day}`, copy: 'Dos cruces · equipos por determinar', status: 'POR ANUNCIAR', href: '#', accent: 'calendar', cta: 'PENDIENTE' }));
+      section.append(grid); return section;
+    }
     if (!context.state.matchdays?.length) return emptyState('Calendario pendiente', 'Las jornadas se publicarán al generar la fase regular.');
     const section = node('section', 'content-section');
     section.append(sectionHeader(1, 'CALENDARIO', 'Todas las jornadas', 'Un bloque por jornada. Entra para ver mapas y detalles.'));
@@ -390,8 +416,18 @@
   }
 
   function renderPlayoffs(context) {
-    if (context.state.preview) return emptyState('Playoffs próximamente', 'Los cuatro mejores equipos avanzarán a esta fase.');
-    if (!context.state.playoffs?.generated) return emptyState('El cuadro todavía no está generado', context.state.complete ? 'La liga ya ha terminado. La organización publicará los cruces del Top 4.' : 'Primero deben terminar todos los partidos de la fase regular.', link(`${competitionRoot(context.slug)}/fase-regular/clasificacion`, 'primary-cta', 'VER CLASIFICACIÓN →'));
+    if (context.state.preview) {
+      const section = node('section', 'content-section bracket-section');
+      section.append(sectionHeader(1, 'DOBLE ELIMINACIÓN', 'Playoffs próximamente', 'Los cuatro equipos entran. La primera derrota baja al cuadro inferior y la segunda elimina.'));
+      const grid = node('div', 'regular-route-grid');
+      grid.append(
+        phaseCard(context, { number: 'A', title: '1º vs 4º', copy: 'Primera semifinal del cuadro alto.', status: 'BO3', href: '#', accent: 'playoffs', cta: 'POR DETERMINAR' }),
+        phaseCard(context, { number: 'B', title: '2º vs 3º', copy: 'Segunda semifinal del cuadro alto.', status: 'BO3', href: '#', accent: 'playoffs', cta: 'POR DETERMINAR' })
+      );
+      section.append(grid, node('p', 'competition-notice', 'La Gran Final será BO3 por defecto. Si el equipo del cuadro inferior vence al equipo invicto, se jugará una Gran Final de reset.'));
+      return section;
+    }
+    if (!context.state.playoffs?.generated) return emptyState('El cuadro todavía no está generado', context.state.complete ? (context.event.officialFormat ? 'La liga ya ha terminado. La organización publicará los cruces 1º–4º y 2º–3º.' : 'La liga ya ha terminado. La organización publicará los cruces del Top 4.') : 'Primero deben terminar todos los partidos de la fase regular.', link(`${competitionRoot(context.slug)}/fase-regular/clasificacion`, 'primary-cta', 'VER CLASIFICACIÓN →'));
     const section = node('section', 'content-section bracket-section');
     section.append(sectionHeader(1, 'DOBLE ELIMINACIÓN', 'Camino a la final', 'Dos derrotas eliminan. El cuadro alto y el bajo convergen en la gran final.'));
     const bracket = node('div', 'competition-bracket');

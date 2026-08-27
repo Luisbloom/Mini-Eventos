@@ -84,8 +84,14 @@
           <section id="league-admin-section" class="admin-section" hidden>
             <header class="admin-section-heading"><div><span>11 / FASE REGULAR</span><h2>Liga y clasificación</h2><p>Todos contra todos. Se genera cuando el draft ha terminado y los equipos están completos.</p></div><span id="league-state" class="draft-admin-state">—</span></header>
 
+            <div id="valorant-official-admin" class="draft-admin-block" hidden>
+              <div class="mini-heading"><h3>FORMATO DEL EVENTO</h3><span>Especificación oficial</span></div>
+              <dl id="valorant-official-summary" class="draft-admin-summary"></dl>
+            </div>
+
             <div class="draft-admin-block">
-              <div class="mini-heading"><h3>MAPAS</h3><span>Los que se juegan en este torneo</span></div>
+              <div class="mini-heading"><h3>MAPAS Y VETO</h3><span id="league-veto-state">VETO PENDIENTE DE CONFIGURACIÓN</span></div>
+              <p class="draft-format-note">El catálogo permite asignación manual como respaldo. El map pool y el procedimiento oficial no se publican hasta configurarlos expresamente.</p>
               <div id="league-maps" class="league-maps"></div>
               <div class="draft-admin-actions">
                 <button id="save-league-maps" type="button" class="secondary-button">GUARDAR MAPAS</button>

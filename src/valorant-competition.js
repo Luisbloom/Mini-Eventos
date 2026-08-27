@@ -2,6 +2,7 @@
 
 const { roundRobinSchedule, scheduleSummary } = require('./services/round-robin');
 const { validateValorantScore, DEFAULT_SCORE_POLICY } = require('./services/valorant-score');
+const { officialValorantFormatForSlug } = require('./valorant-event-format');
 
 /**
  * Fase regular de un torneo por equipos: calendario, mapas, resultados y
@@ -52,7 +53,6 @@ const DEFAULT_MAP_POOL = Object.freeze([
 const PRIMARY_TIEBREAKER = 'wins';
 const SECONDARY_TIEBREAKERS = Object.freeze(['head_to_head', 'round_diff', 'rounds_for']);
 const TIEBREAKERS = Object.freeze([PRIMARY_TIEBREAKER, ...SECONDARY_TIEBREAKERS]);
-const DEFAULT_TIEBREAKERS = Object.freeze([...TIEBREAKERS]);
 
 /** En esta fase clasifican cuatro. Con cuatro equipos, todos. */
 const QUALIFIERS = 4;
@@ -208,6 +208,8 @@ function migrateValorantCompetition(connection) {
       event_id INTEGER PRIMARY KEY,
       tiebreakers_json TEXT NOT NULL DEFAULT '["wins","head_to_head","round_diff","rounds_for"]',
       qualifiers INTEGER NOT NULL DEFAULT 4,
+      map_pool_configured INTEGER NOT NULL DEFAULT 0 CHECK (map_pool_configured IN (0,1)),
+      veto_rules_json TEXT NOT NULL DEFAULT '{"bo1":null,"bo3":null}',
       updated_at TEXT NOT NULL DEFAULT (${NOW}),
       FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE
     );
@@ -243,6 +245,12 @@ function migrateLegacyValorantSchema(connection) {
       const ajustes = connection.pragma('table_info(valorant_settings)').map((c) => c.name);
       if (!ajustes.includes('grand_final_best_of')) {
         connection.exec('ALTER TABLE valorant_settings ADD COLUMN grand_final_best_of INTEGER NOT NULL DEFAULT 3');
+      }
+      if (!ajustes.includes('map_pool_configured')) {
+        connection.exec('ALTER TABLE valorant_settings ADD COLUMN map_pool_configured INTEGER NOT NULL DEFAULT 0 CHECK (map_pool_configured IN (0,1))');
+      }
+      if (!ajustes.includes('veto_rules_json')) {
+        connection.exec(`ALTER TABLE valorant_settings ADD COLUMN veto_rules_json TEXT NOT NULL DEFAULT '{"bo1":null,"bo3":null}'`);
       }
 
       const violations = connection.pragma('foreign_key_check');
@@ -499,6 +507,9 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         connection.prepare('UPDATE valorant_maps SET enabled=0 WHERE event_id=?').run(eventId);
         const encender = connection.prepare('UPDATE valorant_maps SET enabled=1 WHERE event_id=? AND map_key=?');
         for (const clave of activos) encender.run(eventId, clave);
+        connection.prepare(`INSERT INTO valorant_settings (event_id,map_pool_configured)
+          VALUES (?,1) ON CONFLICT(event_id) DO UPDATE SET
+          map_pool_configured=1, updated_at=${NOW}`).run(eventId);
       });
       guardar();
       registrar(eventId, actor, 'MAP_POOL_UPDATED', null, null, { enabled: [...activos] });
@@ -509,15 +520,64 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       return this.listMaps(eventId).filter((mapa) => mapa.enabled).map((mapa) => mapa.key);
     },
 
+    /**
+     * El catálogo interno no equivale a un map pool anunciado. Hasta que la
+     * organización configure pool y procedimiento, la API lo dice claramente.
+     */
+    getVetoConfiguration(eventId) {
+      const row = connection.prepare(
+        'SELECT map_pool_configured,veto_rules_json FROM valorant_settings WHERE event_id=?'
+      ).get(eventId);
+      const rules = row?.veto_rules_json ? JSON.parse(row.veto_rules_json) : { bo1: null, bo3: null };
+      const mapPoolConfigured = Boolean(row?.map_pool_configured);
+      const configured = mapPoolConfigured && Boolean(rules.bo1) && Boolean(rules.bo3);
+      return {
+        status: configured ? 'CONFIGURED' : 'VETO_NOT_CONFIGURED',
+        mapPoolConfigured,
+        // El pool tampoco se anuncia a medias: hasta tener procedimiento BO1
+        // y BO3, tanto el pool como el veto siguen oficialmente pendientes.
+        mapPool: configured ? this.enabledMapKeys(eventId) : null,
+        rules: { bo1: rules.bo1 ?? null, bo3: rules.bo3 ?? null }
+      };
+    },
+
+    setVetoRules(eventId, rules, { actor = 'admin' } = {}) {
+      if (!rules || typeof rules !== 'object' || Array.isArray(rules)) {
+        throw new CompetitionError('vetoRules debe ser un objeto con BO1 y BO3.', 'INVALID_VETO_RULES');
+      }
+      const normalized = { bo1: rules.bo1 ?? null, bo3: rules.bo3 ?? null };
+      for (const key of ['bo1', 'bo3']) {
+        const value = normalized[key];
+        if (value !== null && typeof value !== 'object' && typeof value !== 'string') {
+          throw new CompetitionError(`La regla ${key.toUpperCase()} no es válida.`, 'INVALID_VETO_RULES');
+        }
+      }
+      const serialized = JSON.stringify(normalized);
+      if (serialized.length > 10000) {
+        throw new CompetitionError('La configuración de veto es demasiado grande.', 'INVALID_VETO_RULES');
+      }
+      connection.prepare(`INSERT INTO valorant_settings (event_id,veto_rules_json)
+        VALUES (?,?) ON CONFLICT(event_id) DO UPDATE SET
+        veto_rules_json=excluded.veto_rules_json, updated_at=${NOW}`).run(eventId, serialized);
+      registrar(eventId, actor, 'VETO_RULES_UPDATED', null, null, { configured: Boolean(normalized.bo1 && normalized.bo3) });
+      return this.getVetoConfiguration(eventId);
+    },
+
     // ---------------------------------------------------- fase regular
 
     getSettings(eventId) {
       const row = connection.prepare('SELECT * FROM valorant_settings WHERE event_id=?').get(eventId);
-      const guardados = row ? JSON.parse(row.tiebreakers_json) : [...SECONDARY_TIEBREAKERS];
+      const event = connection.prepare('SELECT slug FROM events WHERE id=?').get(eventId);
+      const official = officialValorantFormatForSlug(event?.slug);
+      const allowed = official
+        ? official.tiebreakers.twoTeam
+        : SECONDARY_TIEBREAKERS;
+      const guardados = row ? JSON.parse(row.tiebreakers_json) : [...allowed];
       return {
         // Las victorias se reponen siempre las primeras aunque en la base haya
         // quedado otra cosa de una versión anterior.
-        tiebreakers: [PRIMARY_TIEBREAKER, ...guardados.filter((c) => c !== PRIMARY_TIEBREAKER)],
+        tiebreakers: [PRIMARY_TIEBREAKER, ...guardados.filter((c) =>
+          c !== PRIMARY_TIEBREAKER && allowed.includes(c))],
         qualifiers: QUALIFIERS,
         scorePolicy: { ...DEFAULT_SCORE_POLICY }
       };
@@ -534,19 +594,31 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           `En esta fase clasifican siempre ${QUALIFIERS}.`, 'QUALIFIERS_FIXED');
       }
 
-      const pedidos = (tiebreakers ?? DEFAULT_TIEBREAKERS).map(String);
-      for (const criterio of pedidos) {
-        if (!TIEBREAKERS.includes(criterio)) {
-          throw new CompetitionError(`Criterio de desempate desconocido: ${criterio}.`, 'UNKNOWN_TIEBREAKER');
-        }
-      }
-      // Aceptar la lista con 'wins' delante o sin ella, pero nunca con 'wins'
-      // en otro sitio: eso sería pedir que la diferencia de rondas mande.
+      const event = connection.prepare('SELECT slug FROM events WHERE id=?').get(eventId);
+      const official = officialValorantFormatForSlug(event?.slug);
+      const permitted = official
+        ? [PRIMARY_TIEBREAKER, ...official.tiebreakers.twoTeam]
+        : TIEBREAKERS;
+      const pedidos = (tiebreakers ?? permitted).map(String);
+      // Comprobar antes la regla estructural de victorias para conservar un
+      // error preciso aunque la lista incluya además un criterio pendiente.
       const posicion = pedidos.indexOf(PRIMARY_TIEBREAKER);
       if (posicion > 0) {
         throw new CompetitionError(
           'Las victorias mandan siempre y van las primeras.', 'WINS_MUST_BE_FIRST');
       }
+      for (const criterio of pedidos) {
+        if (!permitted.includes(criterio)) {
+          if (official && TIEBREAKERS.includes(criterio)) {
+            throw new CompetitionError(
+              'Ese desempate sigue pendiente de decisión oficial.',
+              'OFFICIAL_TIEBREAKER_NOT_CONFIGURED');
+          }
+          throw new CompetitionError(`Criterio de desempate desconocido: ${criterio}.`, 'UNKNOWN_TIEBREAKER');
+        }
+      }
+      // Aceptar la lista con 'wins' delante o sin ella, pero nunca con 'wins'
+      // en otro sitio: eso sería pedir que la diferencia de rondas mande.
       const secundarios = pedidos.filter((c) => c !== PRIMARY_TIEBREAKER);
       if (new Set(secundarios).size !== secundarios.length) {
         throw new CompetitionError('Hay un criterio de desempate repetido.', 'DUPLICATE_TIEBREAKER');
@@ -638,6 +710,13 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
     buildRegularSeason(eventId, teamIds, { bestOf = 1, actor = 'admin', reason = null, replace = false, discardedResults = 0 } = {}) {
       if (!Array.isArray(teamIds) || teamIds.length < 2) {
         throw new CompetitionError('Hacen falta al menos dos equipos.', 'NOT_ENOUGH_TEAMS');
+      }
+      const event = connection.prepare('SELECT slug FROM events WHERE id=?').get(eventId);
+      const official = officialValorantFormatForSlug(event?.slug);
+      if (official && (teamIds.length !== official.teams || Number(bestOf) !== official.regularSeason.bestOf)) {
+        throw new CompetitionError(
+          `El torneo oficial requiere ${official.teams} equipos y fase regular BO${official.regularSeason.bestOf}.`,
+          'OFFICIAL_REGULAR_FORMAT_MISMATCH');
       }
 
       const calendario = roundRobinSchedule(teamIds);
@@ -1226,7 +1305,10 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         complete: tabla.complete,
         tieRequiresAdmin: tabla.tieRequiresAdmin,
         qualifiers: tabla.settings.qualifiers,
-        maps: this.listMaps(eventId),
+        maps: this.getVetoConfiguration(eventId).status === 'CONFIGURED'
+          ? this.listMaps(eventId).filter((mapa) => mapa.enabled)
+          : [],
+        veto: this.getVetoConfiguration(eventId),
         playerStats: this.tournamentPlayerStats(eventId),
         // Sólo lo justo para poner nombre a las filas de estadísticas: el
         // nombre visible, que ya sale en la página del draft. Ni Riot ID, ni

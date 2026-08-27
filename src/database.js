@@ -25,6 +25,13 @@ const {
   normalizeRegistrationFields,
   normalizeRegistrationValues,
   registrationFieldsForGame, normalizeModules } = require('./events');
+const {
+  OFFICIAL_VALORANT_FORMAT,
+  OFFICIAL_VALORANT_SLUG,
+  officialValorantFormatForSlug
+} = require('./valorant-event-format');
+
+const OFFICIAL_FORMAT_SYNC_KEY = `event_format:${OFFICIAL_VALORANT_SLUG}:${OFFICIAL_VALORANT_FORMAT.source.version}`;
 
 function toMatch(row) {
   if (!row) return null;
@@ -306,6 +313,31 @@ function openDatabase(dbPath) {
     for (const field of DEFAULT_REGISTRATION_FIELDS) {
       insertSeedField.run(eventId, field.key, field.label, field.type, Number(field.required), field.placeholder, JSON.stringify(field.options), field.position, Number(field.enabled));
     }
+
+    // Sincronización única del evento real con el documento oficial. El
+    // alcance es deliberadamente estrecho: no toca participantes, equipos,
+    // resultados, archivos ni ningún otro evento.
+    const officialEvent = connection.prepare('SELECT id, modules_json FROM events WHERE slug=?')
+      .get(OFFICIAL_VALORANT_SLUG);
+    const alreadySynced = connection.prepare('SELECT 1 FROM app_settings WHERE setting_key=?')
+      .get(OFFICIAL_FORMAT_SYNC_KEY);
+    if (officialEvent && !alreadySynced) {
+      const modules = normalizeModules(JSON.parse(officialEvent.modules_json));
+      for (const key of ['information', 'participants', 'matches', 'registration', 'competition', 'schedule', 'draft']) {
+        modules[key] = true;
+      }
+      connection.prepare(`UPDATE events
+        SET status='Próximamente', min_participants=?, max_participants=?,
+            registrations_open=0, archived=0, modules_json=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE id=?`).run(
+        OFFICIAL_VALORANT_FORMAT.players,
+        OFFICIAL_VALORANT_FORMAT.players,
+        JSON.stringify(modules),
+        officialEvent.id
+      );
+      connection.prepare('INSERT INTO app_settings (setting_key,value_json) VALUES (?,?)')
+        .run(OFFICIAL_FORMAT_SYNC_KEY, JSON.stringify({ syncedAt: new Date().toISOString() }));
+    }
   })();
 
   // Los eventos creados antes de que existiera el campo de Friend Code no lo
@@ -426,7 +458,12 @@ function openDatabase(dbPath) {
     }
   }
   const createEventTransaction = connection.transaction((input) => {
-    const event = normalizeEvent(input);
+    const official = officialValorantFormatForSlug(input?.slug);
+    const event = normalizeEvent(official ? {
+      ...input,
+      minParticipants: official.players,
+      maxParticipants: official.players
+    } : input);
     let result;
     try {
       result = insertEventStatement.run({ ...event, registrationsOpen: Number(event.registrationsOpen), archived: Number(event.archived), modulesJson: JSON.stringify(event.modules) });
@@ -435,6 +472,10 @@ function openDatabase(dbPath) {
       throw error;
     }
     const id = Number(result.lastInsertRowid);
+    if (official) {
+      connection.prepare(`INSERT OR IGNORE INTO app_settings (setting_key,value_json) VALUES (?,?)`)
+        .run(OFFICIAL_FORMAT_SYNC_KEY, JSON.stringify({ createdAlignedAt: new Date().toISOString() }));
+    }
     insertInformationStatement.run(id, JSON.stringify(createDefaultEventInformation(event.game)));
     const fields = registrationFieldsForGame(event.game).map((field) => ({
       ...field,

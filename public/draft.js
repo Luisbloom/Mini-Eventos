@@ -25,11 +25,59 @@ function setConnection(estado, texto) {
 
 function mostrarNoDisponible(titulo, copia, upcoming = false) {
   byId('draft-main').hidden = true;
+  byId('draft-preview').hidden = true;
   const caja = byId('draft-unavailable');
   caja.hidden = false;
   byId('draft-unavailable-title').textContent = titulo;
   byId('draft-unavailable-copy').textContent = copia;
   setConnection(upcoming ? 'loading' : 'error', upcoming ? 'PRÓXIMAMENTE' : 'NO DISPONIBLE');
+}
+
+function configurarNavegacion() {
+  byId('back-to-event').href = `/eventos/${encodeURIComponent(slug)}`;
+  const competition = `/eventos/${encodeURIComponent(slug)}/competicion`;
+  byId('back-to-competition').href = competition;
+  byId('draft-nav-hub').href = competition;
+  byId('draft-nav-draft').href = `${competition}/draft`;
+  byId('draft-nav-regular').href = `${competition}/fase-regular`;
+  byId('draft-nav-playoffs').href = `${competition}/playoffs`;
+  byId('draft-nav-stats').href = `${competition}/estadisticas`;
+  byId('draft-nav-results').href = `${competition}/resultados`;
+}
+
+function mostrarPrevia(event) {
+  const format = event.officialFormat;
+  configurarNavegacion();
+  byId('draft-main').hidden = true;
+  byId('draft-unavailable').hidden = true;
+  byId('draft-preview').hidden = false;
+  document.title = `Draft · ${event.name} · Mini Eventos Jartiland`;
+  document.documentElement.style.setProperty('--event-accent', event.accentColor || '#ff4655');
+  const kpis = [
+    ['JUGADORES', format.players], ['CAPITANES', format.captains],
+    ['ELECCIONES', format.draftPicks], ['EQUIPOS FINALES', `${format.teams} × ${format.teamSize}`]
+  ];
+  byId('draft-preview-kpis').replaceChildren(...kpis.map(([label, value]) => {
+    const item = document.createElement('div');
+    const term = document.createElement('dt'); term.textContent = label;
+    const detail = document.createElement('dd'); detail.textContent = String(value);
+    item.append(term, detail); return item;
+  }));
+  byId('draft-preview-captains').replaceChildren(...Array.from({ length: format.captains }, (_, index) => {
+    const card = document.createElement('article');
+    const number = document.createElement('span'); number.textContent = String(index + 1).padStart(2, '0');
+    const title = document.createElement('strong'); title.textContent = 'Capitán';
+    const state = document.createElement('small'); state.textContent = 'POR ANUNCIAR';
+    card.append(number, title, state); return card;
+  }));
+  byId('draft-preview-rounds').replaceChildren(...Array.from({ length: format.draftRounds }, (_, index) => {
+    const card = document.createElement('article');
+    const number = document.createElement('span'); number.textContent = `RONDA ${index + 1}`;
+    const copy = document.createElement('strong'); copy.textContent = `${format.teams} elecciones`;
+    const state = document.createElement('small'); state.textContent = 'ORDEN POR ANUNCIAR';
+    card.append(number, copy, state); return card;
+  }));
+  setConnection('loading', 'PRÓXIMAMENTE');
 }
 
 // ------------------------------------------------------------------ pintar
@@ -181,6 +229,10 @@ async function pedirEstado() {
   if (eventResponse.ok) {
     const eventBody = await eventResponse.json();
     if (eventBody.event?.status === 'Próximamente') {
+      if (eventBody.event.officialFormat) {
+        mostrarPrevia(eventBody.event);
+        return false;
+      }
       mostrarNoDisponible('Todavía no',
         'Este torneo aún no ha comenzado. Cuando lo haga, el draft se verá aquí en directo.', true);
       return false;
@@ -207,15 +259,7 @@ async function pedirEstado() {
 
   draft = await estado.json();
   me = yo;
-  byId('back-to-event').href = `/eventos/${encodeURIComponent(slug)}`;
-  const competition = `/eventos/${encodeURIComponent(slug)}/competicion`;
-  byId('back-to-competition').href = competition;
-  byId('draft-nav-hub').href = competition;
-  byId('draft-nav-draft').href = `${competition}/draft`;
-  byId('draft-nav-regular').href = `${competition}/fase-regular`;
-  byId('draft-nav-playoffs').href = `${competition}/playoffs`;
-  byId('draft-nav-stats').href = `${competition}/estadisticas`;
-  byId('draft-nav-results').href = `${competition}/resultados`;
+  configurarNavegacion();
   pintar();
   setConnection('live', draft.status === 'ACTIVE' ? 'EN DIRECTO' : 'CONECTADO');
   return true;

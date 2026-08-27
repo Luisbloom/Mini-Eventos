@@ -208,6 +208,17 @@
     draft = estado.draft || { status: 'PENDING', teamCount: 4, teamSize: 5, totalPicks: 16 };
     equipos = estado.teams || [];
 
+    const selectorEquipos = id('draft-team-count');
+    if (estado.format) {
+      numeroDeEquipos = estado.format.teams;
+      selectorEquipos.value = String(numeroDeEquipos);
+      selectorEquipos.disabled = true;
+      selectorEquipos.title = 'El formato oficial fija cuatro equipos.';
+    } else {
+      selectorEquipos.disabled = false;
+      selectorEquipos.removeAttribute('title');
+    }
+
     // Si hay algo guardado manda eso; si no, lo que haya elegido en pantalla.
     if (estado.draft) numeroDeEquipos = draft.teamCount ?? numeroDeEquipos;
     if (capitanes.length !== numeroDeEquipos) {

@@ -49,6 +49,74 @@ function configureModules(event) {
   }));
 }
 
+function renderOfficialValorant(format, event) {
+  const root = byId('valorant-official');
+  root.hidden = !format;
+  document.body.classList.toggle('official-valorant-event', Boolean(format));
+  if (!format) return;
+
+  byId('valorant-official-summary').textContent = format.public.summary;
+  const kpis = [
+    ['JUGADORES', format.players],
+    ['EQUIPOS', format.teams],
+    ['CAPITANES', format.captains],
+    ['POR EQUIPO', format.teamSize],
+    ['SERIES GARANTIZADAS', `${format.guaranteedSeriesPerTeam}+`]
+  ];
+  byId('valorant-format-kpis').replaceChildren(...kpis.map(([label, value]) => {
+    const wrapper = document.createElement('div');
+    const term = document.createElement('dt'); term.textContent = label;
+    const detail = document.createElement('dd'); detail.textContent = String(value);
+    wrapper.append(term, detail); return wrapper;
+  }));
+
+  const cards = [
+    ['01', 'RESUMEN', 'Cómo funcionará', format.public.summary, 'CONFIRMADO'],
+    ['02', 'FORMATO', 'Tres fases, un campeón', 'Draft en directo → todos contra todos → playoffs de doble eliminación.', 'OFICIAL'],
+    ['03', 'CAPITANES', 'Los cuatro de mayor nivel', format.public.captains, 'POR ANUNCIAR'],
+    ['04', 'DRAFT', 'Cuatro rondas en directo', format.public.draft, `${format.draftPicks} ELECCIONES`],
+    ['05', 'FASE INICIAL', 'Todos contra todos', format.public.regularSeason, 'NADIE ELIMINADO'],
+    ['06', 'CALENDARIO', 'Tres jornadas', 'Cada jornada tendrá dos cruces. Cada equipo jugará una vez contra cada uno de sus tres rivales.', `${format.regularSeason.series} SERIES`],
+    ['07', 'CLASIFICACIÓN', 'Del 1º al 4º', format.public.standings, 'TODOS CLASIFICAN'],
+    ['08', 'DESEMPATES', 'Criterios deportivos', format.public.tiebreakers, 'ADMIN SI ES NECESARIO'],
+    ['09', 'PLAYOFFS', '1º–4º · 2º–3º', format.public.playoffs, 'BO3'],
+    ['10', 'DOBLE ELIMINACIÓN', 'Dos vidas', 'La primera derrota manda al cuadro inferior. La segunda derrota elimina del torneo.', '2 DERROTAS ELIMINAN'],
+    ['11', 'GRAN FINAL', 'Reset si hace falta', format.public.grandFinalReset, 'RESET ACTIVO'],
+    ['12', 'PARTIDAS', 'Salas personalizadas', format.public.matches, 'VALORANT'],
+    ['13', 'BO1 · BO3 · BO5', 'Formatos de serie', format.public.formats, 'GF BO3 POR DEFECTO'],
+    ['14', 'MAPAS Y VETO', 'Antes de cada serie', format.public.veto, 'POR ANUNCIAR'],
+    ['15', 'RESULTADOS', 'Registro oficial', format.public.results, 'REVISIÓN ORGANIZACIÓN'],
+    ['16', 'ESTADÍSTICAS', 'Rendimiento confirmado', format.public.stats, 'TRAS LOS PARTIDOS'],
+    ['17', 'INSCRIPCIONES', '20 plazas exactas', format.public.registration, event.registration.label.toUpperCase()],
+    ['18', 'INFORMACIÓN PENDIENTE', 'Sin datos inventados', 'Fecha, horarios y configuración práctica se publicarán cuando la organización los confirme.', 'POR ANUNCIAR']
+  ];
+  byId('valorant-format-sections').replaceChildren(...cards.map(([number, eyebrow, title, copy, status]) => {
+    const article = document.createElement('article');
+    const top = document.createElement('div');
+    const index = document.createElement('span'); index.textContent = number;
+    const label = document.createElement('small'); label.textContent = eyebrow;
+    top.append(index, label);
+    const heading = document.createElement('h3'); heading.textContent = title;
+    const paragraph = document.createElement('p'); paragraph.textContent = copy;
+    const badge = document.createElement('strong'); badge.textContent = status;
+    article.append(top, heading, paragraph, badge);
+    return article;
+  }));
+
+  byId('valorant-journey-steps').replaceChildren(...format.participantJourney.map((copy, index) => {
+    const item = document.createElement('li');
+    const number = document.createElement('span'); number.textContent = String(index + 1).padStart(2, '0');
+    const paragraph = document.createElement('p'); paragraph.textContent = copy;
+    item.append(number, paragraph); return item;
+  }));
+  byId('valorant-pending-list').replaceChildren(...format.pending.map((copy) => {
+    const item = document.createElement('li'); item.textContent = copy; return item;
+  }));
+  const competitionRoot = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
+  byId('valorant-competition-cta').href = competitionRoot;
+  byId('valorant-draft-cta').href = `${competitionRoot}/draft`;
+}
+
 function renderEvent(event) {
   document.documentElement.style.setProperty('--event-accent', event.accentColor);
   document.title = `${event.name} · Mini Eventos Jartiland`;
@@ -67,6 +135,7 @@ function renderEvent(event) {
   byId('hero-registration-state').textContent = event.registration.label.toUpperCase();
   byId('register-cta').hidden = !event.modules.registration || !event.registration.available;
   configureModules(event);
+  renderOfficialValorant(event.officialFormat, event);
   byId('event-main').hidden = false;
 }
 

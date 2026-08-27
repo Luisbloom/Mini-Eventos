@@ -21,6 +21,7 @@ const { createDraftStream } = require('./services/draft-stream');
 const { CompetitionError: ValorantCompetitionError } = require('./valorant-competition');
 const { CaptureError } = require('./valorant-captures');
 const { PlayoffError } = require('./valorant-playoffs');
+const { officialValorantFormatForSlug } = require('./valorant-event-format');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
 } = require('./services/captures/storage');
@@ -240,7 +241,10 @@ function createApp({
       const registrationFields = event.modules.registration
         ? database.listRegistrationFields(event.id, { publicOnly: true })
         : [];
-      response.set('Cache-Control', 'no-store').json({ event, registrationFields });
+      response.set('Cache-Control', 'no-store').json({
+        event: { ...event, officialFormat: officialValorantFormatForSlug(event.slug) },
+        registrationFields
+      });
     } catch (error) { next(error); }
   });
 
@@ -907,6 +911,7 @@ function createApp({
       if (!event) return;
       const teams = database.valorant.listTeams(event.id);
       response.json({
+        format: officialValorantFormatForSlug(event.slug),
         ...database.valorantCompetition.publicCompetitionState(event.id, teams),
         playoffs: database.valorantPlayoffs.publicState(event.id, teams)
       });
@@ -916,8 +921,11 @@ function createApp({
   app.get('/api/admin/events/:id/competition', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
+      const event = database.getEventById(id);
       response.json({
+        format: officialValorantFormatForSlug(event?.slug),
         maps: database.valorantCompetition.listMaps(id),
+        veto: database.valorantCompetition.getVetoConfiguration(id),
         settings: database.valorantCompetition.getSettings(id),
         matchdays: database.valorantCompetition.matchdays(id),
         teams: database.valorant.listTeams(id),
@@ -932,6 +940,15 @@ function createApp({
       const maps = database.valorantCompetition.setMapPool(id, request.body?.enabled);
       draftStream.publish(id, 'competition_updated');
       response.json({ maps });
+    } catch (error) { next(error); }
+  });
+
+  app.put('/api/admin/events/:id/competition/veto', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const veto = database.valorantCompetition.setVetoRules(id, request.body?.vetoRules);
+      draftStream.publish(id, 'competition_updated');
+      response.json({ veto });
     } catch (error) { next(error); }
   });
 
@@ -1474,7 +1491,9 @@ function createApp({
   app.get('/api/admin/events/:id/draft', (request, response, next) => {
     const id = parseId(request.params.id);
     try {
+      const event = database.getEventById(id);
       response.json({
+        format: officialValorantFormatForSlug(event?.slug),
         draft: database.valorant.getDraft(id) ?? null,
         teams: database.valorant.listTeams(id),
         available: database.valorant.listAvailableParticipants(id)
