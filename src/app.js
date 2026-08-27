@@ -784,6 +784,21 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  app.get('/api/me/profile', (request, response, next) => {
+    try {
+      const session = currentSession(request);
+      response.set('Cache-Control', 'no-store');
+      if (!session) return response.json({ authenticated: false });
+      response.json({
+        authenticated: true,
+        displayName: session.account.displayName || session.account.username,
+        // El perfil mantiene la misma política de privacidad que /api/me.
+        avatar: null,
+        registrations: database.valorant.profileRegistrations(session.account.id)
+      });
+    } catch (error) { next(error); }
+  });
+
   /**
    * Inscripción de Valorant. El cuerpo sólo trae lo que escribe la persona: la
    * cuenta sale de la cookie, así que nadie puede adjudicarse una inscripción
@@ -1584,6 +1599,7 @@ function createApp({
 
   app.get('/informacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/informacion`));
   app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}#clasificacion`));
+  app.get('/perfil', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'profile.html')));
   const sendDraftPage = (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'draft.html'));
   const sendCompetitionPage = (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'competition-page.html'));
   app.get('/eventos/:slug/draft', sendDraftPage);

@@ -1024,6 +1024,99 @@ describe('draft de Valorant', () => {
     });
   });
 
+  describe('perfil global', () => {
+    it('sin sesión no expone ninguna cuenta ni inscripción', async () => {
+      const { app } = montar();
+      const response = await request(app).get('/api/me/profile').expect(200);
+      assert.deepEqual(response.body, { authenticated: false });
+      assert.match(response.headers['cache-control'], /no-store/);
+    });
+
+    it('reúne sólo las inscripciones vinculadas a la cuenta conectada', async () => {
+      const { app, database, event } = montar({
+        discord: fakeDiscord({
+          discordUserId: 'perfil-9001', username: 'luis', displayName: 'Luis', avatar: 'privado'
+        })
+      });
+      const { sesion } = await login(app);
+      await request(app).post('/api/events/torneo-valorant/valorant/registrations')
+        .set('Cookie', sesion).send({
+          riotId: 'Luisbloom#NANO', peakRank: 'Ascendente 2', playerBio: 'Main controlador.'
+        }).expect(201);
+
+      // El jugador entra como capitán en un draft preparado. Los otros 19 no
+      // pertenecen a esta cuenta y no deben aparecer en su perfil.
+      const account = database.valorant.getDiscordAccountByUserId('perfil-9001');
+      const mine = database.valorant.findParticipantByDiscord(event.id, account.id);
+      database.updateParticipant(mine.id, { status: 'confirmed' });
+      const others = inscribir(database, event, 19);
+      database.valorant.configureDraft(event.id, {
+        captains: [mine.id, ...others.slice(0, 3).map((participant) => participant.id)],
+        teamCount: 4,
+        teamSize: 5
+      });
+
+      // Una segunda cuenta real queda vinculada a otro jugador: tampoco puede
+      // aparecer en el perfil de Luis.
+      const otherAccount = database.valorant.upsertDiscordAccount({
+        discordUserId: 'perfil-otra-cuenta', username: 'otra', displayName: 'Otra cuenta', avatar: null
+      });
+      database.valorant.linkParticipantToDiscord(others[0].id, otherAccount.id);
+
+      // El perfil es global: también reúne una inscripción no-Valorant cuando
+      // está vinculada de forma explícita a la misma identidad de Discord.
+      const among = database.getDefaultEvent();
+      database.updateEvent(among.id, { ...among, status: 'Inscripciones abiertas', registrationsOpen: true });
+      const amongRegistration = database.createParticipant(among.id, {
+        discord_username: 'luis', game_name: 'Luis AU', friend_code: 'luis#1234'
+      });
+      database.valorant.linkParticipantToDiscord(amongRegistration.id, account.id);
+
+      const response = await request(app).get('/api/me/profile').set('Cookie', sesion).expect(200);
+      assert.equal(response.body.authenticated, true);
+      assert.equal(response.body.displayName, 'Luis');
+      assert.equal(response.body.avatar, null);
+      assert.equal(response.body.registrations.length, 2);
+      assert.deepEqual(response.body.registrations[0], {
+        slug: 'torneo-valorant',
+        eventName: 'Torneo Valorant',
+        game: 'Valorant',
+        eventStatus: 'Inscripciones abiertas',
+        coverImage: '/images/events/x.png',
+        accentColor: '#ff4655',
+        archived: false,
+        registrationStatus: 'confirmed',
+        riotId: 'Luisbloom#NANO',
+        peakRank: 'Ascendente 2',
+        playerBio: 'Main controlador.',
+        role: 'captain',
+        team: { name: 'Equipo de Luis', role: 'captain' }
+      });
+      assert.deepEqual(response.body.registrations[1], {
+        slug: among.slug,
+        eventName: among.name,
+        game: 'Among Us',
+        eventStatus: 'Inscripciones abiertas',
+        coverImage: among.coverImage,
+        accentColor: among.accentColor,
+        archived: false,
+        registrationStatus: 'pending',
+        riotId: null,
+        peakRank: null,
+        playerBio: '',
+        role: null,
+        team: null
+      });
+      const serialized = JSON.stringify(response.body);
+      assert.equal(serialized.includes('Jugador 01'), false);
+      assert.equal(serialized.includes('Otra cuenta'), false);
+      for (const privateKey of ['discordUserId', 'discordAccountId', 'participantId', 'sessionId', 'riot_puuid']) {
+        assert.equal(serialized.includes(privateKey), false, privateKey);
+      }
+      assert.match(response.headers['cache-control'], /no-store/);
+    });
+  });
+
   // =============== AISLAMIENTO, PRIVACIDAD Y DUPLICADOS ===============
 
   describe('el módulo de draft aísla los eventos', () => {

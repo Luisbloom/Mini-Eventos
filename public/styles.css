@@ -69,6 +69,12 @@ button { font: inherit; }
 .primary-nav a:hover, .primary-nav a.active { color: var(--paper); }
 .primary-nav a:hover::after, .primary-nav a.active::after { transform: scaleX(1); transform-origin: left; }
 .primary-nav a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+.profile-entry {
+  color: var(--paper); text-decoration: none; text-transform: uppercase;
+  font: .56rem/1 var(--mono); letter-spacing: .12em; transition: color .18s ease;
+}
+.profile-entry:hover { color: var(--lime); }
+.profile-entry:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
 
 .mini-crew,
 .crew {

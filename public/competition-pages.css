@@ -36,12 +36,14 @@ p { text-wrap: pretty; }
   background: rgba(8, 11, 13, .86); backdrop-filter: blur(16px);
 }
 .competition-topbar .broadcast { justify-self: end; }
+.competition-topbar-links { display: flex; align-items: center; justify-content: center; gap: clamp(1rem, 2.5vw, 2.5rem); }
 .competition-back {
   color: var(--muted); text-decoration: none; text-transform: uppercase;
   font: .56rem/1 var(--mono); letter-spacing: .12em;
 }
 .competition-back:hover { color: var(--paper); }
 .competition-back span { color: var(--phase-accent); }
+.competition-topbar .profile-entry:hover { color: var(--phase-accent); }
 
 .competition-nav {
   position: sticky; top: 0; z-index: 9; display: flex; justify-content: center;
@@ -360,7 +362,10 @@ p { text-wrap: pretty; }
 @media (max-width: 420px) {
   .brand-copy strong { font-size: .8rem; }
   .brand-copy small { font-size: .43rem; }
-  .competition-topbar { padding-inline: 1rem; }
+  .competition-topbar { padding-inline: 1rem; grid-template-columns: minmax(0, 1fr) auto; }
+  .competition-topbar .broadcast { display: none; }
+  .competition-topbar-links { gap: .65rem; }
+  .competition-topbar .profile-entry { font-size: .46rem; letter-spacing: .08em; }
   .competition-topbar .competition-back { max-width: 5rem; font-size: .46rem; letter-spacing: .08em; }
   .competition-topbar .competition-back span { display: none; }
   .competition-main { padding-inline: 1rem; }

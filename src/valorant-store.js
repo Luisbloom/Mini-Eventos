@@ -546,6 +546,45 @@ function createValorantStore(connection) {
       };
     },
 
+    /**
+     * Historial privado de la cuenta conectada. La relación se hace únicamente
+     * por discord_account_id: nunca se atribuye una inscripción por parecerse
+     * el nombre, y no sale ningún identificador interno.
+     */
+    profileRegistrations(discordAccountId) {
+      return connection.prepare(`
+        SELECT e.slug, e.name event_name, e.game, e.status event_status,
+               e.cover_image, e.accent_color, e.archived,
+               p.status registration_status, p.riot_game_name, p.riot_tag_line,
+               p.field_values_json, tm.role team_role, t.name team_name
+        FROM event_participants p
+        JOIN events e ON e.id=p.event_id
+        LEFT JOIN team_members tm ON tm.event_id=e.id AND tm.participant_id=p.id
+        LEFT JOIN teams t ON t.id=tm.team_id
+        WHERE p.discord_account_id=?
+        ORDER BY e.archived, COALESCE(e.starts_at,e.created_at) DESC, e.id DESC
+      `).all(discordAccountId).map((row) => {
+        const values = JSON.parse(row.field_values_json);
+        return {
+          slug: row.slug,
+          eventName: row.event_name,
+          game: row.game,
+          eventStatus: row.event_status,
+          coverImage: row.cover_image,
+          accentColor: row.accent_color,
+          archived: Boolean(row.archived),
+          registrationStatus: row.registration_status,
+          riotId: row.riot_game_name && row.riot_tag_line
+            ? `${row.riot_game_name}#${row.riot_tag_line}`
+            : null,
+          peakRank: values.peak_rank || null,
+          playerBio: values.player_bio || '',
+          role: row.team_role === 'captain' ? 'captain' : (row.team_role ? 'participant' : null),
+          team: row.team_name ? { name: row.team_name, role: row.team_role } : null
+        };
+      });
+    },
+
     /** Qué papel tiene en el draft: para que la interfaz sepa qué enseñar. */
     draftRole(eventId, participantId) {
       if (!participantId) return 'none';

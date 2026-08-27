@@ -17,18 +17,23 @@ function navigationLinks(html, label) {
 }
 
 describe('navegacion publica simplificada', () => {
-  it('no repite en la portada enlaces que ya existen en el contenido', () => {
-    assert.doesNotMatch(publicFile('index.html'), /class="primary-nav"/);
+  it('en la portada sólo añade la utilidad global de perfil', () => {
+    const portal = publicFile('index.html');
+    assert.equal(navigationLinks(portal, 'Navegación principal'), 1);
+    assert.match(portal, /class="profile-entry" href="\/perfil"/);
   });
 
-  it('deja un unico regreso en las paginas interiores', () => {
+  it('deja un único regreso y el perfil en las páginas interiores', () => {
     const event = publicFile('event.html');
     const information = publicFile('informacion.html');
     const draft = publicFile('draft.html');
 
-    assert.equal(navigationLinks(event, 'Navegación principal'), 1);
-    assert.equal(navigationLinks(information, 'Navegación principal'), 1);
+    assert.equal(navigationLinks(event, 'Navegación principal'), 2);
+    assert.equal(navigationLinks(information, 'Navegación principal'), 2);
+    assert.equal((event.match(/href="\/perfil"/g) || []).length, 1);
+    assert.equal((information.match(/href="\/perfil"/g) || []).length, 1);
     assert.match(draft, /class="competition-topbar"/);
+    assert.equal((draft.match(/href="\/perfil"/g) || []).length, 1);
     assert.doesNotMatch(draft, /id="back-to-competition"/);
   });
 
