@@ -36,6 +36,7 @@ function renderMinimum(event) {
 
 function configureModules(event) {
   byId('information-link').href = `/eventos/${encodeURIComponent(event.slug)}/informacion`;
+  byId('information-link').hidden = !event.modules.information;
   byId('competition-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
   byId('competition-link').hidden = !event.modules.competition;
   byId('premios').hidden = !event.modules.prizes;

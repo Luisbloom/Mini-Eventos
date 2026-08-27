@@ -44,10 +44,8 @@
     return [
       { name: 'hub', label: 'Resumen', href: root },
       { name: 'draft', label: 'Draft', href: `${root}/draft` },
-      { name: 'regular', label: 'Fase regular', href: `${root}/fase-regular`, matches: ['standings', 'matchdays', 'matchday'] },
-      { name: 'playoffs', label: 'Playoffs', href: `${root}/playoffs` },
-      { name: 'stats', label: 'Estadísticas', href: `${root}/estadisticas` },
-      { name: 'results', label: 'Resultados', href: `${root}/resultados`, matches: ['match'] }
+      { name: 'regular', label: 'Fase regular', href: `${root}/fase-regular`, matches: ['standings', 'matchdays', 'matchday', 'stats'] },
+      { name: 'playoffs', label: 'Playoffs', href: `${root}/playoffs`, matches: ['results', 'match'] }
     ];
   }
 

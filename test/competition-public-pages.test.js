@@ -68,6 +68,12 @@ describe('páginas públicas de la competición', () => {
     });
   });
 
+  it('expone únicamente las tres fases en la navegación principal', () => {
+    assert.deepEqual(View.navItems('copa-roja').map((item) => item.label), [
+      'Resumen', 'Draft', 'Fase regular', 'Playoffs'
+    ]);
+  });
+
   it('crea un estado público vacío para un torneo anunciado sin filtrar datos', () => {
     const preview = View.previewCompetitionState();
     assert.equal(preview.preview, true);
