@@ -35,86 +35,11 @@ function renderMinimum(event) {
 }
 
 function configureModules(event) {
-  for (const [module, enabled] of Object.entries(event.modules)) {
-    const visible=module==='leaderboard'&&event.modules.competition?false:enabled;
-    document.querySelectorAll(`[data-module="${module}"], [data-module-link="${module}"]`).forEach((element) => { element.hidden = !visible; });
-  }
   byId('information-link').href = `/eventos/${encodeURIComponent(event.slug)}/informacion`;
-  // El draft y la fase regular son páginas propias, no anclas de esta.
-  byId('draft-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion/draft`;
-  byId('league-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
-  const labels = { draft: 'Draft', information: 'Información', participants: 'Participantes', leaderboard: 'Clasificación', matches: 'Resultados', registration: 'Inscripción', competition: 'Fases', schedule: 'Agenda', prizes: 'Premios' };
-  byId('module-list').replaceChildren(...Object.entries(event.modules).filter(([key,enabled]) => enabled&&!(key==='leaderboard'&&event.modules.competition)).map(([key]) => {
-    const span = document.createElement('span'); span.textContent = labels[key]; return span;
-  }));
-}
-
-function renderOfficialValorant(format, event) {
-  const root = byId('valorant-official');
-  root.hidden = !format;
-  document.body.classList.toggle('official-valorant-event', Boolean(format));
-  if (!format) return;
-
-  byId('valorant-official-summary').textContent = format.public.summary;
-  const kpis = [
-    ['JUGADORES', format.players],
-    ['EQUIPOS', format.teams],
-    ['CAPITANES', format.captains],
-    ['POR EQUIPO', format.teamSize],
-    ['SERIES GARANTIZADAS', `${format.guaranteedSeriesPerTeam}+`]
-  ];
-  byId('valorant-format-kpis').replaceChildren(...kpis.map(([label, value]) => {
-    const wrapper = document.createElement('div');
-    const term = document.createElement('dt'); term.textContent = label;
-    const detail = document.createElement('dd'); detail.textContent = String(value);
-    wrapper.append(term, detail); return wrapper;
-  }));
-
-  const cards = [
-    ['01', 'RESUMEN', 'Cómo funcionará', format.public.summary, 'CONFIRMADO'],
-    ['02', 'FORMATO', 'Tres fases, un campeón', 'Draft en directo → todos contra todos → playoffs de doble eliminación.', 'OFICIAL'],
-    ['03', 'CAPITANES', 'Los cuatro de mayor nivel', format.public.captains, 'POR ANUNCIAR'],
-    ['04', 'DRAFT', 'Cuatro rondas en directo', format.public.draft, `${format.draftPicks} ELECCIONES`],
-    ['05', 'FASE INICIAL', 'Todos contra todos', format.public.regularSeason, 'NADIE ELIMINADO'],
-    ['06', 'CALENDARIO', 'Tres jornadas', 'Cada jornada tendrá dos cruces. Cada equipo jugará una vez contra cada uno de sus tres rivales.', `${format.regularSeason.series} SERIES`],
-    ['07', 'CLASIFICACIÓN', 'Del 1º al 4º', format.public.standings, 'TODOS CLASIFICAN'],
-    ['08', 'DESEMPATES', 'Criterios deportivos', format.public.tiebreakers, 'ADMIN SI ES NECESARIO'],
-    ['09', 'PLAYOFFS', '1º–4º · 2º–3º', format.public.playoffs, 'BO3'],
-    ['10', 'DOBLE ELIMINACIÓN', 'Dos vidas', 'La primera derrota manda al cuadro inferior. La segunda derrota elimina del torneo.', '2 DERROTAS ELIMINAN'],
-    ['11', 'GRAN FINAL', 'Reset si hace falta', format.public.grandFinalReset, 'RESET ACTIVO'],
-    ['12', 'PARTIDAS', 'Salas personalizadas', format.public.matches, 'VALORANT'],
-    ['13', 'BO1 · BO3 · BO5', 'Formatos de serie', format.public.formats, 'GF BO3 POR DEFECTO'],
-    ['14', 'MAPAS Y VETO', 'Antes de cada serie', format.public.veto, 'POR ANUNCIAR'],
-    ['15', 'RESULTADOS', 'Registro oficial', format.public.results, 'REVISIÓN ORGANIZACIÓN'],
-    ['16', 'ESTADÍSTICAS', 'Rendimiento confirmado', format.public.stats, 'TRAS LOS PARTIDOS'],
-    ['17', 'INSCRIPCIONES', '20 plazas exactas', format.public.registration, event.registration.label.toUpperCase()],
-    ['18', 'INFORMACIÓN PENDIENTE', 'Sin datos inventados', 'Fecha, horarios y configuración práctica se publicarán cuando la organización los confirme.', 'POR ANUNCIAR']
-  ];
-  byId('valorant-format-sections').replaceChildren(...cards.map(([number, eyebrow, title, copy, status]) => {
-    const article = document.createElement('article');
-    const top = document.createElement('div');
-    const index = document.createElement('span'); index.textContent = number;
-    const label = document.createElement('small'); label.textContent = eyebrow;
-    top.append(index, label);
-    const heading = document.createElement('h3'); heading.textContent = title;
-    const paragraph = document.createElement('p'); paragraph.textContent = copy;
-    const badge = document.createElement('strong'); badge.textContent = status;
-    article.append(top, heading, paragraph, badge);
-    return article;
-  }));
-
-  byId('valorant-journey-steps').replaceChildren(...format.participantJourney.map((copy, index) => {
-    const item = document.createElement('li');
-    const number = document.createElement('span'); number.textContent = String(index + 1).padStart(2, '0');
-    const paragraph = document.createElement('p'); paragraph.textContent = copy;
-    item.append(number, paragraph); return item;
-  }));
-  byId('valorant-pending-list').replaceChildren(...format.pending.map((copy) => {
-    const item = document.createElement('li'); item.textContent = copy; return item;
-  }));
-  const competitionRoot = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
-  byId('valorant-competition-cta').href = competitionRoot;
-  byId('valorant-draft-cta').href = `${competitionRoot}/draft`;
+  byId('competition-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
+  byId('competition-link').hidden = !event.modules.competition;
+  byId('premios').hidden = !event.modules.prizes;
+  byId('inscripcion').hidden = !event.modules.registration;
 }
 
 function renderEvent(event) {
@@ -123,7 +48,6 @@ function renderEvent(event) {
   byId('event-game').textContent = event.game.toUpperCase();
   byId('event-name').textContent = event.name;
   byId('event-description').textContent = event.description;
-  byId('overview-description').textContent = event.description || 'Toda la información de este evento de la comunidad.';
   byId('event-status').textContent = event.status;
   byId('event-date').textContent = formatDate(event.startsAt);
   byId('event-participant-count').textContent = event.maxParticipants ? `${event.participantCount} / ${event.maxParticipants}` : event.participantCount;
@@ -135,7 +59,6 @@ function renderEvent(event) {
   byId('hero-registration-state').textContent = event.registration.label.toUpperCase();
   byId('register-cta').hidden = !event.modules.registration || !event.registration.available;
   configureModules(event);
-  renderOfficialValorant(event.officialFormat, event);
   byId('event-main').hidden = false;
 }
 
@@ -198,87 +121,6 @@ async function submitRegistration(event) {
   } catch (error) { feedback.textContent = error.message; feedback.className = 'error'; byId('registration-submit').disabled = false; }
 }
 
-async function loadParticipants(event) {
-  if (!event.modules.participants) return;
-  try {
-    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/participants`, { cache: 'no-store' });
-    if (!response.ok) throw new Error();
-    const { participants } = await response.json();
-    byId('participants-loading').hidden = true;
-    byId('public-participant-count').textContent = `${String(participants.length).padStart(2, '0')} CONFIRMADOS`;
-    if (!participants.length) return void (byId('participants-empty').hidden = false);
-    byId('participant-list').replaceChildren(...participants.map((participant, index) => {
-      const item = document.createElement('li'); const number = document.createElement('span'); number.textContent = String(index + 1).padStart(2, '0'); const name = document.createElement('strong'); name.textContent = participant.displayName; const state = document.createElement('small'); state.textContent = 'CONFIRMADO'; item.append(number, name, state); return item;
-    }));
-    byId('participant-list').hidden = false;
-  } catch { byId('participants-loading').textContent = 'No se han podido cargar los participantes.'; }
-}
-
-function renderPodium(rows) {
-  return rows.slice(0, 3).map((player) => {
-    const item = document.createElement('li'); item.className = `podium-card place-${player.rank}`; item.dataset.rank = String(player.rank).padStart(2, '0');
-    const position = document.createElement('span'); position.className = 'podium-position'; position.textContent = `PUESTO ${String(player.rank).padStart(2, '0')}`;
-    const data = document.createElement('div'); data.className = 'podium-player'; const name = document.createElement('strong'); name.className = 'podium-name'; name.textContent = player.name;
-    const score = document.createElement('div'); score.className = 'podium-score'; const points = document.createElement('strong'); points.textContent = player.points; const unit = document.createElement('span'); unit.textContent = 'PTS'; score.append(points, unit); data.append(name, score); item.append(position, data); return item;
-  });
-}
-
-function renderRows(rows) {
-  return rows.map((player, index) => {
-    const row = document.createElement('tr'); row.style.animationDelay = `${index * 35}ms`;
-    const rank = document.createElement('td'); rank.className = 'rank-cell'; rank.textContent = String(player.rank).padStart(2, '0');
-    const playerCell = document.createElement('td'); const name = document.createElement('strong'); name.className = 'player-name'; name.textContent = player.name; playerCell.append(name);
-    const metrics = [player.points, player.wins, player.games, `${player.winRate}%`, player.kills].map((value, metricIndex) => { const cell = document.createElement('td'); cell.className = `numeric-cell ${metricIndex === 0 ? 'points-cell' : 'optional'}`; cell.textContent = value; return cell; });
-    row.append(rank, playerCell, ...metrics); return row;
-  });
-}
-
-async function loadLeaderboard(event) {
-  if (!event.modules.leaderboard||event.modules.competition) return;
-  const refresh = byId('refresh-leaderboard'); refresh.classList.add('loading');
-  try {
-    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/leaderboard`, { cache: 'no-store' }); if (!response.ok) throw new Error();
-    const data = await response.json(); byId('leaderboard-loading').hidden = true;
-    if (!data.standings.length) { byId('leaderboard-empty').hidden = false; byId('leaderboard-content').hidden = true; return; }
-    byId('leaderboard-empty').hidden = true; byId('event-podium').replaceChildren(...renderPodium(data.standings)); byId('event-standings').replaceChildren(...renderRows(data.standings)); byId('leaderboard-content').hidden = false;
-  } catch { byId('leaderboard-loading').textContent = 'No se ha podido cargar la clasificación.'; }
-  finally { refresh.classList.remove('loading'); }
-}
-
-async function loadMatches(event) {
-  if (!event.modules.matches) return;
-  try {
-    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/matches?limit=20`, { cache: 'no-store' }); if (!response.ok) throw new Error();
-    const data = await response.json(); byId('matches-loading').hidden = true; byId('match-total').textContent = `${String(data.count).padStart(2, '0')} REGISTRADAS`;
-    if (!data.matches.length) return void (byId('matches-empty').hidden = false);
-    byId('match-list').replaceChildren(...data.matches.map((match) => {
-      const card = document.createElement('article'); const index = document.createElement('span'); index.textContent = `#${String(match.id).padStart(3, '0')}`;
-      const result = match.result || {};
-      const body = document.createElement('div'); const title = document.createElement('strong'); title.textContent = result.map || result.gameMode || `Partida ${match.id}`; const meta = document.createElement('p'); const winner = result.winner ? ` · Victoria: ${result.winner}` : ''; meta.textContent = `${formatDate(match.receivedAt)}${winner}`; body.append(title, meta);
-      const players = document.createElement('b'); players.textContent = `${result.playerCount ?? '—'} JUG.`; card.append(index, body, players); return card;
-    })); byId('match-list').hidden = false;
-  } catch { byId('matches-loading').textContent = 'No se han podido cargar los resultados.'; }
-}
-
-function competitionTable(stage, board) {
-  if (!board.standings.length) { const empty=document.createElement('div');empty.className='state-panel empty compact';empty.innerHTML='<div><h3>Clasificación pendiente</h3><p>Aparecerá al asignar jugadores y recibir resultados.</p></div>';return empty; }
-  const table=document.createElement('table');table.className='competition-table';table.innerHTML='<thead><tr><th>POS</th><th>JUGADOR</th><th>PTS</th><th>VIC.</th><th>IMP.</th><th>TAREAS</th><th>KILLS</th><th>ESTADO</th></tr></thead>';
-  const body=document.createElement('tbody'); const qualifiers=stage.type==='group_stage'?stage.qualifiersPerGroup:(stage.type==='final'?1:0);
-  board.standings.forEach((player,index)=>{const row=document.createElement('tr');if(qualifiers&&index===qualifiers-1)row.classList.add('cut');const status=board.cutoffTie&&board.decisiveTieParticipantIds.includes(player.participantId)?'DESEMPATE NECESARIO':(qualifiers&&index<qualifiers?(stage.status==='completed'?(stage.type==='final'?'CAMPEÓN':'CLASIFICADO'):'ZONA DE CLASIFICACIÓN'):'');row.innerHTML=`<td>${String(player.rank).padStart(2,'0')}</td><td class="player"></td><td class="points">${player.points}</td><td class="optional">${player.wins}</td><td class="optional">${player.impostorWins}</td><td class="optional">${player.allTasksGames}</td><td class="optional">${player.kills}</td><td class="status ${status.includes('DESEMPATE')?'tie':'zone'}"></td>`;row.querySelector('.player').textContent=player.name;row.querySelector('.status').textContent=status;body.append(row);});table.append(body);return table;
-}
-
-function renderStageBoard(stage) {
-  const tabs=byId('group-tabs'); const target=byId('stage-leaderboard'); tabs.replaceChildren();
-  const scopes=stage.type==='group_stage'?stage.groups:[{id:null,name:stage.name,leaderboard:stage.leaderboard}];
-  scopes.forEach((scope,index)=>{const button=document.createElement('button');button.type='button';button.role='tab';button.textContent=scope.name.toUpperCase();const show=()=>{tabs.querySelectorAll('button').forEach((item)=>item.classList.remove('active'));button.classList.add('active');target.replaceChildren(competitionTable(stage,scope.leaderboard));};button.addEventListener('click',show);tabs.append(button);if(index===0)show();});
-}
-
-async function loadCompetition(event) {
-  if(!event.modules.competition)return;
-  try{const response=await fetch(`/api/events/${encodeURIComponent(event.slug)}/competition`,{cache:'no-store'});if(!response.ok)throw new Error();const data=await response.json();byId('stage-progress').replaceChildren(...data.stages.map((stage)=>{const item=document.createElement('li');item.className=stage.status;item.innerHTML=`<span>FASE ${String(stage.position).padStart(2,'0')}</span><strong></strong><b>${stage.status==='completed'?'✓ COMPLETADA':stage.status==='active'?'● EN CURSO':'○ PENDIENTE'}</b>`;item.querySelector('strong').textContent=stage.name;item.addEventListener('click',()=>renderStageBoard(stage));return item;}));const active=data.stages.find((stage)=>stage.status==='active')||data.stages.find((stage)=>stage.status!=='completed')||data.stages.at(-1);if(active)renderStageBoard(active);byId('competition-state').textContent=active?active.name.toUpperCase():'SIN FASES';const finalStage=data.stages.find((stage)=>stage.type==='final');if(finalStage?.participants?.length){const panel=byId('finalists-panel');panel.hidden=false;byId('finalists-list').replaceChildren(...finalStage.participants.map((participant)=>{const name=document.createElement('b');name.textContent=participant.displayName;return name;}));}if(data.champion){const banner=byId('champion-banner');banner.hidden=false;banner.innerHTML='<span>🏆 CAMPEÓN</span>';banner.append(document.createTextNode(data.champion.displayName));}}catch{byId('competition-state').textContent='NO DISPONIBLE';}
-}
-
-async function loadSchedule(event){if(!event.modules.schedule)return;try{const response=await fetch(`/api/events/${encodeURIComponent(event.slug)}/schedule`,{cache:'no-store'});const data=await response.json();byId('event-schedule').replaceChildren(...data.schedule.map((entry)=>{const item=document.createElement('li');const time=document.createElement('time');time.textContent=entry.time;const title=document.createElement('strong');title.textContent=entry.title;const description=document.createElement('p');description.textContent=entry.description;item.append(time,title,description);return item;}));}catch{byId('event-schedule').innerHTML='<li>No se ha podido cargar la agenda.</li>';}}
 async function loadPrizes(event){if(!event.modules.prizes)return;try{const response=await fetch(`/api/events/${encodeURIComponent(event.slug)}/prizes`,{cache:'no-store'});const data=await response.json();byId('event-prizes').replaceChildren(...data.prizes.map((prize,index)=>{const card=document.createElement('article');card.innerHTML=`<span>PREMIO ${String(index+1).padStart(2,'0')}</span><h3></h3><p></p><b></b>`;card.querySelector('h3').textContent=prize.title;card.querySelector('p').textContent=prize.description;card.querySelector('b').textContent=prize.prizeValue||'';return card;}));}catch{byId('event-prizes').textContent='No se han podido cargar los premios.';}}
 
 async function loadEvent() {
@@ -288,15 +130,13 @@ async function loadEvent() {
     currentEvent = data.event; renderEvent(data.event); renderRegistration(data.event, data.registrationFields); setConnection(true, 'EVENTO ONLINE');
     const mode = window.DraftView.publicEventMode(data.event);
     if (mode.upcoming) setConnection(false, 'PRÓXIMAMENTE');
-    await Promise.all([loadCompetition(data.event),loadSchedule(data.event),loadParticipants(data.event),loadLeaderboard(data.event),loadMatches(data.event),loadPrizes(data.event)]);
+    await loadPrizes(data.event);
     const section = location.pathname.split('/').filter(Boolean)[2]; if (section) document.querySelector(`#${section}`)?.scrollIntoView();
   } catch { byId('event-error').hidden = false; setConnection(false, 'NO DISPONIBLE'); }
 }
 
 byId('registration-form').addEventListener('submit', (event) => { event.preventDefault(); submitRegistration(currentEvent); });
-byId('refresh-leaderboard').addEventListener('click', () => loadLeaderboard(currentEvent));
 loadEvent();
-setInterval(() => { if (currentEvent?.modules.leaderboard&&!currentEvent?.modules.competition) loadLeaderboard(currentEvent); }, 20000);
 
 /* ------------------------------------------------------------------ Discord
  * Inscripción de los torneos por equipos. Sustituye al formulario genérico

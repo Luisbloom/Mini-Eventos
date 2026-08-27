@@ -46,6 +46,19 @@
 .match-list p { margin: .55rem 0 0; color: var(--muted); font-size: .77rem; }
 .match-list b { color: var(--muted); font: .52rem/1 var(--mono); }
 .registration-section { display: grid; grid-template-columns: .72fr 1.28fr; gap: clamp(3rem, 8vw, 9rem); }
+.event-primary-links { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; padding: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+.event-primary-links a { min-height: 132px; padding: clamp(1.2rem,3vw,2.2rem); background: var(--surface); color: var(--paper); text-decoration: none; display: flex; flex-direction: column; justify-content: space-between; transition: background .2s ease; }
+.event-primary-links a:hover { background: color-mix(in srgb,var(--event-accent) 9%,var(--surface)); }
+.event-primary-links span { color: var(--event-accent); font: .55rem/1 var(--mono); letter-spacing: .12em; }
+.event-primary-links strong { display: flex; justify-content: space-between; gap: 1rem; font: clamp(1.35rem,2.6vw,2.6rem)/.95 var(--display); text-transform: uppercase; }
+.event-primary-links b { color: var(--event-accent); font-weight: inherit; }
+.prizes-featured { border-bottom: 1px solid var(--line); }
+.event-prizes { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 1px; padding: 1px; background: var(--line); }
+.event-prizes article { min-height: 250px; padding: clamp(1.3rem,2.5vw,2.2rem); background: var(--surface); display: flex; flex-direction: column; }
+.event-prizes span { color: var(--event-accent); font: .52rem/1 var(--mono); letter-spacing: .1em; }
+.event-prizes h3 { margin: 1.5rem 0 .7rem; font: clamp(2rem,3.5vw,3.8rem)/.9 var(--display); text-transform: uppercase; }
+.event-prizes p { max-width: 40ch; color: var(--muted); line-height: 1.55; }
+.event-prizes b { margin-top: auto; padding-top: 1.5rem; color: var(--paper); font: clamp(1.15rem,2vw,2rem)/1 var(--display); text-transform: uppercase; }
 .registration-heading > p:last-child { max-width: 480px; color: var(--muted); line-height: 1.6; }
 .registration-panel { border-top: 1px solid var(--line); }
 .registration-fields { display: grid; gap: 1.2rem; padding-top: 1.5rem; }
@@ -74,7 +87,7 @@
 .event-fatal a { margin: 1rem auto; padding: .9rem 1rem; color: var(--lime); border: 1px solid var(--lime); text-decoration: none; font: .57rem/1 var(--mono); }
 [hidden] { display: none !important; }
 @media (max-width: 900px) { .event-hero, .event-overview, .registration-section { grid-template-columns: 1fr; } .event-hero { min-height: 760px; } .event-hero::before { background: linear-gradient(0deg, rgba(8,11,13,.98) 8%, rgba(8,11,13,.73) 72%, rgba(8,11,13,.38)); } .event-facts { display: grid; grid-template-columns: repeat(4, 1fr); } .event-facts div { display: block; padding: 1rem; border-right: 1px solid var(--line); } .event-facts dd { margin-top: 1rem; text-align: left; } .participant-list, .match-list { grid-template-columns: 1fr; } }
-@media (max-width: 600px) { .event-hero { min-height: 790px; gap: 2rem; } .event-hero-cover { object-position: 62% center; } .event-quorum { grid-template-columns: 1fr; } .event-quorum > div:first-child { align-items: flex-start; flex-direction: column; } .event-quorum p { text-align: left; } .event-facts { grid-template-columns: 1fr 1fr; } .event-facts div:last-child { grid-column: auto; } .event-subnav { top: 0; } .participant-list li, .match-list article { grid-template-columns: 42px 1fr; } .participant-list small, .match-list b { grid-column: 2; } }
+@media (max-width: 600px) { .event-hero { min-height: 790px; gap: 2rem; } .event-hero-cover { object-position: 62% center; } .event-quorum { grid-template-columns: 1fr; } .event-quorum > div:first-child { align-items: flex-start; flex-direction: column; } .event-quorum p { text-align: left; } .event-facts { grid-template-columns: 1fr 1fr; } .event-facts div:last-child { grid-column: auto; } .event-primary-links { grid-template-columns: 1fr; } .event-primary-links a { min-height: 112px; } .event-prizes { grid-template-columns: 1fr; } .event-prizes article { min-height: 210px; } }
 
 /* --- Inscripción por Discord (torneos por equipos) --------------------- */
 .discord-registration { display: grid; gap: 1.4rem; }

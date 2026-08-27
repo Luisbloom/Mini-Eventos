@@ -12,7 +12,6 @@
     <link rel="apple-touch-icon" href="/images/logo.png">
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/event.css">
-    <link rel="stylesheet" href="/competition.css">
     <script src="/draft-view.js" defer></script>
     <script src="/event.js" defer></script>
   </head>
@@ -47,86 +46,13 @@
         <div class="event-monogram" aria-hidden="true" id="event-monogram">J</div>
       </section>
 
-      <section id="valorant-official" class="valorant-official content-section" aria-labelledby="valorant-official-title" hidden>
-        <header class="valorant-format-header">
-          <div><p class="section-index">FORMATO OFICIAL · 23.08.2026</p><h2 id="valorant-official-title">Cómo se conquista<br><span>el torneo</span></h2></div>
-          <p id="valorant-official-summary"></p>
-        </header>
-        <dl id="valorant-format-kpis" class="valorant-format-kpis"></dl>
-        <div class="valorant-route" aria-label="Fases del torneo">
-          <div><span>01</span><strong>DRAFT</strong><small>4 capitanes · 16 picks</small></div>
-          <i aria-hidden="true">→</i>
-          <div><span>02</span><strong>TODOS CONTRA TODOS</strong><small>6 series · BO1</small></div>
-          <i aria-hidden="true">→</i>
-          <div><span>03</span><strong>DOBLE ELIMINACIÓN</strong><small>Todos clasifican · BO3</small></div>
-        </div>
-        <div id="valorant-format-sections" class="valorant-format-sections"></div>
-        <section class="valorant-journey" aria-labelledby="valorant-journey-title">
-          <header><span>DEL REGISTRO A LA FINAL</span><h3 id="valorant-journey-title">Tu recorrido como participante</h3></header>
-          <ol id="valorant-journey-steps"></ol>
-        </section>
-        <aside class="valorant-pending">
-          <div><span>INFORMACIÓN PENDIENTE</span><h3>Por anunciar</h3><p>No se rellenará con suposiciones. La organización publicará estos detalles antes del torneo.</p></div>
-          <ul id="valorant-pending-list"></ul>
-        </aside>
-        <div class="valorant-official-actions">
-          <a id="valorant-competition-cta" class="primary-cta" href="#">VER COMPETICIÓN <span>→</span></a>
-          <a id="valorant-draft-cta" class="secondary-cta" href="#">SEGUIR EL DRAFT</a>
-        </div>
-      </section>
-
-      <nav id="event-nav" class="event-subnav" aria-label="Secciones del evento">
-        <a href="#resumen">Resumen</a><a data-module-link="competition" href="#fases">Fases</a>
-        <a data-module-link="draft" id="draft-link" href="#">Draft</a>
-        <a data-module-link="draft" id="league-link" href="#">Fase regular</a>
-        <a data-module-link="information" id="information-link" href="#">Información</a>
-        <a data-module-link="participants" href="#participantes">Participantes</a>
-        <a data-module-link="leaderboard" href="#clasificacion">Clasificación</a>
-        <a data-module-link="matches" href="#partidas">Partidas</a>
-        <a data-module-link="registration" href="#inscripcion">Inscripción</a>
+      <nav id="event-primary-links" class="event-primary-links" aria-label="Más sobre el evento">
+        <a id="information-link" href="#"><span>INFORMACIÓN</span><strong>Formato, reglas y horarios <b aria-hidden="true">→</b></strong></a>
+        <a id="competition-link" data-module="competition" href="#"><span>COMPETICIÓN</span><strong>Draft, fase regular y playoffs <b aria-hidden="true">→</b></strong></a>
       </nav>
 
-      <section id="fases" class="competition-section content-section" data-module="competition" aria-labelledby="competition-title">
-        <header class="section-bar"><div><p class="section-index">01 / TORNEO</p><h2 id="competition-title">Camino a la final</h2></div><span id="competition-state" class="section-stat">CARGANDO FASES</span></header>
-        <ol id="stage-progress" class="stage-progress"></ol>
-        <div id="champion-banner" class="champion-banner" hidden></div>
-        <div id="finalists-panel" class="finalists-panel" hidden><span>FINALISTAS</span><div id="finalists-list" class="finalists-list"></div></div>
-        <div id="stage-board" class="stage-board"><div id="group-tabs" class="group-tabs" role="tablist"></div><div id="stage-leaderboard"></div></div>
-      </section>
-
-      <section id="agenda" class="schedule-section content-section" data-module="schedule" aria-labelledby="schedule-title">
-        <header class="section-bar"><div><p class="section-index">02 / HORARIOS</p><h2 id="schedule-title">Agenda del torneo</h2></div><span class="section-stat">HORA LOCAL</span></header>
-        <ol id="event-schedule" class="event-schedule"></ol>
-      </section>
-
-      <section class="event-overview content-section" aria-labelledby="overview-title">
-        <div><p class="section-index">01 / RESUMEN</p><h2 id="overview-title">Todo en un solo lugar</h2></div>
-        <div class="overview-copy"><p id="overview-description"></p><div id="module-list" class="module-list"></div></div>
-      </section>
-
-      <section id="participantes" class="content-section stack-section" data-module="participants" aria-labelledby="participants-title">
-        <header class="section-bar"><div><p class="section-index">02 / COMUNIDAD</p><h2 id="participants-title">Participantes</h2></div><span id="public-participant-count" class="section-stat">00 CONFIRMADOS</span></header>
-        <div id="participants-loading" class="state-panel">Cargando participantes…</div>
-        <div id="participants-empty" class="state-panel empty compact" hidden><span class="empty-number">00</span><div><h3>Aún no hay confirmados</h3><p>Las inscripciones aprobadas aparecerán aquí.</p></div></div>
-        <ol id="participant-list" class="participant-list" hidden></ol>
-      </section>
-
-      <section id="clasificacion" class="leaderboard content-section" data-module="leaderboard" aria-labelledby="leaderboard-title">
-        <header class="section-bar"><div><p class="section-index">03 / RANKING</p><h2 id="leaderboard-title">Leaderboard</h2></div><button id="refresh-leaderboard" class="refresh" type="button"><span>↻</span> ACTUALIZAR</button></header>
-        <div id="leaderboard-loading" class="state-panel"><span class="scanner"></span>Cargando clasificación…</div>
-        <div id="leaderboard-empty" class="state-panel empty" hidden><span class="empty-number">00</span><div><h3>El marcador está a cero</h3><p>La clasificación aparecerá cuando llegue el primer resultado.</p></div></div>
-        <div id="leaderboard-content" hidden><ol id="event-podium" class="podium"></ol><div class="ranking-table-wrap"><table class="ranking-table"><thead><tr><th>POS</th><th>JUGADOR</th><th class="numeric">PUNTOS</th><th class="numeric optional">VICTORIAS</th><th class="numeric optional">PARTIDAS</th><th class="numeric optional">WIN RATE</th><th class="numeric optional">KILLS</th></tr></thead><tbody id="event-standings"></tbody></table></div></div>
-      </section>
-
-      <section id="partidas" class="content-section stack-section" data-module="matches" aria-labelledby="matches-title">
-        <header class="section-bar"><div><p class="section-index">04 / RESULTADOS</p><h2 id="matches-title">Partidas</h2></div><span id="match-total" class="section-stat">00 REGISTRADAS</span></header>
-        <div id="matches-loading" class="state-panel">Cargando resultados…</div>
-        <div id="matches-empty" class="state-panel empty compact" hidden><span class="empty-number">00</span><div><h3>Esperando la primera partida</h3><p>Los resultados enviados por el Reporter aparecerán aquí.</p></div></div>
-        <div id="match-list" class="match-list" hidden></div>
-      </section>
-
-      <section id="premios" class="prizes-section content-section" data-module="prizes" aria-labelledby="prizes-title">
-        <header class="section-bar"><div><p class="section-index">07 / RECOMPENSAS</p><h2 id="prizes-title">Premios</h2></div></header>
+      <section id="premios" class="prizes-section prizes-featured content-section" data-module="prizes" aria-labelledby="prizes-title">
+        <header class="section-bar"><div><p class="section-index">PREMIOS</p><h2 id="prizes-title">Lo que está en juego</h2></div></header>
         <div id="event-prizes" class="event-prizes"></div>
       </section>
 
