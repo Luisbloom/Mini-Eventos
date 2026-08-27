@@ -57,6 +57,12 @@ describe('lógica de la pantalla del draft', () => {
   });
 
   describe('qué pantalla toca en la inscripción', () => {
+    it('un evento Próximamente sigue siendo una portada pública con inscripciones cerradas', () => {
+      assert.deepEqual(V.publicEventMode({
+        status: 'Próximamente', registration: { available: false }
+      }), { upcoming: true, registrationsOpen: false });
+    });
+
     it('sin Discord configurado y sin sesión, no se ofrece entrar', () => {
       assert.equal(V.registrationState({ discordConfigured: false, me: { authenticated: false } }),
         'unavailable');

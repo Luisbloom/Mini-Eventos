@@ -259,14 +259,17 @@
 
   function renderHub(context) {
     const root = competitionRoot(context.slug);
+    const upcoming = Boolean(context.state.preview);
     const container = node('div', 'hub-layout');
     const next = View.nextSeries(context.state);
     const spotlight = node('section', 'hub-spotlight');
     const overview = node('article', 'hub-overview');
     overview.append(
       node('p', 'section-label', 'ESTADO DEL TORNEO'),
-      node('h2', '', context.state.complete ? 'La liga ya tiene Top 4' : 'La competición está en marcha'),
-      node('p', 'section-copy', context.state.complete
+      node('h2', '', upcoming ? 'Próximamente' : context.state.complete ? 'La liga ya tiene Top 4' : 'La competición está en marcha'),
+      node('p', 'section-copy', upcoming
+        ? 'La competición todavía no ha comenzado. Aquí podrás seguir cada fase cuando se publique.'
+        : context.state.complete
         ? 'La fase regular está cerrada. El foco pasa al cuadro de doble eliminación.'
         : 'Sigue el calendario y mira cómo cambia la clasificación con cada resultado.'),
       progressBar(context.state.seriesPlayed || 0, context.state.seriesTotal || 0, 'FASE REGULAR')
@@ -291,8 +294,8 @@
     const top = context.state.standings?.[0]?.name || 'Sin líder';
     const completeResults = View.allSeries(context.state).filter((series) => series.status === 'COMPLETED').length;
     [
-      { number: '01', title: 'Draft', copy: `${context.draft?.teams?.length || 0} equipos · ${statusLabel(context.draft?.status)}`, status: statusLabel(context.draft?.status), ready: context.draft?.status === 'COMPLETED', href: `${root}/draft`, accent: 'draft' },
-      { number: '02', title: 'Fase regular', copy: `${context.state.seriesPlayed || 0} de ${context.state.seriesTotal || 0} partidos`, status: context.state.complete ? 'TERMINADA' : 'EN JUEGO', ready: context.state.generated, href: `${root}/fase-regular`, accent: 'league' },
+      { number: '01', title: 'Draft', copy: upcoming ? 'Capitanes, elecciones y equipos se publicarán aquí.' : `${context.draft?.teams?.length || 0} equipos · ${statusLabel(context.draft?.status)}`, status: upcoming ? 'PRÓXIMAMENTE' : statusLabel(context.draft?.status), ready: context.draft?.status === 'COMPLETED', href: `${root}/draft`, accent: 'draft' },
+      { number: '02', title: 'Fase regular', copy: upcoming ? 'La competición todavía no ha comenzado.' : `${context.state.seriesPlayed || 0} de ${context.state.seriesTotal || 0} partidos`, status: upcoming ? 'PRÓXIMAMENTE' : context.state.complete ? 'TERMINADA' : 'EN JUEGO', ready: context.state.generated, href: `${root}/fase-regular`, accent: 'league' },
       { number: '03', title: 'Clasificación', copy: `Líder actual · ${top}`, status: `${context.state.standings?.length || 0} POSICIONES`, ready: context.state.standings?.length > 0, href: `${root}/fase-regular/clasificacion`, accent: 'standings' },
       { number: '04', title: 'Jornadas', copy: `${context.state.matchdays?.length || 0} bloques de calendario`, status: context.state.generated ? 'PUBLICADAS' : 'PENDIENTES', ready: context.state.generated, href: `${root}/fase-regular/jornadas`, accent: 'calendar' },
       { number: '05', title: 'Playoffs', copy: 'Cuadro alto, bajo y gran final', status: playoffStatus(context.state), ready: context.state.playoffs?.generated, href: `${root}/playoffs`, accent: 'playoffs' },
@@ -310,6 +313,7 @@
 
   function renderRegular(context) {
     const root = competitionRoot(context.slug);
+    if (context.state.preview) return emptyState('La competición todavía no ha comenzado', 'La fase regular, las jornadas y la clasificación aparecerán cuando arranque el torneo.');
     if (!context.state.generated) return emptyState('La liga todavía no está generada', 'Cuando termine el draft, las jornadas y la tabla aparecerán aquí.', link(`${root}/draft`, 'primary-cta', 'VER DRAFT →'));
     const layout = node('div', 'page-stack');
     const summary = node('section', 'regular-summary');
@@ -338,6 +342,7 @@
   }
 
   function renderStandings(context) {
+    if (context.state.preview) return emptyState('Clasificación próximamente', 'La tabla aparecerá cuando comience la fase regular.');
     if (!context.state.standings?.length) return emptyState('Sin clasificación', 'La tabla se calculará en cuanto exista la fase regular.');
     const section = node('section', 'content-section');
     section.append(sectionHeader(1, 'TABLA COMPLETA', 'Clasificación', 'Las victorias mandan. Los desempates usan enfrentamiento directo y diferencia de rondas.'));
@@ -364,6 +369,7 @@
   }
 
   function renderMatchdays(context) {
+    if (context.state.preview) return emptyState('Jornadas próximamente', 'El calendario se publicará antes de comenzar la fase regular.');
     if (!context.state.matchdays?.length) return emptyState('Calendario pendiente', 'Las jornadas se publicarán al generar la fase regular.');
     const section = node('section', 'content-section');
     section.append(sectionHeader(1, 'CALENDARIO', 'Todas las jornadas', 'Un bloque por jornada. Entra para ver mapas y detalles.'));
@@ -384,6 +390,7 @@
   }
 
   function renderPlayoffs(context) {
+    if (context.state.preview) return emptyState('Playoffs próximamente', 'Los cuatro mejores equipos avanzarán a esta fase.');
     if (!context.state.playoffs?.generated) return emptyState('El cuadro todavía no está generado', context.state.complete ? 'La liga ya ha terminado. La organización publicará los cruces del Top 4.' : 'Primero deben terminar todos los partidos de la fase regular.', link(`${competitionRoot(context.slug)}/fase-regular/clasificacion`, 'primary-cta', 'VER CLASIFICACIÓN →'));
     const section = node('section', 'content-section bracket-section');
     section.append(sectionHeader(1, 'DOBLE ELIMINACIÓN', 'Camino a la final', 'Dos derrotas eliminan. El cuadro alto y el bajo convergen en la gran final.'));
@@ -434,7 +441,7 @@
 
   function renderStats(context) {
     const stats = context.state.playerStats || [];
-    if (!stats.length) return emptyState('Todavía no hay estadísticas', 'Aparecerán cuando existan partidas con datos de jugadores confirmados.');
+    if (!stats.length) return emptyState('Todavía no hay estadísticas', context.state.preview ? 'Las estadísticas aparecerán cuando comiencen los partidos.' : 'Aparecerán cuando existan partidas con datos de jugadores confirmados.');
     const section = node('section', 'content-section stats-section');
     section.append(sectionHeader(1, 'RANKING INDIVIDUAL', 'Rendimiento de jugadores', 'Ordena por la métrica que te interese y reduce la lista por equipo.'));
     const controls = node('form', 'stats-controls'); controls.addEventListener('submit', (event) => event.preventDefault());
@@ -481,7 +488,7 @@
 
   function renderResults(context) {
     const completed = View.allSeries(context.state).filter((series) => series.status === 'COMPLETED');
-    if (!completed.length) return emptyState('Sin resultados todavía', 'Los partidos cerrados aparecerán aquí, separados del calendario pendiente.');
+    if (!completed.length) return emptyState('Todavía no hay resultados', context.state.preview ? 'Los marcadores aparecerán cuando comiencen los partidos.' : 'Los partidos cerrados aparecerán aquí, separados del calendario pendiente.');
     const section = node('section', 'content-section results-section');
     section.append(sectionHeader(1, 'HISTORIAL', 'Partidos finalizados', 'Filtra por fase o equipo y abre cualquier serie para ver sus mapas.'));
     const controls = node('form', 'stats-controls results-controls'); controls.addEventListener('submit', (event) => event.preventDefault());

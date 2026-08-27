@@ -41,6 +41,14 @@ function registrationState({ discordConfigured, me }) {
   return 'form';
 }
 
+/** Un anuncio sigue siendo público aunque todavía no admita inscripciones. */
+function publicEventMode(event = {}) {
+  return {
+    upcoming: event.status === 'Próximamente',
+    registrationsOpen: Boolean(event.registration?.available)
+  };
+}
+
 // --------------------------------------------------------------- draft
 
 const DRAFT_LABELS = Object.freeze({
@@ -181,7 +189,7 @@ function startBlockedReason({ selected, savedTeams, confirmedCount, teamCount, t
 const DRAFT_VIEW = {
   escapeHtml, initials,
   TEAM_COUNTS, TEAM_SIZE, draftPlan, captainsAreDirty, startBlockedReason,
-  registrationState,
+  registrationState, publicEventMode,
   draftLabel, currentTeam, viewerRole, canPick, teamSlots, draftHeadline,
   createRefreshQueue
 };

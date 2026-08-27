@@ -216,8 +216,9 @@ async function loadEvent() {
   try {
     const response = await fetch(`/api/events/${encodeURIComponent(slug)}`, { cache: 'no-store' }); if (!response.ok) throw new Error();
     const data = await response.json();
-    if (data.event.status === 'Próximamente') { byId('event-soon').hidden = false; setConnection(false, 'PRÓXIMAMENTE'); return; }
     currentEvent = data.event; renderEvent(data.event); renderRegistration(data.event, data.registrationFields); setConnection(true, 'EVENTO ONLINE');
+    const mode = window.DraftView.publicEventMode(data.event);
+    if (mode.upcoming) setConnection(false, 'PRÓXIMAMENTE');
     await Promise.all([loadCompetition(data.event),loadSchedule(data.event),loadParticipants(data.event),loadLeaderboard(data.event),loadMatches(data.event),loadPrizes(data.event)]);
     const section = location.pathname.split('/').filter(Boolean)[2]; if (section) document.querySelector(`#${section}`)?.scrollIntoView();
   } catch { byId('event-error').hidden = false; setConnection(false, 'NO DISPONIBLE'); }
@@ -338,6 +339,11 @@ async function renderDiscordRegistration(event) {
 
   const paso = byId('discord-step');
   const datos = yo.event || {};
+
+  if (!event.registration.available && !datos.registered) {
+    paso.innerHTML = pasoCerrado(event.registration.label);
+    return;
+  }
 
   switch (window.DraftView.registrationState({ discordConfigured: estado.configured, me: yo })) {
     case 'unavailable': paso.innerHTML = pasoNoConfigurado(); return;

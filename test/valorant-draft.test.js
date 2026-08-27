@@ -905,10 +905,13 @@ describe('draft de Valorant', () => {
       const { app, database, event } = montar();
       database.updateEvent(event.id, { ...event, status: 'Próximamente', registrationsOpen: false });
       const { sesion } = await login(app);
+      const antes = database.getEventBySlug(slug).participantCount;
 
       const cerrado = await request(app).post(`/api/events/${slug}/valorant/registrations`)
         .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' });
-      assert.equal(cerrado.status >= 400, true, 'con el evento cerrado no se inscribe nadie');
+      assert.equal(cerrado.status, 403);
+      assert.equal(cerrado.body.error.code, 'REGISTRATION_CLOSED');
+      assert.equal(database.getEventBySlug(slug).participantCount, antes, 'el intento no modifica datos');
     });
   });
 

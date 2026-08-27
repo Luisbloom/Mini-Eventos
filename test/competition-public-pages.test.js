@@ -68,6 +68,18 @@ describe('páginas públicas de la competición', () => {
     });
   });
 
+  it('crea un estado público vacío para un torneo anunciado sin filtrar datos', () => {
+    const preview = View.previewCompetitionState();
+    assert.equal(preview.preview, true);
+    assert.equal(preview.generated, false);
+    assert.equal(preview.complete, false);
+    assert.deepEqual(preview.teams, []);
+    assert.deepEqual(preview.standings, []);
+    assert.deepEqual(preview.matchdays, []);
+    assert.deepEqual(preview.playerStats, []);
+    assert.deepEqual(preview.playoffs.series, []);
+  });
+
   it('aplana liga y playoffs y localiza una serie sin duplicarla', () => {
     const state = {
       matchdays: [

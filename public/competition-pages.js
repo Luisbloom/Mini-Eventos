@@ -36,16 +36,18 @@
 
   async function loadData() {
     const slug = encodeURIComponent(route.slug);
-    const [eventResponse, stateResponse, draftResponse] = await Promise.all([
-      fetch(`/api/events/${slug}`, { cache: 'no-store' }),
+    const eventResponse = await fetch(`/api/events/${slug}`, { cache: 'no-store' });
+    const eventBody = await json(eventResponse);
+    if (eventBody.event.status === 'Próximamente') {
+      return { event: eventBody.event, state: View.previewCompetitionState(), draft: null };
+    }
+
+    const [stateResponse, draftResponse] = await Promise.all([
       fetch(`/api/events/${slug}/competition-teams`, { cache: 'no-store' }),
       fetch(`/api/events/${slug}/draft`, { cache: 'no-store' })
     ]);
-    const [eventBody, state, draft] = await Promise.all([
-      json(eventResponse),
-      json(stateResponse),
-      draftResponse.ok ? draftResponse.json() : Promise.resolve(null)
-    ]);
+    const state = await json(stateResponse);
+    const draft = draftResponse.ok ? await draftResponse.json() : null;
     return { event: eventBody.event, state, draft };
   }
 
@@ -111,7 +113,10 @@
     byId('competition-loading').hidden = true;
     byId('competition-error').hidden = true;
     byId('competition-main').hidden = false;
-    connection('live', state.playoffs?.status === 'IN_PROGRESS' || !state.complete ? 'EN DIRECTO' : 'ACTUALIZADO');
+    document.body.dataset.preview = String(Boolean(state.preview));
+    connection(state.preview ? 'loading' : 'live', state.preview
+      ? 'PRÓXIMAMENTE'
+      : state.playoffs?.status === 'IN_PROGRESS' || !state.complete ? 'EN DIRECTO' : 'ACTUALIZADO');
   }
 
   async function refresh() {
@@ -125,7 +130,7 @@
   }
 
   function connectStream() {
-    if (!window.EventSource || !route.slug) return;
+    if (!window.EventSource || !route.slug || document.body.dataset.preview === 'true') return;
     stream?.close();
     stream = new EventSource(`/api/events/${encodeURIComponent(route.slug)}/draft/stream`);
     ['connected', 'competition_updated', 'draft_completed', 'draft_configured', 'draft_started', 'pick_made', 'team_updated'].forEach((event) => stream.addEventListener(event, refresh));

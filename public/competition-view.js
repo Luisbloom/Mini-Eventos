@@ -100,6 +100,23 @@
     });
   }
 
+  /** Estado deliberadamente vacío para anunciar la competición sin filtrar su preparación. */
+  function previewCompetitionState() {
+    return {
+      preview: true,
+      generated: false,
+      complete: false,
+      teams: [],
+      standings: [],
+      matchdays: [],
+      playerStats: [],
+      maps: [],
+      seriesPlayed: 0,
+      seriesTotal: 0,
+      playoffs: { generated: false, status: 'PENDING', series: [], placements: [] }
+    };
+  }
+
   return {
     routeFor,
     navItems,
@@ -108,6 +125,7 @@
     allSeries,
     findSeries,
     nextSeries,
-    rankPlayers
+    rankPlayers,
+    previewCompetitionState
   };
 }));

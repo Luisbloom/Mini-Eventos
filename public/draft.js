@@ -23,13 +23,13 @@ function setConnection(estado, texto) {
   byId('draft-connection').textContent = texto;
 }
 
-function mostrarNoDisponible(titulo, copia) {
+function mostrarNoDisponible(titulo, copia, upcoming = false) {
   byId('draft-main').hidden = true;
   const caja = byId('draft-unavailable');
   caja.hidden = false;
   byId('draft-unavailable-title').textContent = titulo;
   byId('draft-unavailable-copy').textContent = copia;
-  setConnection('error', 'NO DISPONIBLE');
+  setConnection(upcoming ? 'loading' : 'error', upcoming ? 'PRÓXIMAMENTE' : 'NO DISPONIBLE');
 }
 
 // ------------------------------------------------------------------ pintar
@@ -177,6 +177,16 @@ function pintar() {
 // ------------------------------------------------------------------ datos
 
 async function pedirEstado() {
+  const eventResponse = await fetch(`/api/events/${encodeURIComponent(slug)}`, { cache: 'no-store' });
+  if (eventResponse.ok) {
+    const eventBody = await eventResponse.json();
+    if (eventBody.event?.status === 'Próximamente') {
+      mostrarNoDisponible('Todavía no',
+        'Este torneo aún no ha comenzado. Cuando lo haga, el draft se verá aquí en directo.', true);
+      return false;
+    }
+  }
+
   const [estado, yo] = await Promise.all([
     fetch(`/api/events/${encodeURIComponent(slug)}/draft`, { cache: 'no-store' }),
     fetch(`/api/me?event=${encodeURIComponent(slug)}`, { cache: 'no-store' })
@@ -190,7 +200,8 @@ async function pedirEstado() {
       code === 'EVENT_NOT_PUBLISHED' ? 'Todavía no' : 'Sin draft',
       code === 'EVENT_NOT_PUBLISHED'
         ? 'Este torneo aún no está abierto. Cuando lo esté, el draft se verá aquí en directo.'
-        : 'Este evento no utiliza draft por equipos.');
+        : 'Este evento no utiliza draft por equipos.',
+      code === 'EVENT_NOT_PUBLISHED');
     return false;
   }
 
