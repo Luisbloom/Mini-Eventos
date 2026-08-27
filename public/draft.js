@@ -41,8 +41,6 @@ function configurarNavegacion() {
   byId('draft-nav-draft').href = `${competition}/draft`;
   byId('draft-nav-regular').href = `${competition}/fase-regular`;
   byId('draft-nav-playoffs').href = `${competition}/playoffs`;
-  byId('draft-nav-stats').href = `${competition}/estadisticas`;
-  byId('draft-nav-results').href = `${competition}/resultados`;
 }
 
 function mostrarPrevia(event) {

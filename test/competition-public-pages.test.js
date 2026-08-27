@@ -74,6 +74,12 @@ describe('páginas públicas de la competición', () => {
     ]);
   });
 
+  it('mantiene el mismo menu reducido tambien dentro del Draft', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'draft.html'), 'utf8');
+    assert.doesNotMatch(html, /id="draft-nav-stats"/);
+    assert.doesNotMatch(html, /id="draft-nav-results"/);
+  });
+
   it('crea un estado público vacío para un torneo anunciado sin filtrar datos', () => {
     const preview = View.previewCompetitionState();
     assert.equal(preview.preview, true);
