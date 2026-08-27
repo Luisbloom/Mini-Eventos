@@ -125,4 +125,13 @@ describe('páginas públicas de la competición', () => {
       { participantId: 3, deaths: 8 }
     ], 'deaths', 'asc').map((row) => row.participantId).join(','), '3,2,1');
   });
+
+  it('no publica puestos de playoffs hasta que esten decididos', () => {
+    const placements = View.confirmedPlacements([
+      { teamId: 1, position: null },
+      { teamId: 2, position: undefined },
+      { teamId: 3, position: 3 }
+    ]);
+    assert.deepEqual(placements, [{ teamId: 3, position: 3 }]);
+  });
 });

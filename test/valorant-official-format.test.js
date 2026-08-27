@@ -141,6 +141,12 @@ describe('formato oficial del torneo de Valorant', () => {
     const event = await request(app).get('/api/events/torneo-valorant').expect(200);
     assert.equal(event.body.event.officialFormat.players, 20);
     assert.equal(event.body.event.participantCount, 0);
+
+    const information = await request(app)
+      .get('/api/events/torneo-valorant/tournament-information')
+      .expect(200);
+    assert.equal(information.body.event.officialFormat.teams, 4);
+    assert.match(information.body.event.officialFormat.public.draft, /draft/i);
   });
 
   it('impide convertir el evento real en una demo de cinco o seis equipos', () => {

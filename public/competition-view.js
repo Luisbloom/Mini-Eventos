@@ -98,6 +98,13 @@
     });
   }
 
+  function confirmedPlacements(rows = []) {
+    return rows.filter((row) => row?.position !== null
+      && row?.position !== undefined
+      && row?.position !== ''
+      && Number.isFinite(Number(row.position)));
+  }
+
   /** Estado deliberadamente vacío para anunciar la competición sin filtrar su preparación. */
   function previewCompetitionState(format = null) {
     return {
@@ -126,6 +133,7 @@
     findSeries,
     nextSeries,
     rankPlayers,
+    confirmedPlacements,
     previewCompetitionState
   };
 }));

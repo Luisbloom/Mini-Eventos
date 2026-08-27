@@ -333,7 +333,7 @@ function createApp({
       if (!event) return;
       if (!event.modules.information) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no publica información ampliada.');
       response.set('Cache-Control', 'no-store').json({
-        event,
+        event: { ...event, officialFormat: officialValorantFormatForSlug(event.slug) },
         ...database.getTournamentInformation(event.id),
         scoring: eventScoring(event)
       });

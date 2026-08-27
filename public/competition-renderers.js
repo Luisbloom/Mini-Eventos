@@ -404,7 +404,7 @@
       bracket.append(zone);
     }
     section.append(bracket);
-    const confirmedPlacements = (context.state.playoffs.placements || []).filter((place) => Number.isFinite(Number(place.position)));
+    const confirmedPlacements = View.confirmedPlacements(context.state.playoffs.placements);
     if (confirmedPlacements.length) {
       const placements = node('section', 'placements-panel');
       placements.append(node('p', 'section-label', 'PUESTOS CONFIRMADOS'));
