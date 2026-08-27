@@ -68,15 +68,15 @@ describe('páginas públicas de la competición', () => {
     });
   });
 
-  it('expone únicamente las tres fases en la navegación principal', () => {
+  it('expone las tres fases y el ranking en la navegación principal', () => {
     assert.deepEqual(View.navItems('copa-roja').map((item) => item.label), [
-      'Resumen', 'Draft', 'Fase regular', 'Playoffs'
+      'Resumen', 'Draft', 'Fase regular', 'Playoffs', 'Ranking'
     ]);
   });
 
   it('mantiene el mismo menu reducido tambien dentro del Draft', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'draft.html'), 'utf8');
-    assert.doesNotMatch(html, /id="draft-nav-stats"/);
+    assert.match(html, /id="draft-nav-stats"/);
     assert.doesNotMatch(html, /id="draft-nav-results"/);
   });
 

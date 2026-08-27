@@ -321,7 +321,7 @@
     }
     const secondary = node('nav', 'competition-secondary-links');
     secondary.setAttribute('aria-label', 'Datos de la fase regular');
-    secondary.append(link(`${root}/estadisticas`, '', 'ESTADÍSTICAS →'), link(`${root}/resultados`, '', 'TODOS LOS RESULTADOS →'));
+    secondary.append(link(`${root}/estadisticas`, '', 'RANKING DE JUGADORES →'), link(`${root}/resultados`, '', 'TODOS LOS RESULTADOS →'));
     layout.append(secondary);
     return layout;
   }
