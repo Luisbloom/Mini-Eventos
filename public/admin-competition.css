@@ -39,3 +39,8 @@
 .draft-admin-teams li.captain{border-color:var(--lime);color:var(--paper)}
 .draft-admin-teams li.empty{border-style:dashed;color:var(--muted)}
 @media(max-width:650px){.draft-captains li{grid-template-columns:32px 1fr auto auto}}
+
+/* Los confirmados que aún no tienen grupo: se distinguen del resto de tarjetas
+   porque son una bandeja de entrada, no un grupo de verdad. */
+.group-admin.is-unassigned{background:var(--void);border:1px dashed var(--line)}
+.group-admin.is-unassigned h4{color:var(--muted)}

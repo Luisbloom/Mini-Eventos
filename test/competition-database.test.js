@@ -157,6 +157,37 @@ describe('competition database', () => {
     database.close();
   });
 
+  it('lists confirmed players with no group so a late signup can be placed by hand', () => {
+    const database=openDatabase(temporaryPath()); const event=database.getDefaultEvent();
+    const stage=database.competition.listStages(event.id)[0]; const groups=database.competition.listGroups(stage.id);
+    Array.from({length:4},(_,index)=>participant(database,event.id,`Jugador ${index+1}`));
+    database.competition.distributeGroups(stage.id);
+
+    // Se apunta cuando el reparto ya está hecho: no tiene fila en la fase.
+    const tarde=participant(database,event.id,'Asesino');
+    participant(database,event.id,'SinConfirmar','pending');
+
+    const sueltos=()=>database.competition.listStages(event.id).find((item)=>item.id===stage.id).unassigned;
+    assert.deepEqual(sueltos().map((row)=>row.displayName),['Asesino']);
+    assert.equal(sueltos()[0].inStage,false);
+
+    // Meterlo a mano en el segundo grupo lo saca de la lista.
+    database.competition.assignParticipant(stage.id,tarde.id,groups[1].id);
+    assert.deepEqual(sueltos(),[]);
+    assert.equal(database.competition.listStageParticipants(stage.id,groups[1].id)
+      .some((row)=>row.participantId===tarde.id),true);
+
+    // Y quien se queda sin grupo vuelve a aparecer, con su fila ya creada.
+    database.competition.assignParticipant(stage.id,tarde.id,null);
+    assert.deepEqual(sueltos().map((row)=>row.displayName),['Asesino']);
+    assert.equal(sueltos()[0].inStage,true);
+
+    // Una fase que no es de grupos no tiene bandeja de sueltos que enseñar.
+    const final=database.competition.createStage(event.id,{name:'Gran final',type:'final',position:9,matchesPerGroup:5});
+    assert.deepEqual(database.competition.listStages(event.id).find((item)=>item.id===final.id).unassigned,[]);
+    database.close();
+  });
+
   it('edits groups and hosts without changing ids or orphaning historical matches', () => {
     const dbPath=temporaryPath();const database=openDatabase(dbPath);const event=database.getDefaultEvent();const stage=database.competition.listStages(event.id)[0];const groups=database.competition.listGroups(stage.id);const hosts=database.competition.listHosts(event.id);const player=participant(database,event.id,'Histórico');database.competition.distributeGroups(stage.id);const assigned=database.competition.listStageParticipants(stage.id).find((row)=>row.participantId===player.id);const group=groups.find((row)=>row.id===assigned.groupId);
     const tokenHash='c'.repeat(64);const tokenCreatedAt='2026-08-21T19:00:00.000Z';database.competition.setHostReporterToken(event.id,hosts[0].id,{tokenHash,createdAt:tokenCreatedAt});const credentialBefore=database.competition.touchHostReporterToken(event.id,hosts[0].id);

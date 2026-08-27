@@ -29,6 +29,40 @@ function label(caption,control){const wrapper=document.createElement('label');co
 
 function renderGroup(stage,group){const card=document.createElement('article');card.className='group-admin';const title=document.createElement('h4');title.textContent=`${group.name} · ${group.participantCount}`;card.append(title);const members=stage.participants.filter((member)=>member.groupId===group.id);members.forEach((member)=>{const row=document.createElement('div');row.className='group-member';const name=document.createElement('span');name.textContent=member.displayName;const move=select([['','SIN GRUPO'],...stage.groups.map((item)=>[item.id,item.name])],member.groupId);move.disabled=stage.groupsLocked;move.addEventListener('change',async()=>{try{await admin.api(`/api/admin/stages/${stage.id}/participants/${member.participantId}`,{method:'PUT',body:JSON.stringify({groupId:move.value?Number(move.value):null})});await loadCompetition();admin.feedback('Jugador movido.');}catch(error){admin.feedback(error.message,true);}});row.append(name,move);card.append(row);});return card;}
 
+/**
+ * Los confirmados que no están en ningún grupo.
+ *
+ * Las tarjetas de grupo sólo pintan a quien ya tiene grupo, así que sin esto
+ * un inscrito nuevo no aparece por ninguna parte y la única forma de meterlo
+ * era repartir otra vez, que borra la distribución entera.
+ */
+function renderUnassigned(stage){
+  const pendientes=stage.unassigned||[];
+  if(!pendientes.length)return null;
+  const card=document.createElement('article');
+  card.className='group-admin is-unassigned';
+  const title=document.createElement('h4');
+  title.textContent=`SIN GRUPO · ${pendientes.length}`;
+  card.append(title);
+  pendientes.forEach((member)=>{
+    const row=document.createElement('div');row.className='group-member';
+    const name=document.createElement('span');name.textContent=member.displayName;
+    const move=select([['','SIN GRUPO'],...stage.groups.map((item)=>[item.id,item.name])],'');
+    move.disabled=stage.groupsLocked;
+    move.addEventListener('change',async()=>{
+      if(!move.value)return;
+      try{
+        await admin.api(`/api/admin/stages/${stage.id}/participants/${member.participantId}`,
+          {method:'PUT',body:JSON.stringify({groupId:Number(move.value)})});
+        await loadCompetition();
+        admin.feedback(`${member.displayName} añadido al grupo.`);
+      }catch(error){admin.feedback(error.message,true);}
+    });
+    row.append(name,move);card.append(row);
+  });
+  return card;
+}
+
 function auditTable(board){const section=document.createElement('section');section.className='stage-audit-board';const heading=document.createElement('h4');heading.textContent=board.group?.name||board.stage.name;section.append(heading);if(!board.standings.length){const empty=document.createElement('p');empty.textContent='Todavía no hay jugadores ni puntuación.';section.append(empty);return section;}board.standings.forEach((player)=>{const row=document.createElement('div');row.className='audit-player';const title=document.createElement('strong');title.textContent=`${String(player.rank).padStart(2,'0')} · ${player.name} · ${player.points} PTS`;const detail=document.createElement('span');detail.textContent=player.breakdowns.length?player.breakdowns.map((item)=>`#${item.matchId}: ${item.score.victory} victoria + ${item.score.kills} kills + ${item.score.tasks} tareas = ${item.score.total}`).join(' | '):'Sin partidas puntuadas';row.append(title,detail);section.append(row);});return section;}
 
 function renderStage(stage){const card=document.createElement('article');card.className='stage-editor';const header=document.createElement('header');header.innerHTML=`<div><span>FASE ${String(stage.position).padStart(2,'0')} · ${stage.status.toUpperCase()}</span><h3></h3>${stage.type==='group_stage'?`<b class="group-lock-state">GRUPOS ${stage.groupsLocked?'CONFIRMADOS':'PENDIENTES'}</b>`:''}</div>`;header.querySelector('h3').textContent=stage.name;card.append(header);const config=document.createElement('div');config.className='stage-config';const name=input(stage.name),type=select([['group_stage','Grupos'],['final','Final'],['league','Liga'],['knockout','Eliminatoria']],stage.type),status=select([['pending','Pendiente'],['active','En curso'],...(stage.status==='completed'?[['completed','Completada']]:[])],stage.status),matches=input(stage.matchesPerGroup,'number'),qualifiers=input(stage.qualifiersPerGroup,'number'),position=input(stage.position,'number'),reset=input('', 'checkbox'),enabled=input('','checkbox');reset.checked=stage.resetPoints;enabled.checked=stage.enabled;config.append(label('NOMBRE',name),label('TIPO',type),label('ESTADO',status),label('POSICIÓN',position),label('PARTIDAS PREVISTAS',matches),label('CLASIFICAN POR GRUPO',qualifiers),label('REINICIAR PUNTOS',reset),label('HABILITADA',enabled));card.append(config);const actions=document.createElement('div');actions.className='stage-actions';
@@ -40,7 +74,7 @@ function renderStage(stage){const card=document.createElement('article');card.cl
   action('RECALCULAR',async()=>{if(!confirm('¿Reconstruir todas las clasificaciones desde los resultados brutos?'))return;await admin.api(`/api/admin/events/${currentEvent.id}/recalculate`,{method:'POST'});admin.feedback('Clasificaciones reconstruidas desde partidas válidas.');});
   const audit=document.createElement('div');audit.className='stage-audit';audit.hidden=true;action('VER PUNTUACIÓN',async()=>{try{const scopes=stage.type==='group_stage'?stage.groups:[null];const boards=await Promise.all(scopes.map((group)=>admin.api(`/api/admin/stages/${stage.id}/leaderboard${group?`?groupId=${group.id}`:''}`)));audit.replaceChildren(...boards.map(auditTable));audit.hidden=!audit.hidden;}catch(error){admin.feedback(error.message,true);}});
   action('FINALIZAR FASE',async()=>{try{const preview=await admin.api(`/api/admin/stages/${stage.id}/close-preview`);const summary=preview.summaries.map((item)=>{const count=stage.type==='group_stage'?stage.qualifiersPerGroup:1;const top=item.leaderboard.standings.slice(0,count).map((player)=>player.name).join(', ')||'sin clasificados';return `${item.group?.name||stage.name}: ${item.matchCount}/${stage.matchesPerGroup} partidas\nTop: ${top}`;}).join('\n\n');if(preview.blocking){const issue=preview.issues.find((item)=>item.participantIds),ids=issue?.participantIds||[];const higher=Number(prompt(`DESEMPATE NECESARIO entre IDs ${ids.join(', ')}. ID que queda por delante:`));const lower=Number(prompt(`ID que queda por detrás de ${higher}:`));const reason=prompt('Motivo de la resolución:','Desempate administrativo del corte');if(!higher||!lower||!reason||!confirm(`¿Confirmar que ${higher} queda por delante de ${lower}?`))return;await admin.api(`/api/admin/stages/${stage.id}/tie-resolutions`,{method:'POST',body:JSON.stringify({groupId:issue?.groupId||null,higherParticipantId:higher,lowerParticipantId:lower,reason})});await loadCompetition();admin.feedback('Orden de desempate guardado. Repite si aún quedan jugadores empatados.');return;}if(!confirm(`${summary}\n\n${preview.issues.length?'Hay avisos pendientes. ':''}¿Finalizar esta fase y generar clasificados?`))return;await admin.api(`/api/admin/stages/${stage.id}/complete`,{method:'POST',body:JSON.stringify({force:preview.issues.length>0})});await loadCompetition();admin.feedback('Fase finalizada y clasificados generados.');}catch(error){admin.feedback(error.message,true);}},'warn');
-  card.append(actions,audit);if(stage.groups.length){const grid=document.createElement('div');grid.className='group-admin-grid';stage.groups.forEach((group)=>grid.append(renderGroup(stage,group)));card.append(grid);}return card;}
+  card.append(actions,audit);if(stage.groups.length){const grid=document.createElement('div');grid.className='group-admin-grid';stage.groups.forEach((group)=>grid.append(renderGroup(stage,group)));const sueltos=renderUnassigned(stage);if(sueltos)grid.append(sueltos);card.append(grid);}return card;}
 
 function compactRow(values,types,id=null){const row=document.createElement('div');row.className='compact-row';if(id!==null)row.dataset.entityId=String(id);types.forEach((type,index)=>{const field=type==='select'?select([['true','Activo'],['false','Oculto']],String(values[index])):input(values[index],type);field.dataset.value=String(index);row.append(field);});const up=document.createElement('button');up.type='button';up.title='Subir';up.textContent='↑';up.addEventListener('click',()=>{if(row.previousElementSibling)row.parentElement.insertBefore(row,row.previousElementSibling);});const down=document.createElement('button');down.type='button';down.title='Bajar';down.textContent='↓';down.addEventListener('click',()=>{if(row.nextElementSibling)row.parentElement.insertBefore(row.nextElementSibling,row);});const remove=document.createElement('button');remove.type='button';remove.title='Eliminar';remove.textContent='×';remove.addEventListener('click',()=>row.remove());row.append(up,down,remove);return row;}
 function values(container){return [...container.children].map((row)=>[...row.querySelectorAll('[data-value]')].map((field)=>field.value));}

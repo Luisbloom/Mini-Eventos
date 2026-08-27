@@ -253,9 +253,33 @@ function createCompetitionStore(connection) {
   const requireGroup = (id) => { const row=connection.prepare('SELECT * FROM event_groups WHERE id=?').get(id); if(!row) throw new CompetitionError('El grupo no existe.','GROUP_NOT_FOUND',404); return toGroup(row); };
   const listGroups = (stageId) => connection.prepare(`SELECT g.*,(SELECT COUNT(*) FROM stage_participants sp WHERE sp.group_id=g.id) participant_count FROM event_groups g WHERE stage_id=? ORDER BY position,id`).all(stageId).map(toGroup);
   const listStageParticipants = (stageId, groupId = null) => connection.prepare(`SELECT sp.*,p.display_name,p.status registration_status FROM stage_participants sp JOIN event_participants p ON p.id=sp.participant_id WHERE sp.stage_id=? AND (? IS NULL OR sp.group_id=?) ORDER BY sp.seed_order,p.display_name COLLATE NOCASE`).all(stageId,groupId,groupId).map((row)=>({stageId:row.stage_id,participantId:row.participant_id,groupId:row.group_id,displayName:row.display_name,registrationStatus:row.registration_status,competitiveStatus:row.competitive_status,seedOrder:row.seed_order,advancedFromStageId:row.advanced_from_stage_id}));
+  /*
+    Confirmados que todavía no están en ningún grupo de esta fase, incluidos
+    los que ni siquiera tienen fila en stage_participants porque se inscribieron
+    después del reparto. Sin esta lista el panel no los enseña en ninguna parte
+    y no hay forma de meterlos a mano.
+  */
+  const listUnassignedParticipants = (stage) => stage.type !== 'group_stage' ? [] : connection.prepare(`
+    SELECT p.id participant_id, p.display_name, p.status registration_status, sp.competitive_status
+    FROM event_participants p
+    LEFT JOIN stage_participants sp ON sp.participant_id=p.id AND sp.stage_id=@stageId
+    WHERE p.event_id=@eventId AND p.status='confirmed'
+      AND (sp.participant_id IS NULL OR sp.group_id IS NULL)
+    ORDER BY p.display_name COLLATE NOCASE`)
+    .all({ stageId: stage.id, eventId: stage.eventId })
+    .map((row) => ({
+      stageId: stage.id,
+      participantId: row.participant_id,
+      groupId: null,
+      displayName: row.display_name,
+      registrationStatus: row.registration_status,
+      competitiveStatus: row.competitive_status,
+      inStage: row.competitive_status !== null
+    }));
+
   const replaceSimple = (table, eventId, rows, insertSql, mapper) => connection.transaction(()=>{ connection.prepare(`DELETE FROM ${table} WHERE event_id=?`).run(eventId); const insert=connection.prepare(insertSql); rows.forEach((row,index)=>insert.run(...mapper(row,index))); })();
 
-  function listStages(eventId) { return connection.prepare('SELECT * FROM event_stages WHERE event_id=? ORDER BY position,id').all(eventId).map(toStage).map((stage)=>({...stage,groups:listGroups(stage.id),participants:listStageParticipants(stage.id)})); }
+  function listStages(eventId) { return connection.prepare('SELECT * FROM event_stages WHERE event_id=? ORDER BY position,id').all(eventId).map(toStage).map((stage)=>({...stage,groups:listGroups(stage.id),participants:listStageParticipants(stage.id),unassigned:listUnassignedParticipants(stage)})); }
   function getStageLeaderboard(stageId, groupId = null) {
     const stage=requireStage(stageId); if(groupId){const group=requireGroup(groupId);if(group.stageId!==stage.id)throw new CompetitionError('El grupo no pertenece a la fase.','GROUP_STAGE_MISMATCH');}
     const members=listStageParticipants(stage.id,groupId).filter((row)=>row.registrationStatus==='confirmed'&&row.competitiveStatus!=='disqualified'); const ids=members.map((row)=>row.participantId);
