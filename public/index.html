@@ -23,22 +23,19 @@
     <script src="/app.js" defer></script>
   </head>
   <body class="portal-page">
+    <a class="skip-link" href="#portal-main">Saltar al contenido</a>
     <div class="grain" aria-hidden="true"></div>
-    <header class="topbar">
+    <header class="topbar portal-topbar">
       <a class="brand" href="/" aria-label="Mini Eventos Jartiland">
         <img class="brand-logo" src="/images/logo-96.png" alt="" aria-hidden="true" width="40" height="40" decoding="async">
         <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
       </a>
-      <nav class="primary-nav" aria-label="Navegación principal">
-        <a class="active" href="/" aria-current="page">Eventos</a>
-        <a href="#como-funciona">Cómo funciona</a>
-      </nav>
       <div class="broadcast" aria-live="polite">
         <span id="portal-dot" class="live-dot loading"></span><span id="portal-state">CONECTANDO</span>
       </div>
     </header>
 
-    <main class="portal-main">
+    <main id="portal-main" class="portal-main">
       <section class="portal-hero" aria-labelledby="portal-title">
         <div class="hero-copy">
           <p class="kicker"><span>COMUNIDAD EN JUEGO</span> · CARTELERA 2026</p>

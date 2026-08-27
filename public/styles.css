@@ -42,6 +42,14 @@ body {
 button, a { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; }
 
+.skip-link {
+  position: fixed; z-index: 100; top: .75rem; left: .75rem; padding: .75rem 1rem;
+  background: var(--paper); color: var(--void); text-decoration: none;
+  font: .58rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  transform: translateY(-180%);
+}
+.skip-link:focus-visible { transform: translateY(0); outline: 2px solid var(--cyan); outline-offset: 3px; }
+
 .topbar {
   height: 82px;
   padding: 0 clamp(1.25rem, 4vw, 4.5rem);
@@ -235,9 +243,13 @@ h2 { font: clamp(2.8rem, 6vw, 5.8rem)/.9 var(--display); letter-spacing: -.025em
 
 @media (max-width: 660px) {
   .topbar { height: auto; min-height: 102px; padding-top: .75rem; padding-bottom: .65rem; flex-wrap: wrap; }
+  .topbar.compact-topbar { min-height: 76px; padding-top: .55rem; padding-bottom: .55rem; flex-wrap: nowrap; }
+  .topbar.portal-topbar { min-height: 76px; padding-top: .55rem; padding-bottom: .55rem; flex-wrap: nowrap; }
+  .compact-topbar .broadcast { display: none; }
   .brand-copy small { display: none; }
   .broadcast { margin-left: auto; }
   .primary-nav { width: 100%; order: 3; justify-content: space-between; border-top: 1px solid var(--line); padding-top: .35rem; }
+  .primary-nav.is-return-only { width: auto; order: initial; border-top: 0; padding-top: 0; }
   .primary-nav a { font-size: .53rem; }
   .intro { padding-top: 3.5rem; }
   h1 { font-size: clamp(3.4rem, 16vw, 6.5rem); }

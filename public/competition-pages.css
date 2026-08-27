@@ -321,8 +321,8 @@ p { text-wrap: pretty; }
 }
 
 @media (max-width: 720px) {
-  .competition-topbar { grid-template-columns: 1fr auto; }
-  .competition-topbar .competition-back { display: none; }
+  .competition-topbar { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .competition-topbar .competition-back { max-width: 7.5rem; text-align: center; }
   .competition-topbar .broadcast { font-size: .48rem; }
   .competition-nav { justify-content: flex-start; padding-inline: .6rem; }
   .competition-nav a { padding-inline: .7rem; }
@@ -355,6 +355,8 @@ p { text-wrap: pretty; }
   .brand-copy strong { font-size: .8rem; }
   .brand-copy small { font-size: .43rem; }
   .competition-topbar { padding-inline: 1rem; }
+  .competition-topbar .competition-back { max-width: 5rem; font-size: .46rem; letter-spacing: .08em; }
+  .competition-topbar .competition-back span { display: none; }
   .competition-main { padding-inline: 1rem; }
   .series-matchup { grid-template-columns: 1fr; }
   .series-team:last-child { text-align: left; }

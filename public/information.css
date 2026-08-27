@@ -25,7 +25,6 @@
 .side-index nav { margin-top: 1.2rem; display: grid; }
 .side-index nav a { padding: .62rem 0; color: #a6aeac; text-decoration: none; text-transform: uppercase; font: .58rem/1.2 var(--mono); letter-spacing: .08em; transition: color .15s ease, transform .15s ease; }
 .side-index nav a:hover { color: var(--lime); transform: translateX(4px); }
-.admin-link { display: inline-block; margin-top: 1.25rem; color: var(--cyan); text-decoration: none; font: .55rem/1 var(--mono); letter-spacing: .1em; }
 .mobile-index { display: none; }
 
 .info-content { min-width: 0; }

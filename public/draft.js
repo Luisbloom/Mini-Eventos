@@ -36,7 +36,6 @@ function mostrarNoDisponible(titulo, copia, upcoming = false) {
 function configurarNavegacion() {
   byId('back-to-event').href = `/eventos/${encodeURIComponent(slug)}`;
   const competition = `/eventos/${encodeURIComponent(slug)}/competicion`;
-  byId('back-to-competition').href = competition;
   byId('draft-nav-hub').href = competition;
   byId('draft-nav-draft').href = `${competition}/draft`;
   byId('draft-nav-regular').href = `${competition}/fase-regular`;

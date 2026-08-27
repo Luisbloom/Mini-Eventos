@@ -22,9 +22,6 @@
 .event-facts dt { color: var(--muted); font: .55rem/1 var(--mono); letter-spacing: .12em; }
 .event-facts dd { margin: 0; max-width: 210px; color: var(--event-accent); font: 1.15rem/1.15 var(--display); text-align: right; text-transform: uppercase; }
 .event-monogram { position: absolute; top: 3%; right: -2%; color: color-mix(in srgb, var(--event-accent) 7%, transparent); font: clamp(16rem, 38vw, 38rem)/1 var(--display); transform: rotate(-7deg); pointer-events: none; }
-.event-subnav { min-height: 66px; padding: 0 clamp(1.25rem, 5vw, 5.5rem); position: sticky; top: 0; z-index: 8; border-bottom: 1px solid var(--line); background: rgba(8,11,13,.93); backdrop-filter: blur(16px); display: flex; align-items: center; gap: clamp(1rem, 3vw, 3rem); overflow-x: auto; }
-.event-subnav a { flex: 0 0 auto; color: var(--muted); text-decoration: none; text-transform: uppercase; font: .55rem/1 var(--mono); letter-spacing: .12em; }
-.event-subnav a:hover { color: var(--event-accent); }
 .content-section { padding: clamp(4rem, 7vw, 7rem) clamp(1.25rem, 5vw, 5.5rem); }
 .event-overview { display: grid; grid-template-columns: .8fr 1.2fr; gap: clamp(3rem, 8vw, 9rem); border-bottom: 1px solid var(--line); }
 .overview-copy > p { max-width: 720px; margin: 0 0 2rem; color: #b6bdbb; font-size: clamp(1.05rem, 1.6vw, 1.35rem); line-height: 1.6; }
