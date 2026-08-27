@@ -112,6 +112,7 @@
   .profile-topbar { height: auto; min-height: 82px; padding-block: .8rem; flex-wrap: wrap; gap: .8rem; }
   .profile-topbar .broadcast { display: none; }
   .profile-topbar .primary-nav { margin-left: auto; }
+  .profile-topbar .topbar-utilities { margin-left: 0; }
   .profile-login { grid-template-columns: 1fr; min-height: 680px; }
   .login-sequence { position: absolute; right: 0; top: 4rem; opacity: .6; }
   .profile-hero { min-height: 680px; padding-top: 4.5rem; }
