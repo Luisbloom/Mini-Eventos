@@ -893,12 +893,13 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
      * meterla como 0 hundiría el promedio de alguien por un fallo de lectura.
      */
     tournamentPlayerStats(eventId, { stage = 'REGULAR' } = {}) {
+      const stageFilter = stage ? ' AND s.stage=?' : '';
       const filas = connection.prepare(`
         SELECT st.*, g.series_id
         FROM valorant_player_game_stats st
         JOIN valorant_games g ON g.id = st.game_id
         JOIN valorant_series s ON s.id = g.series_id
-        WHERE s.event_id=? AND s.stage=? AND g.status='COMPLETED'`).all(eventId, stage);
+        WHERE s.event_id=?${stageFilter} AND g.status='COMPLETED'`).all(...(stage ? [eventId, stage] : [eventId]));
 
       const porJugador = new Map();
       for (const fila of filas) {
@@ -909,6 +910,7 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             games: 0,
             kills: 0, deaths: 0, assists: 0,
             firstKills: 0, firstDeaths: 0,
+            kdKills: 0, kdDeaths: 0, kdSamples: 0,
             agents: new Map(),
             // Cada promedio lleva su propio contador: no todas las partidas
             // aportan todos los datos.
@@ -922,6 +924,11 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         for (const campo of ['kills', 'deaths', 'assists']) {
           const valor = fila[campo];
           if (valor !== null) { acumulado[campo] += valor; acumulado.counted[campo] += 1; }
+        }
+        if (fila.kills !== null && fila.deaths !== null) {
+          acumulado.kdKills += fila.kills;
+          acumulado.kdDeaths += fila.deaths;
+          acumulado.kdSamples += 1;
         }
         if (fila.first_kills !== null) { acumulado.firstKills += fila.first_kills; acumulado.counted.firstKills += 1; }
         if (fila.first_deaths !== null) { acumulado.firstDeaths += fila.first_deaths; acumulado.counted.firstDeaths += 1; }
@@ -952,8 +959,8 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           firstDeaths: acumulado.counted.firstDeaths ? acumulado.firstDeaths : null,
           // Sin muertes registradas no hay K/D que calcular; y con cero muertes
           // se enseña el número de kills, no una división por cero.
-          kd: acumulado.counted.deaths
-            ? Math.round((acumulado.kills / Math.max(1, acumulado.deaths)) * 100) / 100
+          kd: acumulado.kdSamples
+            ? Math.round((acumulado.kdKills / Math.max(1, acumulado.kdDeaths)) * 100) / 100
             : null,
           acs: media(acumulado.promedios.acs),
           adr: media(acumulado.promedios.adr),
@@ -965,7 +972,13 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             acs: acumulado.promedios.acs.length,
             adr: acumulado.promedios.adr.length,
             hsPercent: acumulado.promedios.hsPercent.length,
-            kastPercent: acumulado.promedios.kastPercent.length
+            kastPercent: acumulado.promedios.kastPercent.length,
+            kills: acumulado.counted.kills,
+            deaths: acumulado.counted.deaths,
+            assists: acumulado.counted.assists,
+            firstKills: acumulado.counted.firstKills,
+            firstDeaths: acumulado.counted.firstDeaths,
+            kd: acumulado.kdSamples
           },
           topAgent: agentes.length ? agentes[0][0] : null
         };
@@ -1309,7 +1322,7 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
           ? this.listMaps(eventId).filter((mapa) => mapa.enabled)
           : [],
         veto: this.getVetoConfiguration(eventId),
-        playerStats: this.tournamentPlayerStats(eventId),
+        playerStats: this.tournamentPlayerStats(eventId, { stage: null }),
         // Sólo lo justo para poner nombre a las filas de estadísticas: el
         // nombre visible, que ya sale en la página del draft. Ni Riot ID, ni
         // nada de Discord.

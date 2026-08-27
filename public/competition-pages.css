@@ -243,6 +243,9 @@ p { text-wrap: pretty; }
 .placements-panel b { color: var(--gold); font: .8rem/1 var(--mono); }
 
 /* Statistics */
+.global-ranking-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; align-items: center; margin-bottom: 1px; padding: 1rem 1.2rem; border: 1px solid rgba(var(--phase-rgb), .35); background: linear-gradient(90deg, rgba(var(--phase-rgb), .12), rgba(var(--phase-rgb), .025)); }
+.global-ranking-note strong { color: var(--phase-accent); font: .58rem/1 var(--mono); letter-spacing: .12em; white-space: nowrap; }
+.global-ranking-note p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.55; }
 .stats-controls { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 1px; margin-bottom: 1px; background: var(--line); border: 1px solid var(--line); }
 .stats-controls label { padding: .8rem; background: var(--surface); }
 .stats-controls label > span { display: block; margin-bottom: .5rem; color: var(--muted); font: .48rem/1 var(--mono); letter-spacing: .1em; }
@@ -253,6 +256,7 @@ p { text-wrap: pretty; }
 .stat-leader span { color: var(--muted); font: .5rem/1 var(--mono); letter-spacing: .1em; }
 .stat-leader strong { margin-top: auto; font: 1.8rem/1 var(--display); text-transform: uppercase; }
 .stat-leader b { margin-top: .7rem; color: var(--phase-accent); font: 2.4rem/1 var(--display); }
+.player-ranking-table .global-score-cell { color: var(--phase-accent); font-weight: 700; }
 .team-performance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border: 1px solid var(--line); background: var(--line); }
 .team-performance-grid article { padding: 1.2rem; background: var(--surface); }
 .team-performance-grid span { color: var(--phase-accent); font: .55rem/1 var(--mono); }
@@ -343,6 +347,8 @@ p { text-wrap: pretty; }
   .competition-bracket, .regular-route-grid, .stats-podium { grid-template-columns: 1fr; }
   .bracket-zone.zone-grand { grid-column: auto; }
   .stats-controls, .results-controls { grid-template-columns: 1fr; }
+  .global-ranking-note { grid-template-columns: 1fr; gap: .65rem; }
+  .global-ranking-note strong { white-space: normal; }
   .series-matchup, .match-scoreboard-teams { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .45rem; }
   .series-team strong { font-size: 1rem; }
   .match-scoreboard { min-height: 310px; }

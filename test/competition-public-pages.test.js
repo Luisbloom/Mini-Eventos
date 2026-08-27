@@ -132,6 +132,30 @@ describe('páginas públicas de la competición', () => {
     ], 'deaths', 'asc').map((row) => row.participantId).join(','), '3,2,1');
   });
 
+  it('calcula un ranking global comparable sin alterar las estadísticas originales', () => {
+    const rows = [
+      { participantId: 1, games: 4, acs: 260, kd: 1.5, adr: 170, kastPercent: 78, hsPercent: 31, kills: 80, deaths: 54, assists: 28, firstKills: 12, firstDeaths: 5 },
+      { participantId: 2, games: 4, acs: 205, kd: 1.05, adr: 135, kastPercent: 69, hsPercent: 24, kills: 60, deaths: 58, assists: 22, firstKills: 7, firstDeaths: 8 },
+      { participantId: 3, games: 1, acs: 280, kd: 1.7, adr: 180, kastPercent: 81, hsPercent: 35, kills: 22, deaths: 13, assists: 8, firstKills: 4, firstDeaths: 1 }
+    ];
+    const ranked = View.rankPlayers(View.scoreGlobalPlayers(rows), 'globalScore');
+    assert.deepEqual(ranked.map((row) => row.participantId), [1, 3, 2]);
+    assert.ok(ranked.every((row) => row.globalScore >= 0 && row.globalScore <= 100));
+    assert.equal(rows[0].globalScore, undefined);
+
+    const incomplete = View.scoreGlobalPlayers([
+      { participantId: 10, games: 3, acs: 220, kd: 1.1, deaths: 45, sampleSizes: { acs: 3, kd: 3, deaths: 3 } },
+      { participantId: 11, games: 3, acs: 220, kd: 1.1, deaths: null, sampleSizes: { acs: 3, kd: 3, deaths: 0 } }
+    ]);
+    assert.ok(incomplete[0].globalScore > incomplete[1].globalScore, 'omitir deaths no puede mejorar el índice');
+
+    const partial = View.scoreGlobalPlayers([
+      { participantId: 20, games: 4, acs: 220, sampleSizes: { acs: 4 } },
+      { participantId: 21, games: 4, acs: 220, sampleSizes: { acs: 1 } }
+    ]);
+    assert.ok(partial[0].globalScore > partial[1].globalScore, 'una sola muestra no pesa como cuatro');
+  });
+
   it('no publica puestos de playoffs hasta que esten decididos', () => {
     const placements = View.confirmedPlacements([
       { teamId: 1, position: null },

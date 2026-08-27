@@ -13,6 +13,7 @@
     PAUSED: 'Pausado'
   };
   const METRICS = {
+    overall: ['Global', 'Índice global de rendimiento'],
     acs: ['ACS', 'Puntuación media de combate'],
     kills: ['Kills', 'Bajas totales'],
     deaths: ['Deaths', 'Muertes totales (menos es mejor)'],
@@ -432,23 +433,27 @@
     const wrap = node('div', 'competition-table-scroll');
     const table = node('table', 'competition-table player-ranking-table');
     const head = node('thead'); const header = node('tr');
-    ['#', 'JUGADOR', 'EQUIPO', 'PJ', 'ACS', 'K', 'D', 'A', 'K/D', 'ADR', 'HS%', 'KAST', 'FB'].forEach((label) => { const cell = node('th', '', label); cell.scope = 'col'; header.append(cell); });
+    ['#', 'JUGADOR', 'EQUIPO', 'PJ', 'GLOBAL', 'ACS', 'K', 'D', 'A', 'K/D', 'ADR', 'HS%', 'KAST', 'FB'].forEach((label) => { const cell = node('th', '', label); cell.scope = 'col'; header.append(cell); });
     head.append(header); const body = node('tbody');
     rows.forEach((row, index) => {
       const tr = node('tr', index < 3 ? 'is-top-player' : '');
       const position = node('th', 'position-cell', String(index + 1).padStart(2, '0')); position.scope = 'row';
       const value = (field) => row[field] === null || row[field] === undefined ? '—' : row[field];
-      tr.append(position, node('td', 'team-name-cell', names.get(row.participantId) || `Jugador ${row.participantId}`), node('td', '', teams.get(row.teamId) || '—'), node('td', '', value('games')), node('td', metric === 'acs' ? 'is-highlight' : '', value('acs')), node('td', metric === 'kills' ? 'is-highlight' : '', value('kills')), node('td', '', value('deaths')), node('td', metric === 'assists' ? 'is-highlight' : '', value('assists')), node('td', metric === 'kd' ? 'is-highlight' : '', value('kd')), node('td', '', value('adr')), node('td', '', value('hsPercent')), node('td', '', value('kastPercent')), node('td', metric === 'firstKills' ? 'is-highlight' : '', value('firstKills')));
+      tr.append(position, node('td', 'team-name-cell', names.get(row.participantId) || `Jugador ${row.participantId}`), node('td', '', teams.get(row.teamId) || '—'), node('td', '', value('games')), node('td', metric === 'overall' ? 'is-highlight global-score-cell' : 'global-score-cell', value('globalScore')), node('td', metric === 'acs' ? 'is-highlight' : '', value('acs')), node('td', metric === 'kills' ? 'is-highlight' : '', value('kills')), node('td', '', value('deaths')), node('td', metric === 'assists' ? 'is-highlight' : '', value('assists')), node('td', metric === 'kd' ? 'is-highlight' : '', value('kd')), node('td', '', value('adr')), node('td', '', value('hsPercent')), node('td', '', value('kastPercent')), node('td', metric === 'firstKills' ? 'is-highlight' : '', value('firstKills')));
       body.append(tr);
     });
     table.append(head, body); wrap.append(table); return wrap;
   }
 
   function renderStats(context) {
-    const stats = context.state.playerStats || [];
-    if (!stats.length) return emptyState('Todavía no hay estadísticas', context.state.preview ? 'Las estadísticas aparecerán cuando comiencen los partidos.' : 'Aparecerán cuando existan partidas con datos de jugadores confirmados.');
+    const rawStats = context.state.playerStats || [];
+    if (!rawStats.length) return emptyState('Todavía no hay estadísticas', context.state.preview ? 'Las estadísticas aparecerán cuando comiencen los partidos.' : 'Aparecerán cuando existan partidas con datos de jugadores confirmados.');
+    const stats = View.scoreGlobalPlayers(rawStats);
     const section = node('section', 'content-section stats-section');
-    section.append(sectionHeader(1, 'RANKING INDIVIDUAL', 'Rendimiento de jugadores', 'Ordena por la métrica que te interese y reduce la lista por equipo.'));
+    section.append(sectionHeader(1, 'CLASIFICACIÓN INDIVIDUAL', 'Ranking global de jugadores', 'Una lectura conjunta del rendimiento confirmado durante todo el torneo.'));
+    const formula = node('aside', 'global-ranking-note');
+    formula.append(node('strong', '', 'ÍNDICE GLOBAL · 0–100'), node('p', '', 'Combina todas las fases y ACS, K/D, ADR, KAST, kills, deaths, asistencias, headshots y primeras bajas y muertes. Compara promedios por partida, pondera la muestra real y los datos ausentes no suman.'));
+    section.append(formula);
     const controls = node('form', 'stats-controls'); controls.addEventListener('submit', (event) => event.preventDefault());
     const searchLabel = node('label'); searchLabel.append(node('span', '', 'BUSCAR JUGADOR'));
     const search = node('input'); search.type = 'search'; search.name = 'q'; search.autocomplete = 'off'; search.placeholder = 'Nombre del jugador…'; searchLabel.append(search);
@@ -467,10 +472,14 @@
     const repaint = () => {
       const names = playerNameMap(context);
       const normalizedSearch = search.value.trim().toLocaleLowerCase('es');
-      const rows = View.rankPlayers(stats.filter((row) => (!team.value || Number(team.value) === row.teamId) && (!normalizedSearch || (names.get(row.participantId) || '').toLocaleLowerCase('es').includes(normalizedSearch))), metric.value, metric.value === 'deaths' ? 'asc' : 'desc');
+      const metricField = metric.value === 'overall' ? 'globalScore' : metric.value;
+      const rows = View.rankPlayers(stats.filter((row) => (!team.value || Number(team.value) === row.teamId) && (!normalizedSearch || (names.get(row.participantId) || '').toLocaleLowerCase('es').includes(normalizedSearch))), metricField, metric.value === 'deaths' ? 'asc' : 'desc');
       podium.replaceChildren(...rows.slice(0, 3).map((row, index) => {
         const card = node('article', `stat-leader place-${index + 1}`);
-        card.append(node('span', '', `#${index + 1} · ${METRICS[metric.value][0]}`), node('strong', '', names.get(row.participantId) || `Jugador ${row.participantId}`), node('b', '', row[metric.value] ?? '—'));
+        const displayedValue = row[metricField] === null || row[metricField] === undefined
+          ? '—'
+          : `${row[metricField]}${metric.value === 'overall' ? ' / 100' : ''}`;
+        card.append(node('span', '', `#${index + 1} · ${METRICS[metric.value][0]}`), node('strong', '', names.get(row.participantId) || `Jugador ${row.participantId}`), node('b', '', displayedValue));
         return card;
       }));
       tableTarget.replaceChildren(renderStatsTable(context, rows, metric.value));
@@ -478,7 +487,7 @@
     const update = () => {
       const params = new URLSearchParams();
       if (search.value.trim()) params.set('q', search.value.trim());
-      if (metric.value !== 'acs') params.set('metric', metric.value);
+      if (metric.value !== 'overall') params.set('metric', metric.value);
       if (team.value) params.set('team', team.value);
       history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`);
       repaint();

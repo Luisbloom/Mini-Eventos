@@ -99,6 +99,76 @@
     });
   }
 
+  /**
+   * Índice global relativo (0–100). Normaliza cada métrica contra el resto del
+   * torneo, usa promedios por partida para los acumulados y reduce el peso de
+   * muestras pequeñas. No modifica las filas recibidas.
+   */
+  function scoreGlobalPlayers(rows = []) {
+    const sampleSize = (row, field) => {
+      const explicit = row?.sampleSizes?.[field];
+      return Number.isFinite(Number(explicit)) ? Number(explicit) : Number(row?.games) || 0;
+    };
+    const perGame = (field) => (row) => {
+      const samples = sampleSize(row, field);
+      const value = row?.[field];
+      return samples > 0 && value !== null && value !== undefined && value !== ''
+        ? Number(value) / samples
+        : null;
+    };
+    const direct = (field) => (row) => row?.[field];
+    const metrics = [
+      { field: 'acs', read: direct('acs'), weight: 22 },
+      { field: 'kd', read: direct('kd'), weight: 18 },
+      { field: 'adr', read: direct('adr'), weight: 12 },
+      { field: 'kastPercent', read: direct('kastPercent'), weight: 12 },
+      { field: 'kills', read: perGame('kills'), weight: 10 },
+      { field: 'deaths', read: perGame('deaths'), weight: 8, lowerIsBetter: true },
+      { field: 'assists', read: perGame('assists'), weight: 6 },
+      { field: 'firstKills', read: perGame('firstKills'), weight: 5 },
+      { field: 'hsPercent', read: direct('hsPercent'), weight: 4 },
+      { field: 'firstDeaths', read: perGame('firstDeaths'), weight: 3, lowerIsBetter: true }
+    ];
+    const valid = (value) => value !== null && value !== undefined && value !== ''
+      && Number.isFinite(Number(value));
+    const ranges = metrics.map((metric) => {
+      const values = rows.map(metric.read).filter(valid).map(Number);
+      return values.length ? { min: Math.min(...values), max: Math.max(...values) } : null;
+    });
+    const activeWeight = metrics.reduce((total, metric, index) => total + (ranges[index] ? metric.weight : 0), 0);
+    const maxGames = Math.max(1, ...rows.map((row) => Number(row?.games) || 0));
+
+    return rows.map((row) => {
+      let score = 0;
+      let coveredWeight = 0;
+      metrics.forEach((metric, index) => {
+        const value = metric.read(row);
+        const range = ranges[index];
+        if (!range) return;
+        const games = Math.max(1, Number(row?.games) || 0);
+        const metricCoverage = Math.min(1, sampleSize(row, metric.field) / games);
+        if (!valid(value) || metricCoverage <= 0) return;
+        const normalized = range.max === range.min
+          ? 0.5
+          : (Number(value) - range.min) / (range.max - range.min);
+        score += (metric.lowerIsBetter ? 1 - normalized : normalized) * metric.weight * metricCoverage;
+        coveredWeight += metric.weight * metricCoverage;
+      });
+      if (!coveredWeight || !activeWeight) return { ...row, globalScore: null, globalCoverage: 0 };
+      // Los datos ausentes no desaparecen del denominador: simplemente no
+      // suman. Así nunca mejoran artificialmente la posición de un jugador.
+      const performance = score / activeWeight;
+      const coverage = coveredWeight / activeWeight;
+      const sample = Math.min(1, (Number(row?.games) || 0) / maxGames);
+      const reliability = (0.5 + (0.5 * sample)) * (0.8 + (0.2 * coverage));
+      return {
+        ...row,
+        globalScore: Math.round(performance * reliability * 1000) / 10,
+        globalCoverage: Math.round(coverage * 100) / 100
+      };
+    });
+  }
+
   function confirmedPlacements(rows = []) {
     return rows.filter((row) => row?.position !== null
       && row?.position !== undefined
@@ -134,6 +204,7 @@
     findSeries,
     nextSeries,
     rankPlayers,
+    scoreGlobalPlayers,
     confirmedPlacements,
     previewCompetitionState
   };
