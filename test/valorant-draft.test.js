@@ -35,12 +35,12 @@ describe('draft de Valorant', () => {
     };
   }
 
-  function montar({ discord = fakeDiscord(), slug = 'torneo-valorant' } = {}) {
+  function montar({ discord = fakeDiscord(), slug = 'torneo-valorant', discordAvatarFetch } = {}) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-valorant-'));
     directories.push(directory);
     const database = openDatabase(path.join(directory, 'tournament.db'));
     bases.push(database);
-    const app = createApp({ database, adminToken: ADMIN, discord });
+    const app = createApp({ database, adminToken: ADMIN, discord, discordAvatarFetch });
     // El evento de Valorant ya existe en la plataforma; aqui se crea igual.
     const event = database.createEvent({
       slug, name: 'Torneo Valorant', game: 'Valorant',
@@ -1075,7 +1075,7 @@ describe('draft de Valorant', () => {
       const response = await request(app).get('/api/me/profile').set('Cookie', sesion).expect(200);
       assert.equal(response.body.authenticated, true);
       assert.equal(response.body.displayName, 'Luis');
-      assert.equal(response.body.avatar, null);
+      assert.equal(response.body.avatar, '/api/me/avatar');
       assert.equal(response.body.registrations.length, 2);
       assert.deepEqual(response.body.registrations[0], {
         slug: 'torneo-valorant',
@@ -1114,6 +1114,33 @@ describe('draft de Valorant', () => {
         assert.equal(serialized.includes(privateKey), false, privateKey);
       }
       assert.match(response.headers['cache-control'], /no-store/);
+    });
+
+    it('sirve la foto de Discord sin exponer su identificador al navegador', async () => {
+      const requests = [];
+      const discordAvatarFetch = async (url) => {
+        requests.push(String(url));
+        return new Response(Buffer.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png', 'Content-Length': '4' }
+        });
+      };
+      const { app } = montar({
+        discord: fakeDiscord({
+          discordUserId: '9001', username: 'luis', displayName: 'Luis', avatar: 'avatar_hash'
+        }),
+        discordAvatarFetch
+      });
+      const { sesion } = await login(app);
+
+      await request(app).get('/api/me/avatar').expect(401);
+      const response = await request(app).get('/api/me/avatar').set('Cookie', sesion).expect(200);
+
+      assert.equal(response.headers['content-type'], 'image/png');
+      assert.match(response.headers['cache-control'], /private/);
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0], 'https://cdn.discordapp.com/avatars/9001/avatar_hash.png?size=256');
+      assert.equal(response.text?.includes('9001') || false, false);
     });
   });
 

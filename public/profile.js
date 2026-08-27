@@ -134,6 +134,21 @@ function showProfile(profile) {
   byId('profile-content').hidden = false;
   byId('profile-name').textContent = profile.displayName;
   byId('profile-initials').textContent = initials(profile.displayName);
+  const avatar = byId('profile-avatar-image');
+  const fallback = byId('profile-initials');
+  avatar.hidden = true;
+  fallback.hidden = false;
+  if (profile.avatar) {
+    avatar.addEventListener('load', () => {
+      avatar.hidden = false;
+      fallback.hidden = true;
+    }, { once: true });
+    avatar.addEventListener('error', () => {
+      avatar.hidden = true;
+      fallback.hidden = false;
+    }, { once: true });
+    avatar.src = profile.avatar;
+  }
   byId('profile-event-count').textContent = String(registrations.length);
   byId('profile-active-count').textContent = String(active.length);
   byId('profile-team-count').textContent = String(registrations.filter((item) => item.team).length);

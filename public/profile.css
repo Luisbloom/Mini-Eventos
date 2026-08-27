@@ -79,10 +79,12 @@
   gap: clamp(1.2rem, 3vw, 2.2rem);
 }
 .profile-avatar {
-  width: clamp(76px, 9vw, 104px); aspect-ratio: 1; display: grid; place-items: center;
+  position: relative; width: clamp(76px, 9vw, 104px); aspect-ratio: 1; overflow: hidden;
+  display: grid; place-items: center;
   border-radius: 24%; background: var(--lime); color: var(--void); font: clamp(1.65rem, 4vw, 2.7rem)/1 var(--display);
   box-shadow: inset -10px -10px 0 rgba(0, 0, 0, .12), 0 16px 42px rgba(184, 255, 44, .08);
 }
+.profile-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .profile-identity-copy { min-width: 0; }
 .profile-identity h1 {
   max-width: 760px; overflow-wrap: anywhere; font-size: clamp(3rem, 7vw, 6rem);

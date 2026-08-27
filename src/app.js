@@ -125,6 +125,7 @@ function createApp({
   reporterToken = null,
   reporterPrivateUrl = null,
   discord = null,
+  discordAvatarFetch = globalThis.fetch,
   secureCookies = false,
   // El OCR se puede sustituir por uno falso en las pruebas: lo que hay que
   // probar es el parser y la confirmación, no que Tesseract acierte.
@@ -792,11 +793,45 @@ function createApp({
       response.json({
         authenticated: true,
         displayName: session.account.displayName || session.account.username,
-        // El perfil mantiene la misma política de privacidad que /api/me.
-        avatar: null,
+        // La ruta propia entrega los píxeles sin revelar el id ni el hash de Discord.
+        avatar: session.account.avatar ? '/api/me/avatar' : null,
         registrations: database.valorant.profileRegistrations(session.account.id)
       });
     } catch (error) { next(error); }
+  });
+
+  app.get('/api/me/avatar', async (request, response) => {
+    const session = currentSession(request);
+    if (!session) return sendError(response, 401, 'AUTH_REQUIRED', 'Entra con Discord para ver tu avatar.');
+    const { discordUserId, avatar } = session.account;
+    if (!discordUserId || !avatar) {
+      return sendError(response, 404, 'AVATAR_NOT_FOUND', 'Esta cuenta no tiene avatar de Discord.');
+    }
+
+    try {
+      const id = encodeURIComponent(String(discordUserId));
+      const hash = encodeURIComponent(String(avatar));
+      const upstream = await discordAvatarFetch(
+        `https://cdn.discordapp.com/avatars/${id}/${hash}.png?size=256`,
+        { headers: { Accept: 'image/png' }, signal: AbortSignal.timeout(5000) }
+      );
+      const contentType = upstream.headers.get('content-type') || '';
+      const contentLength = Number(upstream.headers.get('content-length') || 0);
+      if (!upstream.ok || !/^image\/(png|jpeg|webp|gif)(;|$)/i.test(contentType) || contentLength > 2 * 1024 * 1024) {
+        return sendError(response, 502, 'AVATAR_UNAVAILABLE', 'No se ha podido obtener el avatar de Discord.');
+      }
+      const bytes = Buffer.from(await upstream.arrayBuffer());
+      if (bytes.length > 2 * 1024 * 1024) {
+        return sendError(response, 502, 'AVATAR_UNAVAILABLE', 'El avatar de Discord supera el tamaño permitido.');
+      }
+      response.set({
+        'Content-Type': contentType,
+        'Cache-Control': 'private, max-age=300, no-transform'
+      });
+      return response.send(bytes);
+    } catch {
+      return sendError(response, 502, 'AVATAR_UNAVAILABLE', 'No se ha podido obtener el avatar de Discord.');
+    }
   });
 
   /**

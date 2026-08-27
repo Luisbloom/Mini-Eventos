@@ -43,6 +43,7 @@ describe('Jartiland Among Us API', () => {
     assert.equal(response.status, 200);
     assert.match(response.headers['content-type'], /text\/html/);
     assert.match(response.text, /id="profile-main"/);
+    assert.match(response.text, /id="profile-avatar-image"/);
     assert.match(response.text, /src="\/profile\.js"/);
   });
 
