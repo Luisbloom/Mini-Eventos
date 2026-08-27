@@ -24,58 +24,90 @@ function fact(label, value) {
 
 function eventCard(registration) {
   const article = document.createElement('article');
-  article.className = 'profile-event-card';
+  article.className = `profile-event-card${registration.archived ? ' is-archived' : ''}`;
   article.style.setProperty('--event-accent', registration.accentColor || 'var(--lime)');
 
-  const main = document.createElement('div');
-  main.className = 'profile-event-main';
-  const kicker = document.createElement('p');
-  kicker.className = 'profile-event-kicker';
-  kicker.textContent = registration.archived ? `${registration.game} · HISTÓRICO` : registration.game;
+  const cover = document.createElement('figure');
+  cover.className = 'profile-event-cover';
+  const fallback = document.createElement('span');
+  fallback.textContent = String(registration.game || 'J').slice(0, 1).toUpperCase();
+  cover.append(fallback);
+  if (registration.coverImage) {
+    const image = document.createElement('img');
+    image.src = registration.coverImage;
+    image.alt = `Portada de ${registration.eventName}`;
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    image.addEventListener('error', () => { image.hidden = true; });
+    cover.append(image);
+  }
+
+  const content = document.createElement('div');
+  content.className = 'profile-event-content';
+  const heading = document.createElement('header');
+  const game = document.createElement('p');
+  game.className = 'profile-event-game';
+  game.textContent = registration.game;
   const title = document.createElement('h3');
   title.textContent = registration.eventName;
   const status = document.createElement('span');
   status.className = 'profile-event-status';
   status.textContent = registration.eventStatus;
-  main.append(kicker, title, status);
+  heading.append(game, title, status);
 
-  const details = document.createElement('div');
-  details.className = 'profile-event-details';
   const facts = document.createElement('dl');
   facts.className = 'profile-event-facts';
   const registrationLabels = {
-    pending: 'Pendiente de confirmación', confirmed: 'Confirmada',
-    absent: 'Ausente', disqualified: 'Descalificada'
+    pending: 'Pendiente', confirmed: 'Confirmada', absent: 'Ausente', disqualified: 'Descalificada'
   };
-  facts.append(fact('INSCRIPCIÓN', registrationLabels[registration.registrationStatus] || registration.registrationStatus));
-  if (registration.riotId) facts.append(fact('RIOT ID', registration.riotId));
-  if (registration.peakRank) facts.append(fact('RANGO MÁXIMO', registration.peakRank));
+  facts.append(fact('Inscripción', registrationLabels[registration.registrationStatus] || registration.registrationStatus));
+  if (registration.riotId) facts.append(fact('Riot ID', registration.riotId));
+  if (registration.peakRank) facts.append(fact('Rango máximo', registration.peakRank));
   if (registration.team) {
     const role = registration.team.role === 'captain' ? 'Capitán' : 'Jugador';
-    facts.append(fact('EQUIPO', `${registration.team.name} · ${role}`));
+    facts.append(fact('Equipo', `${registration.team.name} · ${role}`));
   }
-  details.append(facts);
+  content.append(heading, facts);
   if (registration.playerBio) {
     const bio = document.createElement('p');
     bio.className = 'profile-event-bio';
     bio.textContent = registration.playerBio;
-    details.append(bio);
+    content.append(bio);
   }
+
+  const footer = document.createElement('footer');
   if (registration.archived) {
     const historical = document.createElement('span');
     historical.className = 'profile-event-history';
-    historical.textContent = 'EVENTO ARCHIVADO';
-    details.append(historical);
+    historical.textContent = 'Evento finalizado';
+    footer.append(historical);
   } else {
     const link = document.createElement('a');
     link.className = 'profile-event-link';
     link.href = `/eventos/${encodeURIComponent(registration.slug)}`;
-    link.textContent = 'ABRIR EVENTO →';
-    details.append(link);
+    link.textContent = 'Ir al evento →';
+    footer.append(link);
   }
+  content.append(footer);
 
-  article.append(main, details);
+  article.append(cover, content);
   return article;
+}
+
+function eventGroup(title, registrations) {
+  const section = document.createElement('section');
+  section.className = 'profile-event-group';
+  const heading = document.createElement('header');
+  const name = document.createElement('h3');
+  name.textContent = title;
+  const count = document.createElement('span');
+  count.textContent = String(registrations.length);
+  heading.append(name, count);
+  const grid = document.createElement('div');
+  grid.className = 'profile-event-grid';
+  grid.append(...registrations.map(eventCard));
+  section.append(heading, grid);
+  return section;
 }
 
 function showLogin(discord) {
@@ -95,17 +127,22 @@ function showLogin(discord) {
 
 function showProfile(profile) {
   const registrations = profile.registrations || [];
+  const active = registrations.filter((item) => !item.archived);
+  const archived = registrations.filter((item) => item.archived);
   byId('profile-loading').hidden = true;
   byId('profile-login').hidden = true;
   byId('profile-content').hidden = false;
   byId('profile-name').textContent = profile.displayName;
   byId('profile-initials').textContent = initials(profile.displayName);
   byId('profile-event-count').textContent = String(registrations.length);
-  byId('profile-active-count').textContent = String(registrations.filter((item) => !item.archived).length);
+  byId('profile-active-count').textContent = String(active.length);
   byId('profile-team-count').textContent = String(registrations.filter((item) => item.team).length);
   byId('profile-empty').hidden = registrations.length > 0;
   byId('profile-registrations').hidden = registrations.length === 0;
-  byId('profile-registrations').replaceChildren(...registrations.map(eventCard));
+  const groups = [];
+  if (active.length) groups.push(eventGroup('Ahora', active));
+  if (archived.length) groups.push(eventGroup('Historial', archived));
+  byId('profile-registrations').replaceChildren(...groups);
   setConnection(true, 'SESIÓN ACTIVA');
 }
 
