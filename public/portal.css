@@ -52,6 +52,5 @@
 @media (max-width: 600px) { .portal-hero { min-height: 570px; padding-top: 4.5rem; gap: 2.5rem; } .hero-logo { right: 2%; top: 0; width: min(58vw, 240px); opacity: .32; } .board-heading { display: block; } .board-count { margin-top: 1.5rem; } .event-card { min-height: 560px; grid-template-columns: 118px 1fr; } .event-card-content { padding: 1.35rem; } .event-card h3 { font-size: 2.35rem; } .event-meta { grid-template-columns: 1fr; } .event-meta .minimum-meta, .event-meta .registration-meta { grid-column: auto; } .portal-footer { gap: 1rem; flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .event-card { animation: none; } }
 
-.event-card-soon .event-cover { filter: grayscale(.75) brightness(.55); }
 .event-link-disabled { border-color: var(--line); color: var(--muted); cursor: default; letter-spacing: .12em; }
 .event-link-disabled:hover { background: transparent; color: var(--muted); }
