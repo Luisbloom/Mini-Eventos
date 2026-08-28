@@ -16,10 +16,22 @@
 .stage-progress li button strong { font: 1.65rem/1 var(--display); text-transform: uppercase; }
 .stage-progress li button span { color: var(--muted); font: .52rem/1 var(--mono); letter-spacing: .12em; }
 .stage-progress li button b { color: var(--event-accent); font: .54rem/1 var(--mono); }
+.map-plan { margin: 1.5rem 0; border: 1px solid var(--line); background: color-mix(in srgb,var(--event-accent) 3%,transparent); }
+.map-plan > header { padding: 1.2rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+.map-plan > header span { color: var(--event-accent); font: .52rem/1 var(--mono); letter-spacing: .12em; }
+.map-plan h3 { margin: 0; font: 1.5rem/1 var(--display); text-transform: uppercase; }
+.map-schedule { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); }
+.map-schedule li { min-height: 110px; padding: 1rem; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: space-between; gap: 1.5rem; }
+.map-schedule li:last-child { border-right: 0; }
+.map-schedule span { color: var(--muted); font: .5rem/1 var(--mono); letter-spacing: .1em; }
+.map-schedule strong { font: 1.25rem/1 var(--display); text-transform: uppercase; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 800px) {
   .amongus-competition-hero { grid-template-columns: 1fr; min-height: 620px; }
   .amongus-competition-hero h1 { font-size: clamp(3.7rem,18vw,7rem); }
+  .map-schedule { grid-template-columns: 1fr; }
+  .map-schedule li { min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; align-items: center; }
+  .map-schedule li:last-child { border-bottom: 0; }
 }
 @media (max-width: 520px) {
   .amongus-competition-page .back-long { display: none; }

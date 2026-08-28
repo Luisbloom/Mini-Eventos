@@ -130,6 +130,20 @@ function renderStageBoard(stage) {
   else target.replaceChildren(competitionTable(stage));
 }
 
+function renderMapSchedule(stage) {
+  byId('map-plan-title').textContent = `Mapas · ${stage.name}`;
+  byId('map-schedule').replaceChildren(...(stage.mapSchedule || []).map((slot) => {
+    const item = document.createElement('li');
+    item.append(cell('span', `PARTIDA ${String(slot.matchNumber).padStart(2, '0')}`), cell('strong', slot.map));
+    return item;
+  }));
+}
+
+function selectStage(stage) {
+  renderMapSchedule(stage);
+  renderStageBoard(stage);
+}
+
 async function loadCompetition() {
   const refresh = byId('refresh-competition');
   refresh.classList.add('loading');
@@ -151,11 +165,11 @@ async function loadCompetition() {
       button.type = 'button';
       button.innerHTML = `<span>FASE ${String(stage.position).padStart(2, '0')}</span><strong></strong><b>${statusLabel(stage.status)}</b>`;
       button.querySelector('strong').textContent = stage.name;
-      button.addEventListener('click', () => renderStageBoard(stage));
+      button.addEventListener('click', () => selectStage(stage));
       item.append(button);
       return item;
     }));
-    if (active) renderStageBoard(active);
+    if (active) selectStage(active);
 
     const finalStage = stages.find((stage) => stage.type === 'final');
     const finalists = finalStage?.participants || [];

@@ -28,6 +28,7 @@ const {
 const { readCapture, buildPreview } = require('./services/captures/ingest');
 const { createTesseractProvider } = require('./services/ocr');
 const { createReporterContextResolver } = require('./services/reporter-context');
+const { mapScheduleForStage } = require('./amongus-maps');
 const {
   ReporterAuthError,
   createReporterAuthorizer,
@@ -294,7 +295,7 @@ function createApp({
       const stages = database.competition.listStages(event.id).filter((stage) => stage.enabled).map((stage) => {
         const groups = stage.groups.map((group) => ({ ...group, leaderboard: database.competition.getStageLeaderboard(stage.id, group.id) }));
         const leaderboard = stage.type === 'group_stage' ? null : database.competition.getStageLeaderboard(stage.id);
-        return { ...stage, groups, leaderboard };
+        return { ...stage, groups, leaderboard, mapSchedule: mapScheduleForStage(stage) };
       });
       const champion = stages.flatMap((stage) => stage.participants).find((participant) => participant.competitiveStatus === 'champion') || null;
       response.set('Cache-Control', 'no-store').json({ stages, champion });

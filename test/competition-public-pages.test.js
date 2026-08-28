@@ -126,6 +126,20 @@ describe('páginas públicas de la competición', () => {
     } }), ['competition', 'matches']);
   });
 
+  it('publica la rotación completa de mapas en grupos y final', async () => {
+    const application = app();
+    const response = await request(application)
+      .get('/api/events/among-us-agosto-2026/competition')
+      .expect(200);
+    const [groups, final] = response.body.stages;
+    assert.deepEqual(groups.mapSchedule.map((slot) => slot.map), [
+      'The Skeld', 'Mira HQ', 'Polus', 'The Airship', 'The Fungle'
+    ]);
+    assert.deepEqual(final.mapSchedule.map((slot) => slot.map), [
+      'Polus', 'The Fungle', 'Mira HQ', 'The Airship', 'The Skeld'
+    ]);
+  });
+
   it('expone las tres fases y el ranking en la navegación principal', () => {
     assert.deepEqual(View.navItems('copa-roja').map((item) => item.label), [
       'Resumen', 'Draft', 'Fase regular', 'Playoffs', 'Ranking'
