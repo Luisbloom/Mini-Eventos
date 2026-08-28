@@ -1633,10 +1633,17 @@ function createApp({
   app.use('/api', (_request, response) => sendError(response, 404, 'API_NOT_FOUND', 'La ruta de API no existe.'));
 
   app.get('/informacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/informacion`));
-  app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}#clasificacion`));
+  app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/competicion`));
   app.get('/perfil', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'profile.html')));
   const sendDraftPage = (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'draft.html'));
   const sendCompetitionPage = (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'competition-page.html'));
+  const sendCompetitionHome = (request, response) => {
+    const event = database.getEventBySlug(request.params.slug);
+    const page = String(event?.game || '').trim().toLowerCase() === 'among us'
+      ? 'amongus-competition.html'
+      : 'competition-page.html';
+    response.sendFile(path.join(PUBLIC_DIRECTORY, page));
+  };
   app.get('/eventos/:slug/draft', sendDraftPage);
   app.get('/eventos/:slug/competicion/draft', sendDraftPage);
   app.get('/eventos/:slug/competicion/fase-regular/jornadas/:jornada', sendCompetitionPage);
@@ -1647,7 +1654,7 @@ function createApp({
   app.get('/eventos/:slug/competicion/estadisticas', sendCompetitionPage);
   app.get('/eventos/:slug/competicion/resultados', sendCompetitionPage);
   app.get('/eventos/:slug/competicion/partidos/:matchId', sendCompetitionPage);
-  app.get('/eventos/:slug/competicion', sendCompetitionPage);
+  app.get('/eventos/:slug/competicion', sendCompetitionHome);
   app.get('/eventos/:slug/informacion', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'informacion.html')));
   app.get('/eventos/:slug', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));
   app.get('/eventos/:slug/:section', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));

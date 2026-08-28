@@ -1,0 +1,27 @@
+.amongus-competition-page { --event-accent: var(--lime); }
+.amongus-competition-hero { min-height: 430px; padding: clamp(5rem,9vw,9rem) clamp(1.25rem,5vw,5.5rem) clamp(3rem,6vw,5rem); border-bottom: 1px solid var(--line); background: radial-gradient(circle at 80% 20%, color-mix(in srgb,var(--event-accent) 15%,transparent),transparent 34rem); display: grid; grid-template-columns: minmax(0,1.25fr) minmax(280px,.55fr); gap: clamp(3rem,8vw,8rem); align-items: end; }
+.amongus-competition-hero h1 { max-width: 900px; margin: .6rem 0 1.2rem; font-size: clamp(4rem,10vw,10rem); line-height: .78; text-transform: uppercase; }
+.amongus-competition-hero .subtitle { max-width: 700px; color: var(--muted); font-size: clamp(1rem,1.6vw,1.3rem); line-height: 1.6; }
+.amongus-summary { margin: 0; border-top: 1px solid var(--line); }
+.amongus-summary div { min-height: 78px; padding: 1rem 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+.amongus-summary dt { color: var(--muted); font: .53rem/1 var(--mono); letter-spacing: .12em; }
+.amongus-summary dd { margin: 0; color: var(--event-accent); font: 1.15rem/1 var(--display); text-align: right; text-transform: uppercase; }
+.amongus-section-nav { position: sticky; top: 0; z-index: 7; min-height: 62px; padding: 0 clamp(1.25rem,5vw,5.5rem); border-bottom: 1px solid var(--line); background: rgba(8,11,13,.94); backdrop-filter: blur(15px); display: flex; align-items: center; gap: clamp(1rem,3vw,2.7rem); overflow-x: auto; }
+.amongus-section-nav a { flex: 0 0 auto; color: var(--muted); text-decoration: none; text-transform: uppercase; font: .54rem/1 var(--mono); letter-spacing: .11em; }
+.amongus-section-nav a:hover { color: var(--event-accent); }
+.amongus-competition-page .refresh { color: var(--event-accent); }
+.amongus-competition-page .refresh.loading span { animation: spin .8s linear infinite; }
+.stage-progress li { padding: 0; }
+.stage-progress li button { width: 100%; min-height: 125px; padding: 1.2rem; border: 0; background: transparent; color: var(--paper); cursor: pointer; display: grid; align-content: space-between; text-align: left; }
+.stage-progress li button strong { font: 1.65rem/1 var(--display); text-transform: uppercase; }
+.stage-progress li button span { color: var(--muted); font: .52rem/1 var(--mono); letter-spacing: .12em; }
+.stage-progress li button b { color: var(--event-accent); font: .54rem/1 var(--mono); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 800px) {
+  .amongus-competition-hero { grid-template-columns: 1fr; min-height: 620px; }
+  .amongus-competition-hero h1 { font-size: clamp(3.7rem,18vw,7rem); }
+}
+@media (max-width: 520px) {
+  .amongus-competition-page .back-long { display: none; }
+  .amongus-competition-page .primary-nav a { letter-spacing: .06em; }
+}

@@ -9,6 +9,7 @@ const request = require('supertest');
 const { createApp } = require('../src/app');
 const { openDatabase } = require('../src/database');
 const View = require('../public/competition-view');
+const AmongUsView = require('../public/amongus-competition-view');
 
 describe('páginas públicas de la competición', () => {
   const directories = [];
@@ -66,6 +67,63 @@ describe('páginas públicas de la competición', () => {
     assert.deepEqual(View.routeFor('/eventos/copa-roja/competicion/partidos/91'), {
       name: 'match', slug: 'copa-roja', parameter: 91
     });
+  });
+
+  it('mantiene la competición de Among Us separada del visor de Valorant', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-game-pages-'));
+    directories.push(directory);
+    const database = openDatabase(path.join(directory, 'test.db'));
+    databases.push(database);
+    database.createEvent({
+      slug: 'copa-valorant',
+      name: 'Copa Valorant',
+      game: 'Valorant',
+      description: 'Torneo por equipos',
+      modules: { competition: true, draft: true }
+    });
+    const application = createApp({ database, adminToken: 'test-admin' });
+
+    const amongUs = await request(application)
+      .get('/eventos/among-us-agosto-2026/competicion')
+      .expect(200);
+    assert.match(amongUs.text, /amongus-competition\.js/);
+    assert.match(amongUs.text, /id="stage-board"/);
+    assert.match(amongUs.text, /id="group-tabs"/);
+    assert.match(amongUs.text, /id="participant-list"/);
+    assert.match(amongUs.text, /id="match-list"/);
+    assert.doesNotMatch(amongUs.text, /competition-pages\.js/);
+
+    const valorant = await request(application)
+      .get('/eventos/copa-valorant/competicion')
+      .expect(200);
+    assert.match(valorant.text, /competition-pages\.js/);
+    assert.doesNotMatch(valorant.text, /amongus-competition\.js/);
+
+    const legacyLeaderboard = await request(application).get('/clasificacion').expect(302);
+    assert.equal(legacyLeaderboard.headers.location, '/eventos/among-us-agosto-2026/competicion');
+  });
+
+  it('presenta cada partida de Among Us con el contrato público y respeta sus módulos', () => {
+    const stages = [{ id: 7, name: 'Clasificación', groups: [{ id: 9, name: 'Grupo B' }] }];
+    const match = AmongUsView.describeMatch({
+      id: 31,
+      stageId: 7,
+      groupId: 9,
+      playedAt: '2026-08-20T18:00:00.000Z',
+      receivedAt: '2026-08-28T00:00:00.000Z',
+      result: { map: 'The Skeld', winner: 'crew', playerCount: 10 }
+    }, stages);
+
+    assert.deepEqual(match, {
+      title: 'The Skeld',
+      context: 'Clasificación · Grupo B',
+      timestamp: '2026-08-20T18:00:00.000Z',
+      winner: 'crew',
+      playerCount: 10
+    });
+    assert.deepEqual(AmongUsView.enabledSections({ modules: {
+      competition: true, participants: false, matches: true, schedule: false
+    } }), ['competition', 'matches']);
   });
 
   it('expone las tres fases y el ranking en la navegación principal', () => {
