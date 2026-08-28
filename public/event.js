@@ -39,6 +39,7 @@ function configureModules(event) {
   byId('information-link').hidden = !event.modules.information;
   byId('competition-link').href = `/eventos/${encodeURIComponent(event.slug)}/competicion`;
   byId('competition-link').hidden = !event.modules.competition;
+  byId('competition-link-copy').textContent = window.EventView.competitionAccessCopy(event);
   byId('premios').hidden = !event.modules.prizes;
   byId('inscripcion').hidden = !event.modules.registration;
 }

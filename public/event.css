@@ -48,6 +48,7 @@
 .event-primary-links a:hover { background: color-mix(in srgb,var(--event-accent) 9%,var(--surface)); }
 .event-primary-links span { color: var(--event-accent); font: .55rem/1 var(--mono); letter-spacing: .12em; }
 .event-primary-links strong { display: flex; justify-content: space-between; gap: 1rem; font: clamp(1.35rem,2.6vw,2.6rem)/.95 var(--display); text-transform: uppercase; }
+.event-primary-links strong em { font: inherit; }
 .event-primary-links b { color: var(--event-accent); font-weight: inherit; }
 .prizes-featured { border-bottom: 1px solid var(--line); }
 .event-prizes { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 1px; padding: 1px; background: var(--line); }
