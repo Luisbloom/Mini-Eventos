@@ -266,3 +266,15 @@ h2 { font: clamp(2.8rem, 6vw, 5.8rem)/.9 var(--display); letter-spacing: -.025em
 }
 
 .brand-logo { width: 40px; height: 40px; flex: none; display: block; object-fit: contain; }
+
+/* Banda legal. Va en todas las páginas públicas porque la obligación de
+   informar no depende de en cuál se haya entrado. */
+.legal-strip {
+  display: flex; flex-wrap: wrap; gap: .4rem 1.4rem;
+  align-items: center; justify-content: center;
+  padding: 1.1rem 1.5rem; border-top: 1px solid var(--line);
+  color: var(--muted); font: .55rem/1.6 var(--mono); letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.legal-strip a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
+.legal-strip a:hover, .legal-strip a:focus-visible { color: var(--paper); border-bottom-color: currentColor; }

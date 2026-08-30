@@ -1,0 +1,116 @@
+/*
+  Páginas legales y de error.
+
+  Texto largo para leer, no una interfaz: una sola columna estrecha, contraste
+  alto y nada que distraiga. La identidad la ponen la cabecera y la tipografía,
+  que son las mismas que en el resto del sitio.
+*/
+
+.legal-main {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 4rem;
+}
+
+.legal-hero { margin-bottom: 3rem; }
+.legal-hero .kicker {
+  margin: 0 0 1.2rem;
+  color: var(--muted);
+  font: .58rem/1 var(--mono);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+.legal-hero .kicker span { color: var(--lime); }
+.legal-hero h1 {
+  margin: 0 0 1.2rem;
+  font: clamp(2.6rem, 9vw, 4.4rem)/.92 var(--display);
+  text-transform: uppercase;
+  letter-spacing: -.01em;
+}
+.legal-hero h1 span { color: var(--muted); }
+.legal-hero > p {
+  margin: 0;
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.65;
+}
+
+.legal-body { border-top: 1px solid var(--line); padding-top: 2.5rem; }
+.legal-body h2 {
+  margin: 2.8rem 0 .9rem;
+  font: 1.45rem/1.15 var(--display);
+  text-transform: uppercase;
+  letter-spacing: .01em;
+}
+.legal-body h2:first-child { margin-top: 0; }
+.legal-body p, .legal-body li { line-height: 1.72; }
+.legal-body p { margin: 0 0 1.1rem; max-width: 68ch; }
+.legal-body ul { margin: 0 0 1.4rem; padding-left: 1.1rem; max-width: 68ch; }
+.legal-body li { margin-bottom: .6rem; padding-left: .3rem; }
+.legal-body li::marker { color: var(--lime); }
+.legal-body strong { color: var(--paper); }
+.legal-body a { color: var(--lime); text-decoration: underline; text-underline-offset: .2em; }
+
+/* Lo que falta por rellenar se ve. Un hueco disimulado se publica sin querer. */
+.legal-todo {
+  margin: 1.6rem 0;
+  padding: .9rem 1.1rem;
+  border-left: 3px solid var(--gold);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: .92rem;
+}
+.legal-todo strong { color: var(--gold); }
+
+/* ---------------------------------------------------------------- 404 */
+
+.notfound-main {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 5rem 1.5rem;
+  text-align: center;
+}
+.notfound-code {
+  margin: 0;
+  font: clamp(5rem, 22vw, 10rem)/1 var(--display);
+  color: var(--surface-raised);
+  letter-spacing: .02em;
+}
+.notfound-main h1 {
+  margin: -.4em 0 1.2rem;
+  font: clamp(2.2rem, 8vw, 3.4rem)/1 var(--display);
+  text-transform: uppercase;
+}
+.notfound-copy {
+  margin: 0 auto 2.5rem;
+  max-width: 46ch;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.notfound-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .8rem;
+  justify-content: center;
+}
+.notfound-actions a {
+  padding: .95rem 1.6rem;
+  border: 1px solid var(--line);
+  color: var(--paper);
+  font: .58rem/1 var(--mono);
+  letter-spacing: .14em;
+  text-decoration: none;
+}
+.notfound-primary { border-color: var(--lime); color: var(--lime); }
+.notfound-actions a:hover, .notfound-actions a:focus-visible {
+  border-color: var(--paper);
+  color: var(--paper);
+}
+
+@media (max-width: 600px) {
+  .legal-main { padding: 2.5rem 1.2rem 3rem; }
+  .legal-hero { margin-bottom: 2.2rem; }
+  .notfound-main { padding: 3.5rem 1.2rem; }
+  .notfound-actions a { width: 100%; }
+}
