@@ -977,6 +977,49 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  /*
+    Desempates que resuelve la organización. La aplicación detecta el empate y
+    se niega a sembrar al azar; esto es lo que le da salida.
+  */
+  app.get('/api/admin/events/:id/competition/tie-resolutions', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        resolutions: database.valorantCompetition.listTieResolutions(
+          id, request.query.stage || 'REGULAR')
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/admin/events/:id/competition/tie-resolutions', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.status(201).json({
+        resolutions: database.valorantCompetition.resolveTie(id, {
+          higherTeamId: request.body?.higherTeamId,
+          lowerTeamId: request.body?.lowerTeamId,
+          reason: request.body?.reason,
+          stage: request.body?.stage || 'REGULAR',
+          actor: 'admin'
+        })
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.delete('/api/admin/events/:id/competition/tie-resolutions', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({
+        resolutions: database.valorantCompetition.clearTieResolution(id, {
+          higherTeamId: request.body?.higherTeamId,
+          lowerTeamId: request.body?.lowerTeamId,
+          stage: request.body?.stage || 'REGULAR',
+          actor: 'admin'
+        })
+      });
+    } catch (error) { next(error); }
+  });
+
   /** Los equipos del evento, comprobando que el draft ha terminado. */
   function teamsReadyForSeason(id, response) {
     const draft = database.valorant.getDraft(id);

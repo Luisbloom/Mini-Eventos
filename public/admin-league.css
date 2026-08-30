@@ -74,3 +74,30 @@
   .league-series { flex-direction: column; align-items: stretch; }
   .league-teams { flex: initial; }
 }
+
+/* Desempates que decide la organización. Se enseñan junto a la tabla porque
+   es donde se ve el problema, y con el motivo delante: sin motivo no se
+   guarda, así que pedirlo después sería una trampa. */
+.league-ties { margin-top: 1rem; display: grid; gap: .6rem; }
+.tie-row {
+  padding: .9rem 1rem; border: 1px solid var(--gold);
+  display: grid; gap: .6rem; background: var(--surface);
+}
+.tie-row p { margin: 0; font-size: .85rem; line-height: 1.5; }
+.tie-reason {
+  width: 100%; min-height: 40px; padding: .55rem;
+  border: 1px solid var(--line); background: var(--void); color: var(--paper);
+}
+.tie-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.tie-actions button, .tie-row button {
+  padding: .65rem 1rem; border: 1px solid var(--line);
+  background: transparent; color: var(--paper);
+  font: .48rem/1 var(--mono); letter-spacing: .1em; cursor: pointer;
+}
+.tie-actions button:hover { border-color: var(--lime); color: var(--lime); }
+.tie-row.is-resolved {
+  border-color: var(--line);
+  grid-template-columns: 1fr auto; align-items: center;
+}
+.tie-row.is-resolved p { color: var(--muted); }
+.tie-row button.warn { border-color: var(--coral); color: var(--coral); }

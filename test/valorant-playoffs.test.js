@@ -251,6 +251,135 @@ describe('eliminatorias de Valorant', () => {
       assert.equal(playoffTeams.has(tabla.standings[5].teamId), false);
     });
 
+    /*
+      Detectar el empate y negarse a sembrar al azar sólo sirve si existe una
+      salida. Sin esto el torneo se quedaba parado sin nada que hacer.
+    */
+    describe('el desempate que resuelve la organización', () => {
+      for (const [frontera, posicion] of [['1/2', 1], ['2/3', 2], ['3/4', 3], ['4/5', 4]]) {
+        it(`desbloquea el cuadro cuando se ordena el empate ${frontera}`, async () => {
+          const contexto = ligaMontada(6);
+          const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES[frontera]);
+          const { database, app, event, equipos } = contexto;
+
+          const arriba = tabla.standings[posicion - 1].teamId;
+          const abajo = tabla.standings[posicion].teamId;
+
+          const puesto = await admin(app, 'post',
+            `/api/admin/events/${event.id}/competition/tie-resolutions`,
+            { higherTeamId: arriba, lowerTeamId: abajo, reason: 'Sorteo ante los capitanes' });
+          assert.equal(puesto.status, 201);
+          assert.equal(puesto.body.resolutions.length, 1);
+
+          // El empate deja de marcarse y el orden respeta lo decidido.
+          const resuelta = database.valorantCompetition.standings(event.id, { teams: equipos });
+          assert.equal(resuelta.tieRequiresAdmin, false);
+          assert.equal(resuelta.standings[posicion - 1].teamId, arriba);
+          assert.equal(resuelta.standings[posicion].teamId, abajo);
+
+          // Y ahora sí se genera el cuadro.
+          await admin(app, 'post', `/api/admin/events/${event.id}/playoffs/generate`, {})
+            .expect(201);
+        });
+      }
+
+      it('exige un motivo', async () => {
+        const contexto = ligaMontada(6);
+        const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES['1/2']);
+        const respuesta = await admin(contexto.app, 'post',
+          `/api/admin/events/${contexto.event.id}/competition/tie-resolutions`,
+          { higherTeamId: tabla.standings[0].teamId, lowerTeamId: tabla.standings[1].teamId });
+        assert.equal(respuesta.status, 400);
+        assert.equal(respuesta.body.error.code, 'TIE_REASON_REQUIRED');
+      });
+
+      it('no ordena a mano equipos que el deporte ya separa', async () => {
+        const contexto = ligaMontada(6);
+        const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES['5/6']);
+        // El 1º y el 2º no están empatados: eso sería reescribir el resultado.
+        const respuesta = await admin(contexto.app, 'post',
+          `/api/admin/events/${contexto.event.id}/competition/tie-resolutions`,
+          {
+            higherTeamId: tabla.standings[1].teamId,
+            lowerTeamId: tabla.standings[0].teamId,
+            reason: 'porque sí'
+          });
+        assert.equal(respuesta.status, 409);
+        assert.equal(respuesta.body.error.code, 'TEAMS_NOT_TIED');
+      });
+
+      it('rechaza una decisión que contradiga otra', async () => {
+        const contexto = ligaMontada(6);
+        const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES['1/2']);
+        const { app, event } = contexto;
+        const uno = tabla.standings[0].teamId;
+        const otro = tabla.standings[1].teamId;
+        const ruta = `/api/admin/events/${event.id}/competition/tie-resolutions`;
+
+        await admin(app, 'post', ruta,
+          { higherTeamId: uno, lowerTeamId: otro, reason: 'sorteo' }).expect(201);
+
+        const alReves = await admin(app, 'post', ruta,
+          { higherTeamId: otro, lowerTeamId: uno, reason: 'me arrepiento' });
+        assert.equal(alReves.status, 409);
+        assert.equal(alReves.body.error.code, 'TIE_RESOLUTION_CYCLE');
+      });
+
+      it('se puede deshacer y el empate vuelve a marcarse', async () => {
+        const contexto = ligaMontada(6);
+        const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES['3/4']);
+        const { database, app, event, equipos } = contexto;
+        const arriba = tabla.standings[2].teamId;
+        const abajo = tabla.standings[3].teamId;
+        const ruta = `/api/admin/events/${event.id}/competition/tie-resolutions`;
+
+        await admin(app, 'post', ruta,
+          { higherTeamId: arriba, lowerTeamId: abajo, reason: 'sorteo' }).expect(201);
+        assert.equal(
+          database.valorantCompetition.standings(event.id, { teams: equipos }).tieRequiresAdmin,
+          false);
+
+        const borrada = await admin(app, 'delete', ruta,
+          { higherTeamId: arriba, lowerTeamId: abajo });
+        assert.equal(borrada.status, 200);
+        assert.deepEqual(borrada.body.resolutions, []);
+        assert.equal(
+          database.valorantCompetition.standings(event.id, { teams: equipos }).tieRequiresAdmin,
+          true);
+      });
+
+      it('queda registrado quién lo decidió y por qué', async () => {
+        const contexto = ligaMontada(6);
+        const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES['2/3']);
+        const { database, app, event } = contexto;
+        await admin(app, 'post', `/api/admin/events/${event.id}/competition/tie-resolutions`, {
+          higherTeamId: tabla.standings[1].teamId,
+          lowerTeamId: tabla.standings[2].teamId,
+          reason: 'Sorteo con moneda ante los dos capitanes'
+        }).expect(201);
+
+        const registro = database.valorant.listAudit(event.id)
+          .find((fila) => fila.action === 'TIE_RESOLVED');
+        assert.ok(registro, 'el desempate tiene que dejar rastro');
+        assert.match(JSON.stringify(registro), /Sorteo con moneda/);
+      });
+
+      it('el motivo no se publica', async () => {
+        const contexto = ligaMontada(6);
+        const tabla = jugarPerfilEmpate(contexto, TIE_PROFILES['1/2']);
+        const { app, event } = contexto;
+        await admin(app, 'post', `/api/admin/events/${event.id}/competition/tie-resolutions`, {
+          higherTeamId: tabla.standings[0].teamId,
+          lowerTeamId: tabla.standings[1].teamId,
+          reason: 'MOTIVO-INTERNO-QUE-NO-SALE'
+        }).expect(201);
+
+        const publico = await request(app)
+          .get(`/api/events/${event.slug}/competition-teams`).expect(200);
+        assert.equal(JSON.stringify(publico.body).includes('MOTIVO-INTERNO-QUE-NO-SALE'), false);
+      });
+    });
+
     it('no se genera dos veces', async () => {
       const contexto = ligaMontada(4);
       jugarLiga(contexto);

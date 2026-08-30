@@ -273,6 +273,104 @@
       cuerpo.append(tr);
     }
     id('league-standings').replaceChildren(cabecera, cuerpo);
+    pintarDesempates(tabla);
+  }
+
+  /**
+   * El botón que saca al torneo del atasco.
+   *
+   * La aplicación detecta el empate y se niega a sembrar al azar, pero eso sólo
+   * sirve si hay forma de resolverlo: sin esto la eliminatoria no se puede
+   * generar y no hay nada que hacer desde el panel.
+   */
+  function pintarDesempates(tabla) {
+    const caja = id('league-ties');
+    if (!caja) return;
+
+    const empatados = (tabla || []).filter((fila) => fila.tieRequiresAdmin);
+    const decididos = estado?.tieResolutions || [];
+    caja.hidden = empatados.length === 0 && decididos.length === 0;
+    if (caja.hidden) { caja.replaceChildren(); return; }
+
+    const piezas = [];
+
+    // Cada pareja contigua empatada se ofrece como una decisión concreta.
+    for (let i = 0; i < empatados.length - 1; i += 1) {
+      const arriba = empatados[i];
+      const abajo = empatados[i + 1];
+      if (abajo.position !== arriba.position + 1) continue;
+
+      const fila = document.createElement('div');
+      fila.className = 'tie-row';
+
+      const texto = document.createElement('p');
+      texto.textContent = `${nombreDe(arriba.teamId)} y ${nombreDe(abajo.teamId)} empatan en el puesto ${arriba.position}. Ningún criterio deportivo los separa.`;
+
+      const motivo = document.createElement('input');
+      motivo.type = 'text';
+      motivo.placeholder = 'Motivo (obligatorio): sorteo, decisión de la organización…';
+      motivo.className = 'tie-reason';
+
+      const acciones = document.createElement('div');
+      acciones.className = 'tie-actions';
+      for (const [ganador, perdedor] of [[arriba, abajo], [abajo, arriba]]) {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = `${nombreDe(ganador.teamId)} POR DELANTE`;
+        boton.addEventListener('click', () => resolverEmpate(
+          ganador.teamId, perdedor.teamId, motivo.value));
+        acciones.append(boton);
+      }
+
+      fila.append(texto, motivo, acciones);
+      piezas.push(fila);
+    }
+
+    // Lo ya decidido, con su motivo y la opción de deshacerlo.
+    for (const decision of decididos) {
+      const fila = document.createElement('div');
+      fila.className = 'tie-row is-resolved';
+
+      const texto = document.createElement('p');
+      texto.textContent = `${nombreDe(decision.higherTeamId)} por delante de ${nombreDe(decision.lowerTeamId)} — ${decision.reason}`;
+
+      const deshacer = document.createElement('button');
+      deshacer.type = 'button';
+      deshacer.className = 'warn';
+      deshacer.textContent = 'DESHACER';
+      deshacer.addEventListener('click', () => borrarEmpate(
+        decision.higherTeamId, decision.lowerTeamId));
+
+      fila.append(texto, deshacer);
+      piezas.push(fila);
+    }
+
+    caja.replaceChildren(...piezas);
+  }
+
+  async function resolverEmpate(higherTeamId, lowerTeamId, reason) {
+    if (!String(reason || '').trim()) {
+      aviso('El desempate necesita un motivo: queda registrado.', true);
+      return;
+    }
+    try {
+      await api(`/api/admin/events/${evento.id}/competition/tie-resolutions`, {
+        method: 'POST', body: JSON.stringify({ higherTeamId, lowerTeamId, reason })
+      });
+      aviso('Desempate resuelto.');
+      await cargar(evento);
+    } catch (error) { aviso(error.message, true); }
+  }
+
+  async function borrarEmpate(higherTeamId, lowerTeamId) {
+    if (!confirm('¿Deshacer esta decisión? La tabla volverá a marcar el empate.')) return;
+    try {
+      await api(`/api/admin/events/${evento.id}/competition/tie-resolutions`, {
+        method: 'DELETE', body: JSON.stringify({ higherTeamId, lowerTeamId })
+      });
+      aviso('Decisión deshecha.');
+      await cargar(evento);
+    } catch (error) { aviso(error.message, true); }
   }
 
   // ------------------------------------------------------------ acciones
@@ -332,6 +430,9 @@
     seccion().hidden = false;
 
     estado = await api(`/api/admin/events/${evento.id}/competition`);
+    estado.tieResolutions = (await api(
+      `/api/admin/events/${evento.id}/competition/tie-resolutions`)
+      .catch(() => ({ resolutions: [] }))).resolutions || [];
     pintarFormatoOficial();
     pintarMapas();
     pintarCalendario();

@@ -52,6 +52,27 @@ const DEFAULT_MAP_POOL = Object.freeze([
  */
 const PRIMARY_TIEBREAKER = 'wins';
 const SECONDARY_TIEBREAKERS = Object.freeze(['head_to_head', 'round_diff', 'rounds_for']);
+
+/**
+ * ¿Hay una cadena de resoluciones que ponga a `arriba` por delante de `abajo`?
+ *
+ * Se sigue en cadena, no sólo la pareja directa: si A va por delante de B y B
+ * por delante de C, entonces A va por delante de C aunque nadie lo dijera. Y
+ * mirarlo así es lo que permite detectar un ciclo antes de crearlo.
+ */
+function caminoDeResolucion(arriba, abajo, resoluciones, vistos = new Set()) {
+  if (vistos.has(arriba)) return false;
+  vistos.add(arriba);
+  return resoluciones.some((fila) => fila.higherTeamId === arriba
+    && (fila.lowerTeamId === abajo
+      || caminoDeResolucion(fila.lowerTeamId, abajo, resoluciones, new Set(vistos))));
+}
+
+/** -1, 1 o 0 según lo que haya decidido la organización. */
+function compararPorResolucion(uno, otro, resoluciones) {
+  if (caminoDeResolucion(uno.teamId, otro.teamId, resoluciones)) return -1;
+  return caminoDeResolucion(otro.teamId, uno.teamId, resoluciones) ? 1 : 0;
+}
 const TIEBREAKERS = Object.freeze([PRIMARY_TIEBREAKER, ...SECONDARY_TIEBREAKERS]);
 
 /** En esta fase clasifican cuatro. Con cuatro equipos, todos. */
@@ -203,6 +224,30 @@ function migrateValorantCompetition(connection) {
       FOREIGN KEY(source_capture_id) REFERENCES valorant_captures(id) ON DELETE SET NULL
     );
     CREATE INDEX IF NOT EXISTS idx_stats_participant ON valorant_player_game_stats(participant_id);
+
+    /*
+      Cuando ningún criterio deportivo separa a dos equipos, lo resuelve la
+      organización. Se guarda como una pareja ordenada —quién queda por
+      delante de quién— y no como una posición fija: así una resolución sigue
+      valiendo aunque después cambien los resultados de otros equipos.
+    */
+    CREATE TABLE IF NOT EXISTS valorant_tie_resolutions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL,
+      stage TEXT NOT NULL DEFAULT 'REGULAR',
+      higher_team_id INTEGER NOT NULL,
+      lower_team_id INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      resolved_by TEXT NOT NULL DEFAULT 'admin',
+      created_at TEXT NOT NULL DEFAULT (${NOW}),
+      CHECK (higher_team_id != lower_team_id),
+      UNIQUE(event_id, stage, higher_team_id, lower_team_id),
+      FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+      FOREIGN KEY(higher_team_id) REFERENCES teams(id) ON DELETE CASCADE,
+      FOREIGN KEY(lower_team_id) REFERENCES teams(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_tie_resolutions_event
+      ON valorant_tie_resolutions(event_id, stage);
 
     CREATE TABLE IF NOT EXISTS valorant_settings (
       event_id INTEGER PRIMARY KEY,
@@ -1151,7 +1196,95 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
      * Se calcula de los resultados, no se guarda. Una tabla derivable que además
      * se almacena acaba discrepando de sus propios datos.
      */
-    standings(eventId, { stage = 'REGULAR', teams } = {}) {
+    listTieResolutions(eventId, stage = 'REGULAR') {
+      return connection.prepare(`SELECT id, event_id eventId, stage,
+        higher_team_id higherTeamId, lower_team_id lowerTeamId,
+        reason, resolved_by resolvedBy, created_at createdAt
+        FROM valorant_tie_resolutions WHERE event_id=? AND stage=? ORDER BY id`).all(eventId, stage);
+    },
+
+    /**
+     * La organización decide quién queda por delante cuando el deporte no lo
+     * decide. No es un criterio más: es reconocer que no hay criterio.
+     *
+     * Sólo se admite entre equipos que estén empatados de verdad —si algún
+     * criterio ya los separa, resolverlos a mano sería reescribir el
+     * resultado— y siempre con un motivo que quede registrado.
+     */
+    resolveTie(eventId, { higherTeamId, lowerTeamId, reason, stage = 'REGULAR', actor = 'admin' } = {}) {
+      const arriba = Number(higherTeamId);
+      const abajo = Number(lowerTeamId);
+      if (!Number.isInteger(arriba) || !Number.isInteger(abajo) || arriba === abajo) {
+        throw new CompetitionError(
+          'El desempate necesita dos equipos distintos.', 'TIE_TEAMS_REQUIRED');
+      }
+      const motivo = String(reason || '').trim();
+      if (!motivo) {
+        throw new CompetitionError(
+          'El desempate necesita un motivo auditable.', 'TIE_REASON_REQUIRED');
+      }
+
+      const tabla = this.standings(eventId, { stage, applyResolutions: false });
+      const filaArriba = tabla.standings.find((fila) => fila.teamId === arriba);
+      const filaAbajo = tabla.standings.find((fila) => fila.teamId === abajo);
+      if (!filaArriba || !filaAbajo) {
+        throw new CompetitionError(
+          'Alguno de los equipos no juega esta fase.', 'TIE_TEAM_SCOPE', 409);
+      }
+
+      /*
+        Empatados de verdad significa: contiguos en la tabla y sin que ningún
+        criterio los separe. Si están lejos, lo que hay que mirar es el
+        resultado, no el desempate.
+      */
+      const distancia = Math.abs(filaArriba.position - filaAbajo.position);
+      if (distancia !== 1 || !(filaArriba.tieRequiresAdmin && filaAbajo.tieRequiresAdmin)) {
+        throw new CompetitionError(
+          'Sólo se pueden ordenar a mano equipos que ningún criterio separa.',
+          'TEAMS_NOT_TIED', 409);
+      }
+
+      const resoluciones = this.listTieResolutions(eventId, stage);
+      const existente = resoluciones.find(
+        (fila) => fila.higherTeamId === arriba && fila.lowerTeamId === abajo);
+      // Decir «A por delante de B» cuando ya consta «B por delante de A»
+      // dejaría un orden imposible: se rechaza en vez de dejar la última.
+      if (!existente && caminoDeResolucion(abajo, arriba, resoluciones)) {
+        throw new CompetitionError(
+          'Esa decisión contradice otra ya tomada.', 'TIE_RESOLUTION_CYCLE', 409);
+      }
+
+      connection.prepare(`INSERT INTO valorant_tie_resolutions
+        (event_id, stage, higher_team_id, lower_team_id, reason, resolved_by)
+        VALUES (?,?,?,?,?,?)
+        ON CONFLICT(event_id, stage, higher_team_id, lower_team_id) DO UPDATE SET
+          reason=excluded.reason, resolved_by=excluded.resolved_by, created_at=${NOW}`)
+        .run(eventId, stage, arriba, abajo, motivo, actor);
+
+      registrar(eventId, actor, 'TIE_RESOLVED', null, null,
+        { stage, higherTeamId: arriba, lowerTeamId: abajo, reason: motivo });
+      return this.listTieResolutions(eventId, stage);
+    },
+
+    /** Deshacer una decisión: la tabla vuelve a marcar el empate. */
+    clearTieResolution(eventId, { higherTeamId, lowerTeamId, stage = 'REGULAR', actor = 'admin' } = {}) {
+      const info = connection.prepare(`DELETE FROM valorant_tie_resolutions
+        WHERE event_id=? AND stage=? AND higher_team_id=? AND lower_team_id=?`)
+        .run(eventId, stage, Number(higherTeamId), Number(lowerTeamId));
+      if (info.changes === 0) {
+        throw new CompetitionError('Esa decisión no existe.', 'TIE_RESOLUTION_NOT_FOUND', 404);
+      }
+      registrar(eventId, actor, 'TIE_RESOLUTION_CLEARED', null, null,
+        { stage, higherTeamId: Number(higherTeamId), lowerTeamId: Number(lowerTeamId) });
+      return this.listTieResolutions(eventId, stage);
+    },
+
+    /**
+     * `applyResolutions: false` da la tabla tal y como la deja el deporte, sin
+     * las decisiones de la organización. Hace falta para poder preguntar si dos
+     * equipos siguen empatados DESPUÉS de haberlos ordenado a mano.
+     */
+    standings(eventId, { stage = 'REGULAR', teams, applyResolutions = true } = {}) {
       const series = this.listSeries(eventId, stage);
       const settings = this.getSettings(eventId);
 
@@ -1216,13 +1349,15 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
 
       // Devuelve 0 sólo cuando NINGÚN criterio configurado los separa: eso es un
       // empate que la organización tiene que resolver.
+      const resoluciones = applyResolutions ? this.listTieResolutions(eventId, stage) : [];
       const comparar = (uno, otro) => {
         const empatados = huella(uno) === huella(otro) ? cuantosIgual.get(huella(uno)) : 0;
         for (const criterio of settings.tiebreakers) {
           const resultado = porCriterio(criterio, uno, otro, empatados);
           if (resultado !== 0) return resultado;
         }
-        return 0;
+        // Último recurso, y sólo si la organización lo ha decidido a mano.
+        return compararPorResolucion(uno, otro, resoluciones);
       };
 
       filas.sort((uno, otro) => comparar(uno, otro)
