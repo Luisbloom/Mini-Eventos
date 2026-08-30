@@ -45,11 +45,14 @@
   background: #080c0f; color: inherit; font: inherit; font-size: .78rem;
 }
 
+/* Antes iba atenuado porque era un recurso de emergencia. Ya no lo es:
+   escribir el marcador a mano es una forma normal de registrar el partido. */
 .playoff-manual {
-  padding: .25rem .5rem; border: 1px solid rgba(255, 255, 255, .12); border-radius: 4px;
-  background: transparent; color: inherit; opacity: .55; cursor: pointer; font-size: .7rem;
+  padding: .4rem .7rem; border: 1px solid var(--line); border-radius: 4px;
+  background: transparent; color: var(--paper); cursor: pointer;
+  font: .48rem/1 var(--mono); letter-spacing: .1em; white-space: nowrap;
 }
-.playoff-manual:hover { opacity: 1; border-color: rgba(255, 70, 85, .5); }
+.playoff-manual:hover { border-color: var(--lime); color: var(--lime); }
 
 .playoff-places { display: grid; gap: .4rem; margin: 1.4rem 0 0; padding: 0; list-style: none; }
 .playoff-place {
@@ -68,3 +71,14 @@
   .playoffs-bracket { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .playoff-zone:last-child { grid-column: 1 / -1; }
 }
+
+/* Marcador a mano: dos casillas, como en la liga. No es un camino de
+   emergencia, así que no se disimula. */
+.playoff-manual-form { display: flex; align-items: center; gap: .35rem; }
+.playoff-manual-form input {
+  width: 48px; min-height: 34px; padding: .3rem;
+  border: 1px solid var(--line); background: var(--void); color: var(--paper);
+  text-align: center;
+}
+.playoff-manual-form span { color: var(--muted); }
+.playoff-manual-form input:disabled, .playoff-manual:disabled { opacity: .4; cursor: not-allowed; }

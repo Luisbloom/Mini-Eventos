@@ -380,6 +380,86 @@ describe('eliminatorias de Valorant', () => {
       });
     });
 
+    it('a mano se puede llevar un torneo entero, sin una sola captura', async () => {
+      /*
+        Las capturas son la via comoda, no la unica. Quien organiza tiene que
+        poder teclear el marcador -porque no hay foto, porque no vale, o porque
+        prefiere hacerlo asi- y que el cuadro avance igual.
+      */
+      const contexto = ligaMontada(4);
+      jugarLiga(contexto);
+      const { database, app, event } = contexto;
+
+      await admin(app, 'post', `/api/admin/events/${event.id}/playoffs/generate`, {})
+        .expect(201);
+
+      const POOL = ['ascent', 'bind', 'haven', 'lotus', 'split'];
+      const anotar = async (slot, marcadores) => {
+        const serie = porSlot(database.valorantPlayoffs.listSeries(event.id), slot);
+        // Igual que en el panel: primero el mapa, después el marcador.
+        for (const juego of serie.games) {
+          database.valorantCompetition.assignMap(event.id, {
+            seriesId: serie.id, gameNumber: juego.gameNumber,
+            mapKey: POOL[(juego.gameNumber - 1) % POOL.length]
+          });
+        }
+        for (const [numero, [a, b]] of marcadores.entries()) {
+          await admin(app, 'post', `/api/admin/events/${event.id}/competition/result`, {
+            seriesId: serie.id, gameNumber: numero + 1,
+            teamARounds: a, teamBRounds: b, reason: 'anotado a mano'
+          }).expect(200);
+        }
+        return database.valorantPlayoffs.getSeriesBySlot(event.id, slot);
+      };
+
+      await anotar(SLOTS.UPPER_SEMI_1, [[13, 8], [13, 10]]);
+      await anotar(SLOTS.UPPER_SEMI_2, [[13, 9], [11, 13], [13, 7]]);
+      await anotar(SLOTS.LOWER_ROUND_1, [[13, 6], [13, 11]]);
+      await anotar(SLOTS.UPPER_FINAL, [[13, 4], [13, 9]]);
+      await anotar(SLOTS.LOWER_FINAL, [[13, 10], [13, 8]]);
+      await anotar(SLOTS.GRAND_FINAL, [[13, 5], [13, 11]]);
+
+      const tabla = database.valorantPlayoffs.standings(event.id);
+      assert.equal(tabla.status, 'COMPLETED');
+      assert.ok(tabla.champion, 'tiene que haber campeón');
+      assert.deepEqual(
+        tabla.placements.map((fila) => fila.position),
+        [1, 2, 3, 4]);
+
+      // Todo lo guardado dice de dónde salió, y ninguno vino de una captura.
+      const partidas = database.valorantPlayoffs.listSeries(event.id)
+        .flatMap((serie) => serie.games)
+        .filter((juego) => juego.status === 'COMPLETED');
+      assert.ok(partidas.length > 0);
+      assert.ok(partidas.every((juego) => juego.resultSource === 'MANUAL'),
+        'un resultado tecleado tiene que quedar marcado como MANUAL');
+    });
+
+    it('una correccion a mano sigue exigiendo motivo', async () => {
+      const contexto = ligaMontada(4);
+      jugarLiga(contexto);
+      const { database, app, event } = contexto;
+      await admin(app, 'post', `/api/admin/events/${event.id}/playoffs/generate`, {}).expect(201);
+      const serie = database.valorantPlayoffs.getSeriesBySlot(event.id, SLOTS.UPPER_SEMI_1);
+      database.valorantCompetition.assignMap(event.id,
+        { seriesId: serie.id, gameNumber: 1, mapKey: 'bind' });
+
+      await admin(app, 'post', `/api/admin/events/${event.id}/competition/result`, {
+        seriesId: serie.id, gameNumber: 1, teamARounds: 13, teamBRounds: 8, reason: 'a mano'
+      }).expect(200);
+
+      const sinMotivo = await admin(app, 'post',
+        `/api/admin/events/${event.id}/competition/result/correct`,
+        { seriesId: serie.id, gameNumber: 1, teamARounds: 13, teamBRounds: 9 });
+      assert.equal(sinMotivo.status, 400);
+      assert.equal(sinMotivo.body.error.code, 'REASON_REQUIRED');
+
+      const conMotivo = await admin(app, 'post',
+        `/api/admin/events/${event.id}/competition/result/correct`,
+        { seriesId: serie.id, gameNumber: 1, teamARounds: 13, teamBRounds: 9, reason: 'mal tecleado' });
+      assert.equal(conMotivo.status, 200);
+    });
+
     it('no se genera dos veces', async () => {
       const contexto = ligaMontada(4);
       jugarLiga(contexto);

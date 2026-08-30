@@ -186,7 +186,7 @@
       fila.append(capturas);
     }
 
-    fila.append(botonManual(serie, juego));
+    fila.append(formularioManual(serie, juego));
     return fila;
   }
 
@@ -229,34 +229,56 @@
     return selector;
   }
 
-  /** El respaldo de emergencia, pequeño y con motivo obligatorio. */
-  function botonManual(serie, juego) {
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.className = 'playoff-manual';
-    boton.textContent = juego.status === 'COMPLETED' ? 'corregir' : 'a mano';
-    boton.title = 'Resultado manual: sólo si no hay captura que valga';
+  /**
+   * Marcador escrito a mano.
+   *
+   * No es un respaldo de emergencia: se usa cuando no hay captura, cuando la
+   * captura no vale o cuando simplemente se prefiere teclearlo. Por eso son
+   * dos casillas y no un texto libre que haya que interpretar. El motivo sigue
+   * siendo obligatorio, y queda en la auditoría junto a lo que había antes.
+   */
+  function formularioManual(serie, juego) {
+    const forma = document.createElement('form');
+    forma.className = 'playoff-manual-form';
 
-    boton.addEventListener('click', async () => {
-      const marcador = prompt(
-        `Resultado del mapa ${juego.gameNumber}\n`
-        + `${nombreDe(serie.teamAId)} – ${nombreDe(serie.teamBId)}\n\n`
-        + 'Escríbelo como 13-8:', juego.status === 'COMPLETED'
-          ? `${juego.teamARounds}-${juego.teamBRounds}` : '');
-      if (!marcador) return;
-      const partes = /^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/.exec(marcador);
-      if (!partes) { aviso('El marcador se escribe como 13-8.', true); return; }
+    const rondasA = document.createElement('input');
+    rondasA.type = 'number'; rondasA.min = '0'; rondasA.max = '30';
+    rondasA.required = true;
+    rondasA.value = juego.teamARounds ?? '';
+    rondasA.setAttribute('aria-label', `Rondas de ${nombreDe(serie.teamAId)}`);
 
-      const motivo = prompt('Motivo (queda registrado):');
+    const guion = document.createElement('span');
+    guion.textContent = '–';
+
+    const rondasB = rondasA.cloneNode();
+    rondasB.value = juego.teamBRounds ?? '';
+    rondasB.setAttribute('aria-label', `Rondas de ${nombreDe(serie.teamBId)}`);
+
+    const enviar = document.createElement('button');
+    enviar.type = 'submit';
+    enviar.className = 'playoff-manual';
+    const corregir = juego.status === 'COMPLETED';
+    enviar.textContent = corregir ? 'CORREGIR' : 'GUARDAR';
+
+    // Sin rivales todavía no hay resultado que escribir.
+    const listo = Boolean(serie.teamAId && serie.teamBId);
+    for (const campo of [rondasA, rondasB, enviar]) campo.disabled = !listo;
+    if (!listo) forma.title = 'Todavía no se sabe quién juega esta serie.';
+
+    forma.addEventListener('submit', async (suceso) => {
+      suceso.preventDefault();
+      const motivo = prompt(corregir
+        ? 'Motivo de la corrección (queda registrado):'
+        : 'Motivo del resultado manual (queda registrado):');
       if (!motivo || !motivo.trim()) return;
-
-      const corregir = juego.status === 'COMPLETED';
       try {
+        // Crear y corregir son rutas distintas a propósito: ningún campo del
+        // cuerpo puede convertir la una en la otra.
         await api(`/api/admin/events/${evento.id}/competition/result${corregir ? '/correct' : ''}`, {
           method: 'POST',
           body: JSON.stringify({
             seriesId: serie.id, gameNumber: juego.gameNumber,
-            teamARounds: Number(partes[1]), teamBRounds: Number(partes[2]),
+            teamARounds: Number(rondasA.value), teamBRounds: Number(rondasB.value),
             reason: motivo.trim()
           })
         });
@@ -266,7 +288,9 @@
         aviso(error.message || 'No se ha podido guardar.', true);
       }
     });
-    return boton;
+
+    forma.append(rondasA, guion, rondasB, enviar);
+    return forma;
   }
 
   const RESULTADO = {
