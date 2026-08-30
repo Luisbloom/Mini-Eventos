@@ -36,6 +36,28 @@ function parseTrustProxy(rawValue) {
   throw new Error('TRUST_PROXY debe ser true, false o un numero entero');
 }
 
+/**
+ * Origen con el que se construyen los enlaces de las tarjetas sociales.
+ *
+ * Se puede deducir de la petición, pero detrás de un proxy eso depende de que
+ * las cabeceras lleguen bien. Configurarlo quita esa incertidumbre justo en lo
+ * que se ve fuera: la previsualización de un enlace compartido.
+ */
+function parsePublicBaseUrl(rawValue) {
+  const value = rawValue?.trim();
+  if (!value) return null;
+  let url;
+  try { url = new URL(value); }
+  catch { throw new Error('PUBLIC_BASE_URL debe ser una URL válida'); }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error('PUBLIC_BASE_URL debe ser HTTP o HTTPS');
+  }
+  if (url.username || url.password) {
+    throw new Error('PUBLIC_BASE_URL no debe llevar credenciales');
+  }
+  return url.origin;
+}
+
 function parseReporterPrivateUrl(rawValue) {
   const value = rawValue?.trim();
   if (!value) return null;
@@ -81,6 +103,7 @@ function loadConfig(env = process.env, projectRoot = PROJECT_ROOT) {
     },
     reporterToken: env.REPORTER_TOKEN?.trim() || null,
     reporterPrivateUrl: parseReporterPrivateUrl(env.REPORTER_PRIVATE_URL),
+    publicBaseUrl: parsePublicBaseUrl(env.PUBLIC_BASE_URL),
     nodeEnv: env.NODE_ENV || 'development'
   });
 }

@@ -129,8 +129,8 @@ function renderEvent(event) {
   byId('event-participant-count').textContent = event.maxParticipants ? `${event.participantCount} / ${event.maxParticipants}` : event.participantCount;
   renderMinimum(event);
   const cover = byId('event-hero-cover');
-  cover.src = event.bannerImage || event.coverImage || '/images/events/default-event-cover.png';
-  cover.addEventListener('error', () => { cover.src = '/images/events/default-event-cover.png'; }, { once: true });
+  cover.src = event.bannerImage || event.coverImage || '/images/events/default-event-cover.jpg';
+  cover.addEventListener('error', () => { cover.src = '/images/events/default-event-cover.jpg'; }, { once: true });
   byId('event-monogram').textContent = iconLabel(event.icon);
   byId('hero-registration-state').textContent = event.registration.label.toUpperCase();
   byId('register-cta').hidden = !event.modules.registration || !event.registration.available;

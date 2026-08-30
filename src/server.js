@@ -61,7 +61,8 @@ try {
     reporterPrivateUrl: config.reporterPrivateUrl,
     discord: createDiscordProvider(config.discord),
     // Detrás del Funnel de Tailscale todo va por HTTPS.
-    secureCookies: process.env.NODE_ENV === 'production'
+    secureCookies: process.env.NODE_ENV === 'production',
+    publicBaseUrl: config.publicBaseUrl
   });
 
   server = app.listen(config.port, config.host, () => {

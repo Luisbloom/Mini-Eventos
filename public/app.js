@@ -39,11 +39,11 @@ function safeStatusClass(event) {
 function coverFor(event, className, eager = false) {
   const cover = document.createElement('img');
   cover.className = className;
-  cover.src = event.coverImage || '/images/events/default-event-cover.png';
+  cover.src = event.coverImage || '/images/events/default-event-cover.jpg';
   cover.alt = className === 'event-cover' ? `Portada de ${event.name}` : '';
   cover.loading = eager ? 'eager' : 'lazy';
   cover.addEventListener('error', () => {
-    cover.src = '/images/events/default-event-cover.png';
+    cover.src = '/images/events/default-event-cover.jpg';
   }, { once: true });
   return cover;
 }

@@ -160,7 +160,7 @@ function normalizeEvent(input, existing = null) {
     modules: DEFAULT_MODULES,
     accentColor: '#d7ff3f',
     icon: 'gamepad',
-    coverImage: '/images/events/default-event-cover.png',
+    coverImage: '/images/events/default-event-cover.jpg',
     bannerImage: null
   };
   const pick = (key) => input[key] === undefined ? base[key] : input[key];

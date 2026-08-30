@@ -14,3 +14,7 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 .worktrees/
+
+# Material de trabajo que no forma parte del proyecto.
+.tmp/
+_preset_plugin/

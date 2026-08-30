@@ -74,13 +74,33 @@ describe('migración poblada anterior a las eliminatorias', () => {
     firstOpen.pragma('foreign_keys = ON');
     const migratedSnapshot = snapshot(firstOpen);
 
+    /*
+      La portada por defecto cambió de PNG a JPEG, así que las filas que
+      apuntaban al fichero viejo SÍ deben cambiar: dejarlas quietas las
+      dejaría sin imagen. Es la única diferencia que se admite, y se comprueba
+      que de verdad ocurre en vez de relajar la comparación.
+    */
+    const COVER_LEGACY = '/images/events/default-event-cover.png';
+    const COVER_ACTUAL = '/images/events/default-event-cover.jpg';
+    const conPortadaMigrada = (rows) => rows.map((row) => (
+      Object.hasOwn(row, 'cover_image') && row.cover_image === COVER_LEGACY
+        ? { ...row, cover_image: COVER_ACTUAL }
+        : row));
+
+    assert.ok(
+      legacySnapshot.events.some((row) => row.cover_image === COVER_LEGACY),
+      'la base legacy debe traer alguna portada antigua que migrar');
+
     for (const table of TABLES) {
       assert.deepEqual(
         projectRows(migratedSnapshot[table], legacyColumns[table]),
-        legacySnapshot[table],
+        table === 'events' ? conPortadaMigrada(legacySnapshot[table]) : legacySnapshot[table],
         `${table} debe conservar todas sus filas, ids y valores legacy`
       );
     }
+    assert.ok(
+      migratedSnapshot.events.every((row) => row.cover_image !== COVER_LEGACY),
+      'no debe quedar ninguna portada apuntando al PNG borrado');
     assert.equal(migratedSnapshot.valorant_settings[0].grand_final_best_of, 3);
     assert.deepEqual(firstOpen.pragma('foreign_key_check'), []);
     firstOpen.close();

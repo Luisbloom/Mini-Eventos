@@ -185,7 +185,7 @@ function openDatabase(dbPath) {
         modules_json TEXT NOT NULL CHECK (json_valid(modules_json)),
         accent_color TEXT NOT NULL DEFAULT '#d7ff3f',
         icon TEXT NOT NULL DEFAULT 'gamepad',
-        cover_image TEXT NOT NULL DEFAULT '/images/events/default-event-cover.png',
+        cover_image TEXT NOT NULL DEFAULT '/images/events/default-event-cover.jpg',
         banner_image TEXT,
         created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -247,11 +247,18 @@ function openDatabase(dbPath) {
       connection.exec('ALTER TABLE events ADD COLUMN min_participants INTEGER');
     }
     if (needsCoverMigration) {
-      connection.exec("ALTER TABLE events ADD COLUMN cover_image TEXT NOT NULL DEFAULT '/images/events/default-event-cover.png'");
+      connection.exec("ALTER TABLE events ADD COLUMN cover_image TEXT NOT NULL DEFAULT '/images/events/default-event-cover.jpg'");
     }
     if (needsBannerMigration) {
       connection.exec('ALTER TABLE events ADD COLUMN banner_image TEXT');
     }
+    /*
+      La portada por defecto pasó de PNG a JPEG: pesaba 2,2 MB y era lo primero
+      que descargaba quien entraba. Los eventos que apuntaban al fichero viejo
+      se quedarían sin imagen, así que se les cambia la ruta.
+    */
+    connection.exec(`UPDATE events SET cover_image='/images/events/default-event-cover.jpg'
+      WHERE cover_image='/images/events/default-event-cover.png'`);
     connection.exec(`
       CREATE INDEX IF NOT EXISTS idx_matches_received_at ON matches(received_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_matches_event_received ON matches(event_id, received_at DESC, id DESC);

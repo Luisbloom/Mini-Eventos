@@ -120,7 +120,7 @@ describe('multi-event database', () => {
       description: 'Construcción para la comunidad.',
       minParticipants: 8,
       maxParticipants: 24,
-      coverImage: '/images/events/default-event-cover.png',
+      coverImage: '/images/events/default-event-cover.jpg',
       registrationsOpen: true,
       modules: { registration: true, participants: true }
     });
@@ -140,7 +140,7 @@ describe('multi-event database', () => {
     assert.equal(database.listParticipants(amongUs.id).length, 1);
     assert.equal(database.listParticipants(minecraft.id).length, 1);
     assert.equal(minecraft.minParticipants, 8);
-    assert.equal(minecraft.coverImage, '/images/events/default-event-cover.png');
+    assert.equal(minecraft.coverImage, '/images/events/default-event-cover.jpg');
     assert.throws(
       () => database.createParticipant(amongUs.id, {
         discord_username: 'luis',
@@ -161,7 +161,7 @@ describe('multi-event database', () => {
     database.updateEvent(original.id, {
       slug: 'among-us-renombrado',
       minParticipants: 12,
-      coverImage: '/images/events/default-event-cover.png'
+      coverImage: '/images/events/default-event-cover.jpg'
     });
     database.close();
 
@@ -170,7 +170,7 @@ describe('multi-event database', () => {
     assert.equal(reopened.id, original.id);
     assert.equal(reopened.slug, 'among-us-renombrado');
     assert.equal(reopened.minParticipants, 12);
-    assert.equal(reopened.coverImage, '/images/events/default-event-cover.png');
+    assert.equal(reopened.coverImage, '/images/events/default-event-cover.jpg');
     assert.equal(database.listEvents({ includeArchived: true }).length, 1);
     assert.equal(database.countMatches(reopened.id), 1);
     database.close();

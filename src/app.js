@@ -1,10 +1,12 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 const crypto = require('node:crypto');
 const express = require('express');
 const multer = require('multer');
 const helmet = require('helmet');
+const compression = require('compression');
 const { buildLeaderboard } = require('./leaderboard');
 const { getPublicScoringRules, SCORING_CONFIG } = require('./services/scoring');
 const { InformationValidationError } = require('./tournament-information');
@@ -22,6 +24,7 @@ const { CompetitionError: ValorantCompetitionError } = require('./valorant-compe
 const { CaptureError } = require('./valorant-captures');
 const { PlayoffError } = require('./valorant-playoffs');
 const { officialValorantFormatForSlug } = require('./valorant-event-format');
+const { buildMetadata, injectMetadata } = require('./services/social-metadata');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
 } = require('./services/captures/storage');
@@ -37,6 +40,11 @@ const {
 } = require('./services/reporter-auth');
 
 const PUBLIC_DIRECTORY = path.resolve(__dirname, '..', 'public');
+
+/** El slug de un evento llega de la base: se escapa antes de meterlo en XML. */
+const escapeXml = (valor) => String(valor)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 const MAX_MATCHES_PER_PAGE = 100;
 
 function sendError(response, status, code, message) {
@@ -129,7 +137,10 @@ function createApp({
   // El OCR se puede sustituir por uno falso en las pruebas: lo que hay que
   // probar es el parser y la confirmación, no que Tesseract acierte.
   ocrProvider = null,
-  captureStorageRoot = null
+  captureStorageRoot = null,
+  // Origen público con el que se construyen los enlaces de las tarjetas
+  // sociales. Si no se configura se deduce de la petición.
+  publicBaseUrl = null
 }) {
   if (!database) throw new TypeError('createApp necesita una base de datos');
 
@@ -151,6 +162,9 @@ function createApp({
   const ocr = ocrProvider || createTesseractProvider();
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxy);
+  // El HTML y el JSON del torneo son texto y comprimen muchísimo. Las imágenes
+  // ya vienen comprimidas y compression las deja en paz por su cuenta.
+  app.use(compression());
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -1569,8 +1583,46 @@ function createApp({
 
   app.get('/informacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/informacion`));
   app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}#clasificacion`));
-  const sendDraftPage = (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'draft.html'));
-  const sendCompetitionPage = (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'competition-page.html'));
+  /*
+    Las plantillas se leen una vez y se guardan en memoria: lo que cambia entre
+    dos peticiones son los metadatos, no el fichero.
+  */
+  const plantillas = new Map();
+  const leerPlantilla = (fichero) => {
+    if (!plantillas.has(fichero)) {
+      plantillas.set(fichero, fs.readFileSync(path.join(PUBLIC_DIRECTORY, fichero), 'utf8'));
+    }
+    return plantillas.get(fichero);
+  };
+
+  const origenPublico = (request) => {
+    if (publicBaseUrl) return publicBaseUrl.replace(/\/+$/, '');
+    const host = request.get('host');
+    return host ? `${request.protocol}://${host}` : null;
+  };
+
+  /**
+   * Envía una página con su título, su descripción y su tarjeta social ya
+   * escritos. El evento se busca por el slug de la URL; si no existe, se
+   * responde igual con los metadatos del sitio en vez de fallar: la página se
+   * encarga después de decir que el evento no está.
+   */
+  const enviarPagina = (fichero, seccion = null) => (request, response) => {
+    let evento = null;
+    if (request.params?.slug) {
+      try { evento = database.getEventBySlug(request.params.slug) ?? null; }
+      catch { evento = null; }
+    }
+    const metadata = buildMetadata({
+      event: evento, section: seccion,
+      origin: origenPublico(request),
+      path: request.originalUrl.split('?')[0]
+    });
+    response.type('html').send(injectMetadata(leerPlantilla(fichero), metadata));
+  };
+
+  const sendDraftPage = enviarPagina('draft.html', 'draft');
+  const sendCompetitionPage = enviarPagina('competition-page.html', 'competicion');
   app.get('/eventos/:slug/draft', sendDraftPage);
   app.get('/eventos/:slug/competicion/draft', sendDraftPage);
   app.get('/eventos/:slug/competicion/fase-regular/jornadas/:jornada', sendCompetitionPage);
@@ -1582,11 +1634,67 @@ function createApp({
   app.get('/eventos/:slug/competicion/resultados', sendCompetitionPage);
   app.get('/eventos/:slug/competicion/partidos/:matchId', sendCompetitionPage);
   app.get('/eventos/:slug/competicion', sendCompetitionPage);
-  app.get('/eventos/:slug/informacion', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'informacion.html')));
-  app.get('/eventos/:slug', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));
-  app.get('/eventos/:slug/:section', (_request, response) => response.sendFile(path.join(PUBLIC_DIRECTORY, 'event.html')));
-  app.use(express.static(PUBLIC_DIRECTORY, { extensions: ['html'] }));
-  app.use((_request, response) => response.status(404).type('text').send('Pagina no encontrada'));
+  app.get('/eventos/:slug/informacion', enviarPagina('informacion.html', 'informacion'));
+  app.get('/eventos/:slug', enviarPagina('event.html'));
+  app.get('/eventos/:slug/:section', enviarPagina('event.html'));
+  app.get('/', enviarPagina('index.html'));
+
+  /*
+    El mapa del sitio se genera: los eventos aparecen y se archivan, y un
+    fichero escrito a mano se queda desfasado a la primera.
+  */
+  app.get('/sitemap.xml', (request, response) => {
+    const origen = origenPublico(request) || '';
+    const enlaces = ['/', '/privacidad', '/terminos', '/contacto'];
+    for (const evento of database.listEvents()) {
+      enlaces.push(`/eventos/${encodeURIComponent(evento.slug)}`);
+      if (evento.modules?.information) enlaces.push(`/eventos/${encodeURIComponent(evento.slug)}/informacion`);
+      if (evento.modules?.competition) enlaces.push(`/eventos/${encodeURIComponent(evento.slug)}/competicion`);
+      if (evento.modules?.draft) enlaces.push(`/eventos/${encodeURIComponent(evento.slug)}/competicion/draft`);
+    }
+    const cuerpo = enlaces
+      .map((ruta) => `  <url><loc>${escapeXml(`${origen}${ruta}`)}</loc></url>`)
+      .join('\n');
+    response.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${cuerpo}\n</urlset>\n`);
+  });
+
+  app.get('/robots.txt', (request, response) => {
+    const origen = origenPublico(request) || '';
+    response.type('text/plain').send([
+      '# Mini Eventos Jartiland',
+      '',
+      'User-agent: *',
+      'Disallow: /admin',
+      'Disallow: /api/',
+      'Allow: /',
+      '',
+      `Sitemap: ${origen}/sitemap.xml`,
+      ''
+    ].join('\n'));
+  });
+
+  /*
+    Las imágenes y las fuentes se pueden cachear de sobra; el HTML no, porque
+    cambia con cada evento y una portada vieja en la caché del navegador es
+    peor que una recarga.
+  */
+  app.use(express.static(PUBLIC_DIRECTORY, {
+    extensions: ['html'],
+    setHeaders(response, ruta) {
+      response.setHeader('Cache-Control', /\.(png|jpe?g|webp|svg|ico|woff2?)$/i.test(ruta)
+        ? 'public, max-age=604800'
+        : 'no-cache');
+    }
+  }));
+  app.use((_request, response) => {
+    // Una página de error con la identidad del sitio y una salida. Un texto
+    // plano deja al visitante sin saber siquiera dónde ha caído.
+    //
+    // Sin metadatos sociales a propósito: lleva su propio título, va marcada
+    // como noindex y nadie comparte un enlace roto queriendo.
+    response.status(404).type('html').send(leerPlantilla('404.html'));
+  });
 
 
   app.use((error, request, response, _next) => {

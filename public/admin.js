@@ -37,7 +37,7 @@ function populateEvent(event) {
   byId('registrations-open').checked = event?.registrationsOpen || false;
   byId('event-accent').value = event?.accentColor || '#d7ff3f';
   byId('event-icon').value = event?.icon || 'gamepad';
-  byId('event-cover-image').value = event?.coverImage || '/images/events/default-event-cover.png';
+  byId('event-cover-image').value = event?.coverImage || '/images/events/default-event-cover.jpg';
   byId('event-banner-image').value = event?.bannerImage || '';
   byId('event-cover-preview').src = byId('event-cover-image').value;
   document.querySelectorAll('[data-module-input]').forEach((input) => { input.checked = event?.modules?.[input.dataset.moduleInput] ?? true; });
@@ -62,12 +62,12 @@ function collectEvent() {
 }
 
 byId('event-cover-image').addEventListener('input', () => {
-  byId('event-cover-preview').src = value('event-cover-image') || '/images/events/default-event-cover.png';
+  byId('event-cover-preview').src = value('event-cover-image') || '/images/events/default-event-cover.jpg';
 });
 byId('event-cover-preview').addEventListener('error', () => {
   const preview = byId('event-cover-preview');
-  if (!preview.src.endsWith('/images/events/default-event-cover.png')) {
-    preview.src = '/images/events/default-event-cover.png';
+  if (!preview.src.endsWith('/images/events/default-event-cover.jpg')) {
+    preview.src = '/images/events/default-event-cover.jpg';
   }
 });
 
