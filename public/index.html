@@ -10,8 +10,8 @@
     <meta property="og:site_name" content="Mini Eventos Jartiland">
     <meta property="og:title" content="Mini Eventos Jartiland">
     <meta property="og:description" content="Torneos y eventos ocasionales para la comunidad de Jartiland">
-    <meta property="og:image" content="https://mini-eventos-jartiland.tail9d0334.ts.net:8443/images/logo.png">
-    <meta property="og:url" content="https://mini-eventos-jartiland.tail9d0334.ts.net:8443/">
+    <meta property="og:image" content="https://mini-eventos-jartiland.tail9d0334.ts.net/images/logo.png">
+    <meta property="og:url" content="https://mini-eventos-jartiland.tail9d0334.ts.net/">
     <meta name="twitter:card" content="summary">
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
@@ -30,8 +30,8 @@
         <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
       </a>
       <nav class="primary-nav" aria-label="Navegación principal">
-        <a class="active" href="/" aria-current="page">Eventos</a>
-        <a href="#como-funciona">Cómo funciona</a>
+        <a class="active" href="#eventos" aria-current="page">Próximo evento</a>
+        <a href="#historial">Historial</a>
       </nav>
       <div class="broadcast" aria-live="polite">
         <span id="portal-dot" class="live-dot loading"></span><span id="portal-state">CONECTANDO</span>
@@ -45,30 +45,29 @@
           <h1 id="portal-title">MINI EVENTOS <span>JARTILAND</span></h1>
         </div>
         <div class="hero-side">
-          <p>Torneos y encuentros ocasionales de distintos juegos. Entra, elige misión y apúntate en menos de un minuto.</p>
-          <a class="jump-link" href="#eventos">VER EVENTOS <span aria-hidden="true">↓</span></a>
+          <p>Un evento en primer plano. Toda la información, las inscripciones y la competición sin rodeos.</p>
+          <a class="jump-link" href="#eventos">VER PRÓXIMO EVENTO <span aria-hidden="true">↓</span></a>
         </div>
         <img class="hero-logo" src="/images/logo.png" alt="" decoding="async">
       </section>
 
       <section id="eventos" class="events-board" aria-labelledby="events-title">
         <header class="board-heading">
-          <div><p class="section-index">01 / CARTELERA</p><h2 id="events-title">Elige tu próximo evento</h2></div>
-          <p id="event-count" class="board-count">— EVENTOS</p>
+          <div><p class="section-index">01 / AHORA</p><h2 id="events-title">El próximo reto</h2></div>
+          <p id="event-count" class="board-count">— EVENTO ACTIVO</p>
         </header>
-        <div id="events-loading" class="state-panel" role="status"><span class="scanner"></span>Cargando cartelera…</div>
-        <div id="events-empty" class="state-panel empty" hidden><span class="empty-number">00</span><div><h3>Preparando la siguiente partida</h3><p>Vuelve pronto: aquí aparecerán los próximos eventos de la comunidad.</p></div></div>
+        <div id="events-loading" class="state-panel" role="status"><span class="scanner"></span>Cargando evento…</div>
+        <div id="events-empty" class="state-panel empty" hidden><span class="empty-number">00</span><div><h3>Preparando el siguiente evento</h3><p>Vuelve pronto: aquí aparecerá el próximo reto de la comunidad.</p></div></div>
         <div id="events-error" class="state-panel empty" hidden><span class="empty-number">!</span><div><h3>No hemos podido abrir la cartelera</h3><p>Comprueba la conexión y vuelve a intentarlo.</p><button id="retry-events" class="outline-button" type="button">REINTENTAR</button></div></div>
-        <div id="event-grid" class="event-grid" hidden></div>
+        <div id="event-grid" class="event-grid event-grid-featured" hidden></div>
       </section>
 
-      <section id="como-funciona" class="portal-steps" aria-labelledby="steps-title">
-        <div><p class="section-index">02 / EN 60 SEGUNDOS</p><h2 id="steps-title">Entrar. Elegir. Jugar.</h2></div>
-        <ol>
-          <li><span>01</span><strong>Abre un evento</strong><p>Consulta fecha, formato y plazas disponibles.</p></li>
-          <li><span>02</span><strong>Apúntate</strong><p>Discord y nombre en el juego. Nada más.</p></li>
-          <li><span>03</span><strong>Sigue la partida</strong><p>Participantes, resultados y leaderboard en directo.</p></li>
-        </ol>
+      <section id="historial" class="history-board" aria-labelledby="history-title" hidden>
+        <header class="board-heading history-heading">
+          <div><p class="section-index">02 / ARCHIVO</p><h2 id="history-title">Eventos realizados</h2></div>
+          <p id="history-count" class="board-count">— FINALIZADOS</p>
+        </header>
+        <div id="history-list" class="history-list"></div>
       </section>
     </main>
 
