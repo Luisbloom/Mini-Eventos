@@ -50,6 +50,25 @@ describe('paginas publicas', () => {
       }
     });
 
+    it('no queda ningun hueco por rellenar en las paginas legales', async () => {
+      // Un marcador de pendiente publicado es peor que no tener la página: dice
+      // que la información existe y a la vez que no está.
+      for (const ruta of ['/privacidad', '/terminos', '/contacto']) {
+        const html = (await request(app).get(ruta).expect(200)).text;
+        assert.ok(!html.includes('legal-todo'), `${ruta} tiene un hueco sin rellenar`);
+        assert.ok(!html.includes('Pendiente de completar'), `${ruta} anuncia algo pendiente`);
+      }
+    });
+
+    it('ofrece un canal de contacto real, no una promesa', async () => {
+      const contacto = (await request(app).get('/contacto').expect(200)).text;
+      assert.match(contacto, /href="https:\/\/discord\.gg\/[A-Za-z0-9]+"/);
+
+      // La política remite a ese canal para ejercer derechos: tiene que llevar.
+      const privacidad = (await request(app).get('/privacidad').expect(200)).text;
+      assert.match(privacidad, /href="https:\/\/discord\.gg\/[A-Za-z0-9]+"/);
+    });
+
     it('la politica dice que no hay analiticas ni rastreadores', async () => {
       const html = (await request(app).get('/privacidad')).text;
       assert.match(html, /no usamos analíticas/i);

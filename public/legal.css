@@ -114,3 +114,17 @@
   .notfound-main { padding: 3.5rem 1.2rem; }
   .notfound-actions a { width: 100%; }
 }
+
+/* La llamada a la acción de la página de contacto: el enlace al Discord es
+   lo único que se va a pulsar ahí, así que no se disimula entre el texto. */
+.contact-cta { margin: 1.6rem 0 1.4rem; }
+.contact-link {
+  display: inline-block;
+  padding: 1rem 1.7rem;
+  border: 1px solid var(--lime);
+  color: var(--lime);
+  font: .6rem/1 var(--mono);
+  letter-spacing: .14em;
+  text-decoration: none;
+}
+.contact-link:hover, .contact-link:focus-visible { background: var(--lime); color: var(--void); }
