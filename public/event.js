@@ -189,13 +189,26 @@ async function submitRegistration(event) {
     if (!element.name) continue;
     values[element.name] = element.type === 'checkbox' ? element.checked : element.value;
   }
-  byId('registration-submit').disabled = true; feedback.textContent = 'Enviando inscripción…'; feedback.className = '';
+  byId('registration-submit').disabled = true; feedback.textContent = 'Enviando inscripción…'; feedback.className = ''; feedback.setAttribute('role', 'status');
   try {
     const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || 'No se pudo completar la inscripción.');
     form.hidden = true; byId('registration-success').hidden = false;
-  } catch (error) { feedback.textContent = error.message; feedback.className = 'error'; byId('registration-submit').disabled = false; }
+  } catch (error) {
+    /*
+      Que el error se vea Y se oiga. Con role="status" el lector de pantalla
+      espera a que haya un hueco y puede no llegar a decirlo nunca; y en un
+      movil, con el boton al final de un formulario largo, el mensaje se queda
+      fuera de pantalla y parece que no ha pasado nada.
+    */
+    feedback.textContent = error.message;
+    feedback.className = 'error';
+    feedback.setAttribute('role', 'alert');
+    byId('registration-submit').disabled = false;
+    feedback.focus({ preventScroll: true });
+    feedback.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
 }
 
 async function loadParticipants(event) {
