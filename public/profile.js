@@ -22,6 +22,97 @@ function fact(label, value) {
   return row;
 }
 
+const MAPAS = {
+  ascent: 'Ascent', bind: 'Bind', breeze: 'Breeze', fracture: 'Fracture',
+  haven: 'Haven', icebox: 'Icebox', lotus: 'Lotus', pearl: 'Pearl',
+  split: 'Split', sunset: 'Sunset', abyss: 'Abyss'
+};
+const nombreDeMapa = (clave) => MAPAS[clave] || String(clave || '').toUpperCase();
+
+/** El equipo con nombres y apellidos, no sólo el nombre del equipo. */
+function plantilla(team) {
+  if (!team?.members?.length) return null;
+  const caja = document.createElement('div');
+  caja.className = 'profile-roster';
+
+  const titulo = document.createElement('p');
+  titulo.className = 'profile-roster-title';
+  titulo.textContent = 'Tus compañeros';
+  caja.append(titulo);
+
+  const lista = document.createElement('ul');
+  for (const miembro of team.members) {
+    const fila = document.createElement('li');
+    if (miembro.role === 'captain') fila.className = 'is-captain';
+    fila.textContent = miembro.displayName || '—';
+    if (miembro.role === 'captain') {
+      const marca = document.createElement('span');
+      marca.textContent = 'capitán';
+      fila.append(marca);
+    }
+    lista.append(fila);
+  }
+  caja.append(lista);
+  return caja;
+}
+
+/** Cómo va el equipo. Sin liga generada no se enseña nada. */
+function posicion(registration) {
+  const fila = registration.standing;
+  if (!fila) return null;
+  const caja = document.createElement('div');
+  caja.className = 'profile-standing';
+  if (fila.qualified) caja.classList.add('is-qualified');
+
+  const puesto = document.createElement('b');
+  puesto.textContent = `${fila.position}º`;
+
+  const detalle = document.createElement('span');
+  const diferencia = fila.roundDiff > 0 ? `+${fila.roundDiff}` : String(fila.roundDiff);
+  detalle.textContent = `${fila.wins}V · ${fila.losses}D · ${diferencia} rondas`;
+
+  caja.append(puesto, detalle);
+
+  // Un empate sin resolver se dice, no se disimula con el orden alfabético.
+  if (fila.tieRequiresAdmin) {
+    const aviso = document.createElement('small');
+    aviso.textContent = 'Empate pendiente de resolver por la organización';
+    caja.append(aviso);
+  }
+  return caja;
+}
+
+/** Contra quién toca. Es lo primero que se busca al abrir el perfil. */
+function proximoPartido(registration) {
+  const partido = registration.nextMatch;
+  if (!partido) return null;
+  const caja = document.createElement('div');
+  caja.className = 'profile-next';
+
+  const etiqueta = document.createElement('p');
+  etiqueta.className = 'profile-next-label';
+  etiqueta.textContent = partido.matchday
+    ? `Próximo partido · jornada ${partido.matchday}`
+    : 'Próximo partido';
+
+  const rival = document.createElement('p');
+  rival.className = 'profile-next-rival';
+  rival.textContent = partido.opponentName || 'Por determinar';
+
+  caja.append(etiqueta, rival);
+
+  const detalles = [];
+  if (partido.bestOf > 1) detalles.push(`BO${partido.bestOf}`);
+  if (partido.maps?.length) detalles.push(partido.maps.map(nombreDeMapa).join(' · '));
+  if (detalles.length) {
+    const pie = document.createElement('p');
+    pie.className = 'profile-next-detail';
+    pie.textContent = detalles.join(' — ');
+    caja.append(pie);
+  }
+  return caja;
+}
+
 function eventCard(registration) {
   const article = document.createElement('article');
   article.className = `profile-event-card${registration.archived ? ' is-archived' : ''}`;
@@ -75,6 +166,10 @@ function eventCard(registration) {
     content.append(bio);
   }
 
+  for (const pieza of [proximoPartido(registration), posicion(registration), plantilla(registration.team)]) {
+    if (pieza) content.append(pieza);
+  }
+
   const footer = document.createElement('footer');
   if (registration.archived) {
     const historical = document.createElement('span');
@@ -87,6 +182,16 @@ function eventCard(registration) {
     link.href = `/eventos/${encodeURIComponent(registration.slug)}`;
     link.textContent = 'Ir al evento →';
     footer.append(link);
+
+    // Si ya hay competición, se va directo a ella: es donde está lo que
+    // importa una vez formados los equipos.
+    if (registration.standing || registration.nextMatch) {
+      const competicion = document.createElement('a');
+      competicion.className = 'profile-event-link is-secondary';
+      competicion.href = `/eventos/${encodeURIComponent(registration.slug)}/competicion`;
+      competicion.textContent = 'Ver competición →';
+      footer.append(competicion);
+    }
   }
   content.append(footer);
 

@@ -1077,7 +1077,9 @@ describe('draft de Valorant', () => {
       assert.equal(response.body.displayName, 'Luis');
       assert.equal(response.body.avatar, '/api/me/avatar');
       assert.equal(response.body.registrations.length, 2);
-      assert.deepEqual(response.body.registrations[0], {
+      const propia = response.body.registrations[0];
+      assert.deepEqual(propia, {
+        eventId: event.id,
         slug: 'torneo-valorant',
         eventName: 'Torneo Valorant',
         game: 'Valorant',
@@ -1090,9 +1092,23 @@ describe('draft de Valorant', () => {
         peakRank: 'Ascendente 2',
         playerBio: 'Main controlador.',
         role: 'captain',
-        team: { name: 'Equipo de Luis', role: 'captain' }
+        team: {
+          id: propia.team.id,
+          name: 'Equipo de Luis',
+          role: 'captain',
+          members: propia.team.members
+        },
+        // El draft está configurado pero no jugado, así que todavía no hay
+        // liga: ni clasificación ni rival que enseñar.
+        standing: null,
+        seriesPlayed: null,
+        seriesTotal: null,
+        nextMatch: null
       });
+      // El capitán ya cuenta como plantilla de un equipo de uno.
+      assert.deepEqual(propia.team.members, [{ displayName: 'Luis', role: 'captain' }]);
       assert.deepEqual(response.body.registrations[1], {
+        eventId: among.id,
         slug: among.slug,
         eventName: among.name,
         game: 'Among Us',

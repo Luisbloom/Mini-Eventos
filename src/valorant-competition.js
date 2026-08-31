@@ -1188,6 +1188,58 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
      * Se calcula de los resultados, no se guarda. Una tabla derivable que además
      * se almacena acaba discrepando de sus propios datos.
      */
+    /**
+     * Lo que un jugador quiere saber de su equipo sin recorrer tres páginas:
+     * cómo va y contra quién juega la próxima vez.
+     *
+     * Devuelve null en lo que todavía no exista —una liga sin generar no tiene
+     * clasificación, y un equipo que ya jugó todo no tiene próximo partido—
+     * en vez de inventar ceros que parecerían datos.
+     */
+    teamSnapshot(eventId, teamId, { teams } = {}) {
+      const equipo = Number(teamId);
+      const SIN_LIGA = { standing: null, seriesPlayed: null, seriesTotal: null, nextMatch: null };
+      if (!Number.isInteger(equipo)) return SIN_LIGA;
+
+      const series = this.listSeries(eventId);
+      if (series.length === 0) return SIN_LIGA;
+
+      const tabla = this.standings(eventId, { teams });
+      const fila = tabla.standings.find((row) => row.teamId === equipo) ?? null;
+
+      const nombre = new Map((teams || []).map((e) => [e.id, e.name]));
+      const suyas = series.filter(
+        (serie) => serie.teamAId === equipo || serie.teamBId === equipo);
+
+      // El próximo es el primero sin terminar; las series van ordenadas por
+      // jornada, así que basta con el primero que aparezca.
+      const siguiente = suyas.find((serie) => serie.status !== 'COMPLETED') ?? null;
+      const jugadas = suyas.filter((serie) => serie.status === 'COMPLETED').length;
+
+      return {
+        standing: fila ? {
+          position: fila.position,
+          played: fila.played,
+          wins: fila.wins,
+          losses: fila.losses,
+          roundDiff: fila.roundDiff,
+          qualified: fila.qualified,
+          tieRequiresAdmin: fila.tieRequiresAdmin
+        } : null,
+        seriesPlayed: jugadas,
+        seriesTotal: suyas.length,
+        nextMatch: siguiente ? {
+          matchday: siguiente.matchday,
+          opponentTeamId: siguiente.teamAId === equipo ? siguiente.teamBId : siguiente.teamAId,
+          opponentName: nombre.get(
+            siguiente.teamAId === equipo ? siguiente.teamBId : siguiente.teamAId) ?? null,
+          maps: siguiente.games.map((juego) => juego.mapKey).filter(Boolean),
+          bestOf: siguiente.bestOf,
+          scheduledAt: siguiente.scheduledAt ?? null
+        } : null
+      };
+    },
+
     listTieResolutions(eventId, stage = 'REGULAR') {
       return connection.prepare(`SELECT id, event_id eventId, stage,
         higher_team_id higherTeamId, lower_team_id lowerTeamId,

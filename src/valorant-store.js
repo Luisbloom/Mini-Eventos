@@ -553,10 +553,10 @@ function createValorantStore(connection) {
      */
     profileRegistrations(discordAccountId) {
       return connection.prepare(`
-        SELECT e.slug, e.name event_name, e.game, e.status event_status,
+        SELECT e.id event_id, e.slug, e.name event_name, e.game, e.status event_status,
                e.cover_image, e.accent_color, e.archived,
                p.status registration_status, p.riot_game_name, p.riot_tag_line,
-               p.field_values_json, tm.role team_role, t.name team_name
+               p.field_values_json, tm.role team_role, t.id team_id, t.name team_name
         FROM event_participants p
         JOIN events e ON e.id=p.event_id
         LEFT JOIN team_members tm ON tm.event_id=e.id AND tm.participant_id=p.id
@@ -580,7 +580,8 @@ function createValorantStore(connection) {
           peakRank: values.peak_rank || null,
           playerBio: values.player_bio || '',
           role: row.team_role === 'captain' ? 'captain' : (row.team_role ? 'participant' : null),
-          team: row.team_name ? { name: row.team_name, role: row.team_role } : null
+          eventId: row.event_id,
+          team: row.team_name ? { id: row.team_id, name: row.team_name, role: row.team_role } : null
         };
       });
     },

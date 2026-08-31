@@ -226,3 +226,93 @@
   .skeleton { animation: none; }
   .profile-event-card, .profile-event-cover img, .profile-primary-action { transition: none; }
 }
+
+/* ------------------------------------------------- lo que pasa en el torneo
+
+   El perfil decía quién eres y a qué te habías apuntado. Lo que uno viene a
+   mirar de verdad es contra quién juega, cómo va su equipo y con quién. */
+
+.profile-next {
+  margin-top: 1rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--event-accent, var(--lime));
+  background: rgba(255, 255, 255, .03);
+}
+.profile-next-label {
+  margin: 0 0 .35rem;
+  color: var(--muted);
+  font: .5rem/1 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.profile-next-rival {
+  margin: 0;
+  font: 1.35rem/1.1 var(--display);
+  text-transform: uppercase;
+}
+.profile-next-detail {
+  margin: .45rem 0 0;
+  color: var(--muted);
+  font: .55rem/1.4 var(--mono);
+  letter-spacing: .06em;
+}
+
+.profile-standing {
+  margin-top: .8rem;
+  padding: .7rem .9rem;
+  border: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .3rem .8rem;
+}
+.profile-standing b { font: 1.5rem/1 var(--display); }
+.profile-standing span { color: var(--muted); font: .6rem/1 var(--mono); letter-spacing: .08em; }
+.profile-standing small {
+  flex-basis: 100%;
+  color: var(--gold);
+  font: .5rem/1.4 var(--mono);
+  letter-spacing: .06em;
+}
+.profile-standing.is-qualified { border-color: var(--lime); }
+.profile-standing.is-qualified b { color: var(--lime); }
+
+.profile-roster { margin-top: .8rem; }
+.profile-roster-title {
+  margin: 0 0 .5rem;
+  color: var(--muted);
+  font: .5rem/1 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.profile-roster ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+.profile-roster li {
+  padding: .35rem .6rem;
+  border: 1px solid var(--line);
+  font-size: .8rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: .4rem;
+}
+.profile-roster li.is-captain { border-color: var(--event-accent, var(--lime)); }
+.profile-roster li span {
+  color: var(--muted);
+  font: .45rem/1 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.profile-event-link.is-secondary { opacity: .75; }
+.profile-event-link.is-secondary:hover { opacity: 1; }
+
+@media (max-width: 600px) {
+  .profile-next-rival { font-size: 1.15rem; }
+  .profile-roster ul { gap: .3rem; }
+}

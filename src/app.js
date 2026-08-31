@@ -800,6 +800,42 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  /**
+   * Añade a una inscripción lo que su dueño querría ver: con quién juega,
+   * contra quién y cómo va su equipo.
+   *
+   * De los compañeros sale **sólo el nombre visible**, que ya es público en la
+   * página del draft. Ni Riot ID, ni Friend Code, ni identificadores de
+   * Discord: que sea mi perfil no me da acceso a los datos de los demás.
+   */
+  function enrichRegistration(registro) {
+    if (!registro.team?.id) return registro;
+    try {
+      const equipos = database.valorant.listTeams(registro.eventId);
+      const propio = equipos.find((equipo) => equipo.id === registro.team.id);
+      const snapshot = database.valorantCompetition.teamSnapshot(
+        registro.eventId, registro.team.id, { teams: equipos });
+
+      return {
+        ...registro,
+        team: {
+          ...registro.team,
+          members: (propio?.members || []).map((miembro) => ({
+            displayName: miembro.displayName ?? miembro.display_name ?? null,
+            role: miembro.role === 'captain' ? 'captain' : 'participant'
+          }))
+        },
+        standing: snapshot.standing,
+        seriesPlayed: snapshot.seriesPlayed ?? null,
+        seriesTotal: snapshot.seriesTotal ?? null,
+        nextMatch: snapshot.nextMatch
+      };
+    } catch {
+      // Un evento sin competición montada no es un error del perfil.
+      return registro;
+    }
+  }
+
   app.get('/api/me/profile', (request, response, next) => {
     try {
       const session = currentSession(request);
@@ -811,6 +847,7 @@ function createApp({
         // La ruta propia entrega los píxeles sin revelar el id ni el hash de Discord.
         avatar: session.account.avatar ? '/api/me/avatar' : null,
         registrations: database.valorant.profileRegistrations(session.account.id)
+          .map((registro) => enrichRegistration(registro))
       });
     } catch (error) { next(error); }
   });
