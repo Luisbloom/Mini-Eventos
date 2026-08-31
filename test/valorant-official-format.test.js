@@ -174,6 +174,38 @@ describe('formato oficial del torneo de Valorant', () => {
     }
   });
 
+  it('el estado de la decena llega a la pagina, no se queda en el calculo', async () => {
+    const dbPath = databasePath();
+    const database = openDatabase(dbPath);
+    databases.push(database);
+    const event = createOfficialEvent(database);
+
+    // Un calculo que no llega a ninguna pantalla es trabajo que no existe.
+    const app = createApp({ database, adminToken: 'admin-test' });
+    const vacio = await request(app).get(`/api/events/${event.slug}`).expect(200);
+    assert.ok(vacio.body.event.rosterState, 'el evento oficial trae el estado de la decena');
+    assert.equal(vacio.body.event.rosterState.confirmed, 0);
+    assert.equal(vacio.body.event.rosterState.missingForNext, 20);
+
+    const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.js'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.html'), 'utf8');
+    assert.ok(js.includes('event.rosterState'), 'la pagina lo lee');
+    assert.ok(html.includes('id="event-roster-note"'), 'y tiene donde pintarlo');
+  });
+
+  it('un evento que no es el oficial no habla de decenas', async () => {
+    const dbPath = databasePath();
+    const database = openDatabase(dbPath);
+    databases.push(database);
+    const otro = database.createEvent({
+      slug: 'otro-torneo', name: 'Otro', game: 'Fall Guys', description: 'x',
+      status: 'Inscripciones abiertas', registrationsOpen: true, modules: { participants: true }
+    });
+    const app = createApp({ database, adminToken: 'admin-test' });
+    const respuesta = await request(app).get(`/api/events/${otro.slug}`).expect(200);
+    assert.equal(respuesta.body.event.rosterState, null);
+  });
+
   it('las plantillas oficiales van de diez en diez, de 20 a 40', () => {
     const { OFFICIAL_VALORANT_FORMAT: F, officialRosterState } = require('../src/valorant-event-format');
 

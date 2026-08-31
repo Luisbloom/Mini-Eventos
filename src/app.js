@@ -26,6 +26,7 @@ const { PlayoffError } = require('./valorant-playoffs');
 const { officialValorantFormatForSlug } = require('./valorant-event-format');
 const { gameProfile, isAmongUs, isValorant } = require('./games');
 const { LEGAL_VERSION, ConsentError, requireConsent } = require('./legal-consent');
+const { officialRosterState } = require('./valorant-event-format');
 const { buildMetadata, injectMetadata } = require('./services/social-metadata');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
@@ -263,6 +264,12 @@ function createApp({
         event: {
           ...event,
           officialFormat: officialValorantFormatForSlug(event.slug),
+          // En qué punto está la inscripción respecto a las decenas. Se calcula
+          // con los confirmados, que es lo que decide si el torneo se puede
+          // jugar; los pendientes todavía no cuentan.
+          rosterState: officialValorantFormatForSlug(event.slug)
+            ? officialRosterState(database.countConfirmedParticipants(event.id))
+            : null,
           valorantPeakRanks: isValorant(event.game) ? VALORANT_PEAK_RANKS : []
         },
         registrationFields

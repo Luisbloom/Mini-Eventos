@@ -32,6 +32,31 @@ function renderMinimum(event) {
     ? 'Mínimo alcanzado: el evento ya cuenta con las inscripciones necesarias.'
     : `Faltan ${remaining} ${remaining === 1 ? 'persona' : 'personas'} para poder realizar el evento.`;
   byId('event-minimum-progress').style.width = `${Math.min(100, Math.round((event.participantCount / minimum) * 100))}%`;
+
+  /*
+    En los torneos por decenas el mínimo no lo cuenta todo: con 25 confirmados
+    se ha pasado de 20 pero no se juega con 25. Se dice cuántos faltan para la
+    siguiente plantilla, que es la pregunta de quien mira el contador.
+  */
+  const decenas = event.rosterState;
+  const nota = byId('event-roster-note');
+  if (!nota) return;
+  nota.hidden = !decenas;
+  if (!decenas) return;
+
+  if (decenas.exact) {
+    nota.textContent = `Plantilla completa: ${decenas.exact.players} jugadores, ${decenas.exact.teams} equipos.`;
+    nota.className = 'roster-note is-ready';
+  } else if (decenas.next) {
+    const sobran = decenas.leftOut > 0 && decenas.playable
+      ? ` Si se jugara ya, serían ${decenas.playable.players} y ${decenas.leftOut} se quedarían fuera.`
+      : '';
+    nota.textContent = `Faltan ${decenas.missingForNext} para completar ${decenas.next.players}.${sobran}`;
+    nota.className = 'roster-note';
+  } else {
+    nota.textContent = `Aforo completo: ${decenas.playable.players} jugadores, ${decenas.playable.teams} equipos.`;
+    nota.className = 'roster-note is-ready';
+  }
 }
 
 function configureModules(event) {

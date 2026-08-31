@@ -207,3 +207,13 @@
 .consent-check input { margin-top: .2rem; width: 18px; height: 18px; flex: none; accent-color: var(--event-accent, var(--lime)); cursor: pointer; }
 .consent-check a { color: var(--event-accent, var(--lime)); text-decoration: underline; text-underline-offset: .2em; }
 .consent-check:focus-within { border-color: var(--event-accent, var(--lime)); }
+
+/* En los torneos que van por decenas, el mínimo no cuenta toda la historia:
+   pasar de 20 no significa poder jugar con 25. */
+.roster-note {
+  margin: .6rem 0 0;
+  color: var(--muted);
+  font: .58rem/1.5 var(--mono);
+  letter-spacing: .06em;
+}
+.roster-note.is-ready { color: var(--event-accent, var(--lime)); }

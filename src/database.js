@@ -483,6 +483,7 @@ function openDatabase(dbPath) {
   const deleteMatchStatement = connection.prepare('DELETE FROM matches WHERE id=? AND event_id=?');
   const voidMatchStatement = connection.prepare("UPDATE matches SET match_status='VOID',void_reason=? WHERE id=? AND event_id=?");
   const countActiveParticipantsStatement = connection.prepare(`SELECT COUNT(*) total FROM event_participants WHERE event_id=? AND status IN ('pending','confirmed')`);
+  const countConfirmedParticipantsStatement = connection.prepare("SELECT COUNT(*) total FROM event_participants WHERE event_id=? AND status='confirmed'");
   const duplicateParticipantStatement = connection.prepare('SELECT id FROM event_participants WHERE event_id=? AND discord_username=? COLLATE NOCASE');
   const duplicateFriendCodeStatement = connection.prepare(
     "SELECT id FROM event_participants WHERE event_id=? AND internal_friend_code=? AND status!='cancelled' AND id IS NOT ?");
@@ -672,6 +673,10 @@ function openDatabase(dbPath) {
         eventId, discordUsername, displayName, JSON.stringify(values), friendCode,
         consent?.acceptedAt ?? null, consent?.version ?? null);
       return toParticipant(getParticipantStatement.get(Number(result.lastInsertRowid)));
+    },
+    /** Sólo los confirmados: son los que deciden si el torneo se puede jugar. */
+    countConfirmedParticipants(eventId) {
+      return countConfirmedParticipantsStatement.get(eventId).total;
     },
     listParticipants(eventId, { publicView = false } = {}) {
       requireEvent(eventId);
