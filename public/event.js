@@ -111,12 +111,15 @@ async function submitRegistration(event) {
   if (!form.reportValidity()) return;
   const values = {};
   for (const element of form.elements) {
-    if (!element.name) continue;
+    if (!element.name || element.name === 'acceptedTerms') continue;
     values[element.name] = element.type === 'checkbox' ? element.checked : element.value;
   }
+  // El consentimiento va aparte de los datos del formulario: no es un campo
+  // de inscripción, es la base legal para tratarlos.
+  const acceptedTerms = byId('registration-consent')?.checked === true;
   byId('registration-submit').disabled = true; feedback.textContent = 'Enviando inscripción…'; feedback.className = ''; feedback.setAttribute('role', 'status');
   try {
-    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) });
+    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values, acceptedTerms }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || 'No se pudo completar la inscripción.');
     form.hidden = true; byId('registration-success').hidden = false;
@@ -246,8 +249,13 @@ function pasoFormulario(event) {
           placeholder="Cuánto tiempo llevas jugando, roles preferidos o algún comentario…"></textarea>
         <div class="riot-field-meta"><small>Este texto sólo lo verá la organización.</small><span id="player-bio-count">0 / 160</span></div>
       </div>
+      <label class="consent-check">
+        <input type="checkbox" id="riot-consent" required>
+        <span>He leído y acepto los <a href="/terminos" target="_blank" rel="noopener">términos y condiciones</a>
+        y la <a href="/privacidad" target="_blank" rel="noopener">política de privacidad</a>.</span>
+      </label>
       <button type="submit">INSCRIBIRME <span aria-hidden="true">→</span></button>
-      <p id="riot-feedback" role="status"></p>
+      <p id="riot-feedback" role="status" tabindex="-1"></p>
     </form>`;
 }
 
@@ -301,6 +309,12 @@ async function renderDiscordRegistration(event) {
     submit.preventDefault();
     const boton = byId('riot-form').querySelector('button');
     const aviso = byId('riot-feedback');
+    if (!byId('riot-consent')?.checked) {
+      aviso.textContent = 'Tienes que aceptar los términos y la política de privacidad.';
+      aviso.className = 'error';
+      byId('riot-consent')?.focus();
+      return;
+    }
     boton.disabled = true;
     aviso.textContent = '';
     try {
@@ -311,7 +325,8 @@ async function renderDiscordRegistration(event) {
         body: JSON.stringify({
           riotId: byId('riot-id').value,
           peakRank: byId('peak-rank').value,
-          playerBio: byId('player-bio').value
+          playerBio: byId('player-bio').value,
+          acceptedTerms: byId('riot-consent')?.checked === true
         })
       });
       const cuerpo = await respuesta.json().catch(() => ({}));

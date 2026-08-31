@@ -195,3 +195,15 @@
   .valorant-official-actions a { text-align: center; }
 }
 @media (prefers-reduced-motion: reduce) { .valorant-route > div:hover { transform: none; } }
+
+/* Casilla de consentimiento. Nunca viene marcada: una casilla premarcada no
+   es consentimiento, y aquí es la base legal para tratar los datos. */
+.consent-check {
+  display: flex; align-items: flex-start; gap: .7rem;
+  margin: 1.2rem 0; padding: .9rem 1rem;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .02);
+  font-size: .88rem; line-height: 1.55; cursor: pointer;
+}
+.consent-check input { margin-top: .2rem; width: 18px; height: 18px; flex: none; accent-color: var(--event-accent, var(--lime)); cursor: pointer; }
+.consent-check a { color: var(--event-accent, var(--lime)); text-decoration: underline; text-underline-offset: .2em; }
+.consent-check:focus-within { border-color: var(--event-accent, var(--lime)); }

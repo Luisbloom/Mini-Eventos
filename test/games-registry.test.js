@@ -125,7 +125,7 @@ describe('registro de juegos', () => {
       const { app, evento } = eventoDe('Fall Guys');
       const respuesta = await request(app)
         .post(`/api/events/${evento.slug}/valorant/registrations`)
-        .send({ riotId: 'Alguien#0000' });
+        .send({ riotId: 'Alguien#0000', acceptedTerms: true });
       assert.equal(respuesta.status, 404);
       assert.equal(respuesta.body.error.code, 'MODULE_DISABLED');
     });

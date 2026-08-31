@@ -860,8 +860,9 @@ describe('draft de Valorant', () => {
     it('bloquea la ruta genérica para que nadie se salte Discord y Riot ID', async () => {
       const { app, database, event } = montar();
       const response = await request(app).post(`/api/events/${slug}/registrations`).send({
-        values: { discord_username: 'inventado', game_name: 'Sin dueño', peak_rank: 'Radiante' }
-      });
+        values: { discord_username: 'inventado', game_name: 'Sin dueño', peak_rank: 'Radiante' },
+          acceptedTerms: true
+        });
       assert.equal(response.status, 404);
       assert.equal(response.body.error.code, 'REGISTRATION_FLOW_UNAVAILABLE');
       assert.equal(database.listParticipants(event.id).length, 0);
@@ -870,7 +871,7 @@ describe('draft de Valorant', () => {
     it('exige sesión y no acepta identidades del navegador', async () => {
       const { app } = montar();
       const anonimo = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .send({ riotId: 'Luisbloom#NANO' });
+        .send({ riotId: 'Luisbloom#NANO', acceptedTerms: true });
       assert.equal(anonimo.status, 401);
       assert.equal(anonimo.body.error.code, 'AUTH_REQUIRED');
     });
@@ -885,7 +886,8 @@ describe('draft de Valorant', () => {
         .set('Cookie', sesion).send({
           riotId: 'Luisbloom#NANO',
           peakRank: 'Ascendente 2',
-          playerBio: 'Llevo tres años jugando y suelo jugar controlador.'
+          playerBio: 'Llevo tres años jugando y suelo jugar controlador.',
+          acceptedTerms: true
         }).expect(201);
 
       assert.equal(alta.body.registration.riotId, 'Luisbloom#NANO');
@@ -910,12 +912,12 @@ describe('draft de Valorant', () => {
       const { sesion } = await login(app);
 
       const invalidRank = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Madera 7' });
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Madera 7', acceptedTerms: true });
       assert.equal(invalidRank.status, 400);
       assert.equal(invalidRank.body.error.code, 'INVALID_PEAK_RANK');
 
       const longBio = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Sin rango', playerBio: 'x'.repeat(161) });
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Sin rango', playerBio: 'x'.repeat(161), acceptedTerms: true });
       assert.equal(longBio.status, 400);
       assert.equal(longBio.body.error.code, 'PLAYER_BIO_TOO_LONG');
     });
@@ -938,7 +940,8 @@ describe('draft de Valorant', () => {
           discordAccountId: 999,
           discordUserId: '1',
           discord_username: 'suplantado',
-          game_name: 'Suplantado'
+          game_name: 'Suplantado',
+          acceptedTerms: true
         })
         .expect(201);
 
@@ -951,10 +954,10 @@ describe('draft de Valorant', () => {
       const { app } = montar();
       const { sesion } = await login(app);
       await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true }).expect(201);
 
       const segunda = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Otro#NAME' });
+        .set('Cookie', sesion).send({ riotId: 'Otro#NAME', acceptedTerms: true });
       assert.equal(segunda.status, 409);
       assert.equal(segunda.body.error.code, 'ALREADY_REGISTERED');
     });
@@ -963,7 +966,7 @@ describe('draft de Valorant', () => {
       const { app } = montar();
       const { sesion } = await login(app);
       const malo = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom' });
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom', acceptedTerms: true });
       assert.equal(malo.status, 400);
       assert.equal(malo.body.error.code, 'INVALID_RIOT_ID');
       assert.match(malo.body.error.message, /almohadilla/);
@@ -976,7 +979,7 @@ describe('draft de Valorant', () => {
       const antes = database.getEventBySlug(slug).participantCount;
 
       const cerrado = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' });
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true });
       assert.equal(cerrado.status, 403);
       assert.equal(cerrado.body.error.code, 'REGISTRATION_CLOSED');
       assert.equal(database.getEventBySlug(slug).participantCount, antes, 'el intento no modifica datos');
@@ -998,7 +1001,7 @@ describe('draft de Valorant', () => {
       assert.equal(antes.body.event.registrationsOpen, true);
 
       await request(app).post('/api/events/torneo-valorant/valorant/registrations')
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Diamante 1', playerBio: 'Main centinela.' }).expect(201);
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Diamante 1', playerBio: 'Main centinela.', acceptedTerms: true }).expect(201);
 
       const despues = await request(app).get('/api/me').query({ event: 'torneo-valorant' })
         .set('Cookie', sesion).expect(200);
@@ -1041,7 +1044,8 @@ describe('draft de Valorant', () => {
       const { sesion } = await login(app);
       await request(app).post('/api/events/torneo-valorant/valorant/registrations')
         .set('Cookie', sesion).send({
-          riotId: 'Luisbloom#NANO', peakRank: 'Ascendente 2', playerBio: 'Main controlador.'
+          riotId: 'Luisbloom#NANO', peakRank: 'Ascendente 2', playerBio: 'Main controlador.',
+          acceptedTerms: true
         }).expect(201);
 
       // El jugador entra como capitán en un draft preparado. Los otros 19 no
@@ -1182,7 +1186,7 @@ describe('draft de Valorant', () => {
       const { sesion } = await login(app);
       const intento = await request(app)
         .post(`/api/events/${among.slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' });
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true });
       assert.equal(intento.status, 404);
       assert.equal(intento.body.error.code, 'MODULE_DISABLED');
 
@@ -1240,11 +1244,11 @@ describe('draft de Valorant', () => {
 
       const uno = await loginComo(app, '111');
       await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true }).expect(201);
 
       const dos = await loginComo(app, '222');
       const repetido = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', dos).send({ riotId: 'Luisbloom#NANO' });
+        .set('Cookie', dos).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true });
 
       assert.equal(repetido.status, 409);
       assert.equal(repetido.body.error.code, 'RIOT_ID_ALREADY_REGISTERED',
@@ -1255,11 +1259,11 @@ describe('draft de Valorant', () => {
       const { app } = conVariasCuentas();
       const uno = await loginComo(app, '111');
       await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true }).expect(201);
 
       const dos = await loginComo(app, '222');
       const disfrazado = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', dos).send({ riotId: 'luisbloom#nano' });
+        .set('Cookie', dos).send({ riotId: 'luisbloom#nano', acceptedTerms: true });
       assert.equal(disfrazado.status, 409);
       assert.equal(disfrazado.body.error.code, 'RIOT_ID_ALREADY_REGISTERED');
     });
@@ -1268,21 +1272,21 @@ describe('draft de Valorant', () => {
       const { app } = conVariasCuentas();
       const uno = await loginComo(app, '111');
       await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true }).expect(201);
 
       const dos = await loginComo(app, '222');
       await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', dos).send({ riotId: 'Otrojugador#EUW' }).expect(201);
+        .set('Cookie', dos).send({ riotId: 'Otrojugador#EUW', acceptedTerms: true }).expect(201);
     });
 
     it('la misma cuenta repetida sigue siendo otro error distinto', async () => {
       const { app } = conVariasCuentas();
       const uno = await loginComo(app, '111');
       await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', uno).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true }).expect(201);
 
       const otra = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', uno).send({ riotId: 'Distinto#EUW' });
+        .set('Cookie', uno).send({ riotId: 'Distinto#EUW', acceptedTerms: true });
       assert.equal(otra.status, 409);
       assert.equal(otra.body.error.code, 'ALREADY_REGISTERED');
     });
@@ -1302,7 +1306,8 @@ describe('draft de Valorant', () => {
 
       await request(app).post('/api/events/torneo-valorant/valorant/registrations')
         .set('Cookie', sesion).send({
-          riotId: 'Luisbloom#NANO', peakRank: 'Inmortal 3', playerBio: PRIVATE_BIO
+          riotId: 'Luisbloom#NANO', peakRank: 'Inmortal 3', playerBio: PRIVATE_BIO,
+          acceptedTerms: true
         }).expect(201);
 
       // Un draft en marcha, para que el estado publico tenga contenido.
@@ -1487,7 +1492,7 @@ describe('draft de Valorant', () => {
 
       const { sesion } = await login(app);
       const intento = await request(app).post(`/api/events/${otro.slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' });
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', acceptedTerms: true });
       assert.equal(intento.status, 404);
       assert.equal(intento.body.error.code, 'MODULE_DISABLED');
 

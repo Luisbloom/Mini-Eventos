@@ -138,6 +138,8 @@ function toParticipant(row, { publicView = false } = {}) {
     participant.discordUsername = row.discord_username;
     participant.values = values;
     participant.internalFriendCode = row.internal_friend_code;
+    participant.consentAt = row.consent_at ?? null;
+    participant.consentVersion = row.consent_version ?? null;
   }
   return participant;
 }
@@ -223,6 +225,10 @@ function openDatabase(dbPath) {
         field_values_json TEXT NOT NULL CHECK (json_valid(field_values_json)),
         status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'absent', 'disqualified')),
         internal_friend_code TEXT,
+        -- Cuándo aceptó los términos y la política, y qué versión aceptó. Sin
+        -- esto la política afirma un consentimiento que nadie puede demostrar.
+        consent_at TEXT,
+        consent_version TEXT,
         created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         UNIQUE (event_id, discord_username),
@@ -240,6 +246,19 @@ function openDatabase(dbPath) {
     if (!connection.pragma('table_info(matches)').some((column) => column.name === 'event_id')) {
       connection.exec('ALTER TABLE matches ADD COLUMN event_id INTEGER');
     }
+    /*
+      Los inscritos anteriores a esto se quedan sin fecha de consentimiento:
+      no se inventa una. NULL dice «se apuntó antes de que se registrara», que
+      es la verdad; una fecha falsa sería peor que no tenerla.
+    */
+    const participantColumns = connection.pragma('table_info(event_participants)').map((c) => c.name);
+    if (!participantColumns.includes('consent_at')) {
+      connection.exec('ALTER TABLE event_participants ADD COLUMN consent_at TEXT');
+    }
+    if (!participantColumns.includes('consent_version')) {
+      connection.exec('ALTER TABLE event_participants ADD COLUMN consent_version TEXT');
+    }
+
     const eventColumns = connection.pragma('table_info(events)');
     const needsMinimumMigration = !eventColumns.some((column) => column.name === 'min_participants');
     const needsCoverMigration = !eventColumns.some((column) => column.name === 'cover_image');
@@ -467,7 +486,7 @@ function openDatabase(dbPath) {
   const duplicateParticipantStatement = connection.prepare('SELECT id FROM event_participants WHERE event_id=? AND discord_username=? COLLATE NOCASE');
   const duplicateFriendCodeStatement = connection.prepare(
     "SELECT id FROM event_participants WHERE event_id=? AND internal_friend_code=? AND status!='cancelled' AND id IS NOT ?");
-  const insertParticipantStatement = connection.prepare(`INSERT INTO event_participants (event_id,discord_username,display_name,field_values_json,internal_friend_code) VALUES (?,?,?,?,?)`);
+  const insertParticipantStatement = connection.prepare(`INSERT INTO event_participants (event_id,discord_username,display_name,field_values_json,internal_friend_code,consent_at,consent_version) VALUES (?,?,?,?,?,?,?)`);
   const getParticipantStatement = connection.prepare('SELECT * FROM event_participants WHERE id=?');
   const listParticipantsStatement = connection.prepare('SELECT * FROM event_participants WHERE event_id=? ORDER BY created_at,id');
   const listPublicParticipantsStatement = connection.prepare(`SELECT * FROM event_participants WHERE event_id=? AND status='confirmed' ORDER BY display_name COLLATE NOCASE,id`);
@@ -621,7 +640,7 @@ function openDatabase(dbPath) {
       replaceFieldsTransaction(eventId, fields);
       return this.listRegistrationFields(eventId);
     },
-    createParticipant(eventId, rawValues) {
+    createParticipant(eventId, rawValues, consent = null) {
       const event = requireEvent(eventId);
       event.participantCount = countActiveParticipantsStatement.get(eventId).total;
       const availability = registrationAvailability(event);
@@ -649,7 +668,9 @@ function openDatabase(dbPath) {
           throw new EventValidationError('Ese Friend Code ya está inscrito en este evento.', 'FRIEND_CODE_TAKEN', 409);
         }
       }
-      const result = insertParticipantStatement.run(eventId, discordUsername, displayName, JSON.stringify(values), friendCode);
+      const result = insertParticipantStatement.run(
+        eventId, discordUsername, displayName, JSON.stringify(values), friendCode,
+        consent?.acceptedAt ?? null, consent?.version ?? null);
       return toParticipant(getParticipantStatement.get(Number(result.lastInsertRowid)));
     },
     listParticipants(eventId, { publicView = false } = {}) {

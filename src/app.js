@@ -25,6 +25,7 @@ const { CaptureError } = require('./valorant-captures');
 const { PlayoffError } = require('./valorant-playoffs');
 const { officialValorantFormatForSlug } = require('./valorant-event-format');
 const { gameProfile, isAmongUs, isValorant } = require('./games');
+const { LEGAL_VERSION, ConsentError, requireConsent } = require('./legal-consent');
 const { buildMetadata, injectMetadata } = require('./services/social-metadata');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
@@ -277,7 +278,10 @@ function createApp({
         return sendError(response, 404, 'REGISTRATION_FLOW_UNAVAILABLE',
           'Este evento utiliza inscripción con Discord y Riot ID.');
       }
-      const participant = database.createParticipant(event.id, request.body?.values);
+      // Se comprueba aquí, no sólo en el navegador: lo que enseña la página
+      // es cortesía, lo que vale es lo que llega.
+      const consent = requireConsent(request.body?.acceptedTerms);
+      const participant = database.createParticipant(event.id, request.body?.values, consent);
       response.status(201).json({ participant: publicParticipant(participant), message: 'Inscripción recibida. Queda pendiente de confirmación.' });
     } catch (error) { next(error); }
   });
@@ -900,6 +904,7 @@ function createApp({
         return sendError(response, 401, 'AUTH_REQUIRED', 'Entra con Discord para inscribirte.');
       }
 
+      const consent = requireConsent(request.body?.acceptedTerms);
       const registro = database.valorant.registerWithDiscord(event.id, {
         discordAccountId: session.account.id,
         riotId: request.body?.riotId,
@@ -908,7 +913,7 @@ function createApp({
           peak_rank: request.body?.peakRank ?? 'Sin rango',
           player_bio: request.body?.playerBio ?? ''
         }
-      }, (eventId, values) => database.createParticipant(eventId, values));
+      }, (eventId, values) => database.createParticipant(eventId, values, consent));
 
       response.status(201).json({ registration: registro });
     } catch (error) { next(error); }
@@ -1849,6 +1854,7 @@ function createApp({
   app.use((error, request, response, _next) => {
     if (error?.type === 'entity.parse.failed') return sendError(response, 400, 'INVALID_JSON', 'El cuerpo no contiene JSON valido.');
     if (error?.type === 'entity.too.large') return sendError(response, 413, 'REPORT_TOO_LARGE', 'El informe supera el limite de 1 MB.');
+    if (error instanceof ConsentError) return sendError(response, error.status, error.code, error.message);
     if (error instanceof EventValidationError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof CompetitionError) return sendError(response, error.status || 400, error.code, error.message);
     if (error instanceof ReporterAuthError) return sendError(response, error.status || 400, error.code, error.message);

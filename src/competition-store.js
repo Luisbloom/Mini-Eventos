@@ -31,12 +31,21 @@ function migrateParticipantStatuses(connection) {
       field_values_json TEXT NOT NULL CHECK (json_valid(field_values_json)),
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','confirmed','rejected','absent','disqualified')),
       internal_friend_code TEXT,
+      consent_at TEXT,
+      consent_version TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       UNIQUE (event_id, discord_username),
       FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
     );
-    INSERT INTO event_participants_v2 SELECT * FROM event_participants;
+    -- Columnas por nombre, no por posición: el SELECT * de antes se rompía en
+    -- cuanto la tabla ganaba una columna, con un error que no decía dónde.
+    INSERT INTO event_participants_v2
+      (id, event_id, discord_username, display_name, field_values_json,
+       status, internal_friend_code, created_at, updated_at)
+    SELECT id, event_id, discord_username, display_name, field_values_json,
+           status, internal_friend_code, created_at, updated_at
+    FROM event_participants;
     DROP TABLE event_participants;
     ALTER TABLE event_participants_v2 RENAME TO event_participants;
     CREATE INDEX IF NOT EXISTS idx_participants_event_status ON event_participants(event_id,status,created_at);
