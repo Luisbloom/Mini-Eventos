@@ -103,6 +103,26 @@ describe('fase regular de Valorant', () => {
       return { calendario, partidos, parejas, juega };
     };
 
+    it('el calendario de cuatro sale igual que en el documento del torneo', () => {
+      /*
+        La tabla del PDF que ha leído la gente:
+          J1  A vs B  ·  C vs D
+          J2  A vs C  ·  B vs D
+          J3  A vs D  ·  B vs C
+        El método del círculo por sí solo empieza por A vs D. Si la web dice
+        una cosa y el papel otra, el papel gana: es el que ya está repartido.
+      */
+      const jornadas = roundRobinSchedule([1, 2, 3, 4]);
+      assert.deepEqual(
+        jornadas.map((j) => j.matches.map((m) => [m.home, m.away])),
+        [
+          [[1, 2], [3, 4]],
+          [[1, 3], [2, 4]],
+          [[1, 4], [2, 3]]
+        ]
+      );
+    });
+
     it('cuatro equipos: tres jornadas, seis partidos, tres cada uno', () => {
       const { calendario, partidos, parejas, juega } = comprobar(4);
       assert.equal(calendario.length, 3);

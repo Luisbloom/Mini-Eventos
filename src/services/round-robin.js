@@ -33,7 +33,11 @@ function roundRobinSchedule(teamIds) {
   const jornadas = n - 1;
   const porJornada = n / 2;
 
-  const calendario = [];
+  // Dónde queda cada equipo en la lista, para ordenar las parejas igual que
+  // las publica el documento del torneo: primero el que va antes.
+  const puesto = new Map(equipos.map((equipo, indice) => [equipo, indice]));
+
+  const rondas = [];
   // El primero se queda fijo y los demás rotan a su alrededor.
   const orden = [...ruedan];
 
@@ -46,12 +50,14 @@ function roundRobinSchedule(teamIds) {
       const otro = orden[n - 1 - i];
       if (uno === DESCANSA) { descansa = otro; continue; }
       if (otro === DESCANSA) { descansa = uno; continue; }
-      // Se alterna quién figura primero para no darle siempre el mismo puesto
-      // al mismo equipo en el cuadro.
-      partidos.push(jornada % 2 === 0 ? { home: uno, away: otro } : { home: otro, away: uno });
+      partidos.push(puesto.get(uno) <= puesto.get(otro)
+        ? { home: uno, away: otro }
+        : { home: otro, away: uno });
     }
 
-    calendario.push({ matchday: jornada + 1, matches: partidos, bye: descansa });
+    // Dentro de la jornada, los partidos también en orden de equipo.
+    partidos.sort((a, b) => puesto.get(a.home) - puesto.get(b.home));
+    rondas.push({ matches: partidos, bye: descansa });
 
     // Rotación: el primero quieto, el resto gira una posición.
     const [fijo, ...resto] = orden;
@@ -60,7 +66,17 @@ function roundRobinSchedule(teamIds) {
     orden.push(fijo, ...resto);
   }
 
-  return calendario;
+  /*
+    El método del círculo empieza a rotar por donde quiera, y sale el primer
+    equipo enfrentándose al último en la jornada 1. El documento del torneo lo
+    publica al revés —cada equipo va conociendo rivales en orden— así que se
+    invierte el orden de las jornadas para que la web y el PDF digan lo mismo.
+    Invertir jornadas no cambia el calendario: sigue jugando cada uno contra
+    cada uno, y cada equipo descansa exactamente una vez.
+  */
+  return rondas.reverse().map((ronda, indice) => ({
+    matchday: indice + 1, matches: ronda.matches, bye: ronda.bye
+  }));
 }
 
 /** Resumen para enseñar antes de generar y para comprobar en pruebas. */
