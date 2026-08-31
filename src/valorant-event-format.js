@@ -43,18 +43,22 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     twoTeam: Object.freeze(['head_to_head', 'round_diff']),
     final: 'ADMIN_REQUIRED'
   }),
-  veto: Object.freeze({
-    requiredBeforeEverySeries: true,
-    status: 'VETO_NOT_CONFIGURED',
-    mapPool: null,
-    rules: Object.freeze({ bo1: null, bo3: null })
+  /*
+    Los mapas los decide la organización y se anuncian antes de cada serie. No
+    hay veto ni sorteo entre los equipos: prometerlo obligaría a un
+    procedimiento que no existe.
+  */
+  maps: Object.freeze({
+    chosenBy: 'ORGANISATION',
+    announcedBeforeSeries: true,
+    status: 'MAP_POOL_NOT_ANNOUNCED',
+    pool: null
   }),
   pending: Object.freeze([
     'Fecha',
     'Horarios',
     'Orden definitivo del draft',
     'Map pool',
-    'Procedimiento exacto de veto',
     'Criterio definitivo de desempate',
     'Servidor o región',
     'Reglas de pausa',
@@ -72,7 +76,7 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     grandFinalReset: 'Si el equipo procedente del cuadro inferior gana la primera Gran Final al equipo que seguía invicto, se disputará una serie final de desempate, ya que ambos tendrán entonces una derrota.',
     matches: 'Las series se jugarán en partidas personalizadas de VALORANT. Los horarios, servidor, reglas de pausa y configuración exacta de las salas se publicarán junto al calendario definitivo.',
     formats: 'BO1: un mapa. BO3: primero en ganar dos mapas. La Gran Final será BO3 por defecto y podrá anunciarse previamente como BO5 si el horario lo permite.',
-    veto: 'Antes de cada serie se realizará un veto de mapas. En BO1 se irán descartando mapas hasta determinar el mapa de juego. En BO3 cada equipo podrá disponer de una elección y existirá un mapa decisivo. El procedimiento exacto y el map pool se anunciarán antes del torneo.',
+    maps: 'Los mapas los decide la organización y se anuncian antes de cada serie: no hay veto ni sorteo entre los equipos. En BO3 no se repite mapa dentro de la misma serie. El map pool se publicará antes del torneo.',
     results: 'Los resultados oficiales se registrarán en la plataforma y serán revisados por la organización.',
     stats: 'Los marcadores y estadísticas confirmados de las partidas personalizadas se publicarán en la plataforma.',
     registration: 'Las inscripciones todavía no están abiertas.'

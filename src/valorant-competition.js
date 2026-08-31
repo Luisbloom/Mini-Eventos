@@ -254,6 +254,9 @@ function migrateValorantCompetition(connection) {
       tiebreakers_json TEXT NOT NULL DEFAULT '["wins","head_to_head","round_diff","rounds_for"]',
       qualifiers INTEGER NOT NULL DEFAULT 4,
       map_pool_configured INTEGER NOT NULL DEFAULT 0 CHECK (map_pool_configured IN (0,1)),
+      -- Vestigio: hubo un veto de mapas planeado que nunca llegó a existir.
+      -- Los mapas los elige la organización. La columna se conserva porque
+      -- quitarla obliga a rehacer la tabla, y nadie la lee.
       veto_rules_json TEXT NOT NULL DEFAULT '{"bo1":null,"bo3":null}',
       updated_at TEXT NOT NULL DEFAULT (${NOW}),
       FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE
@@ -566,46 +569,22 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
     },
 
     /**
-     * El catálogo interno no equivale a un map pool anunciado. Hasta que la
-     * organización configure pool y procedimiento, la API lo dice claramente.
+     * Qué se puede decir en público sobre los mapas.
+     *
+     * Los elige la organización y se anuncian antes de cada serie; no hay veto.
+     * Mientras el pool no esté anunciado no se publica a medias: se dice que
+     * está pendiente, que es la verdad.
      */
-    getVetoConfiguration(eventId) {
+    getMapAnnouncement(eventId) {
       const row = connection.prepare(
-        'SELECT map_pool_configured,veto_rules_json FROM valorant_settings WHERE event_id=?'
-      ).get(eventId);
-      const rules = row?.veto_rules_json ? JSON.parse(row.veto_rules_json) : { bo1: null, bo3: null };
-      const mapPoolConfigured = Boolean(row?.map_pool_configured);
-      const configured = mapPoolConfigured && Boolean(rules.bo1) && Boolean(rules.bo3);
+        'SELECT map_pool_configured FROM valorant_settings WHERE event_id=?').get(eventId);
+      const announced = Boolean(row?.map_pool_configured);
       return {
-        status: configured ? 'CONFIGURED' : 'VETO_NOT_CONFIGURED',
-        mapPoolConfigured,
-        // El pool tampoco se anuncia a medias: hasta tener procedimiento BO1
-        // y BO3, tanto el pool como el veto siguen oficialmente pendientes.
-        mapPool: configured ? this.enabledMapKeys(eventId) : null,
-        rules: { bo1: rules.bo1 ?? null, bo3: rules.bo3 ?? null }
+        status: announced ? 'MAP_POOL_ANNOUNCED' : 'MAP_POOL_NOT_ANNOUNCED',
+        chosenBy: 'ORGANISATION',
+        announcedBeforeSeries: true,
+        pool: announced ? this.enabledMapKeys(eventId) : null
       };
-    },
-
-    setVetoRules(eventId, rules, { actor = 'admin' } = {}) {
-      if (!rules || typeof rules !== 'object' || Array.isArray(rules)) {
-        throw new CompetitionError('vetoRules debe ser un objeto con BO1 y BO3.', 'INVALID_VETO_RULES');
-      }
-      const normalized = { bo1: rules.bo1 ?? null, bo3: rules.bo3 ?? null };
-      for (const key of ['bo1', 'bo3']) {
-        const value = normalized[key];
-        if (value !== null && typeof value !== 'object' && typeof value !== 'string') {
-          throw new CompetitionError(`La regla ${key.toUpperCase()} no es válida.`, 'INVALID_VETO_RULES');
-        }
-      }
-      const serialized = JSON.stringify(normalized);
-      if (serialized.length > 10000) {
-        throw new CompetitionError('La configuración de veto es demasiado grande.', 'INVALID_VETO_RULES');
-      }
-      connection.prepare(`INSERT INTO valorant_settings (event_id,veto_rules_json)
-        VALUES (?,?) ON CONFLICT(event_id) DO UPDATE SET
-        veto_rules_json=excluded.veto_rules_json, updated_at=${NOW}`).run(eventId, serialized);
-      registrar(eventId, actor, 'VETO_RULES_UPDATED', null, null, { configured: Boolean(normalized.bo1 && normalized.bo3) });
-      return this.getVetoConfiguration(eventId);
     },
 
     // ---------------------------------------------------- fase regular
@@ -1453,10 +1432,10 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         complete: tabla.complete,
         tieRequiresAdmin: tabla.tieRequiresAdmin,
         qualifiers: tabla.settings.qualifiers,
-        maps: this.getVetoConfiguration(eventId).status === 'CONFIGURED'
+        maps: this.getMapAnnouncement(eventId).status === 'MAP_POOL_ANNOUNCED'
           ? this.listMaps(eventId).filter((mapa) => mapa.enabled)
           : [],
-        veto: this.getVetoConfiguration(eventId),
+        mapPolicy: this.getMapAnnouncement(eventId),
         playerStats: this.tournamentPlayerStats(eventId, { stage: null }),
         // Sólo lo justo para poner nombre a las filas de estadísticas: el
         // nombre visible, que ya sale en la página del draft. Ni Riot ID, ni

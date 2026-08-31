@@ -188,7 +188,7 @@
       matchdays: [],
       playerStats: [],
       maps: [],
-      veto: format?.veto ?? { status: 'VETO_NOT_CONFIGURED', mapPool: null, rules: { bo1: null, bo3: null } },
+      mapPolicy: format?.maps ?? { status: 'MAP_POOL_NOT_ANNOUNCED', chosenBy: 'ORGANISATION', announcedBeforeSeries: true, pool: null },
       seriesPlayed: 0,
       seriesTotal: format?.regularSeason?.series ?? 0,
       playoffs: { generated: false, status: 'PENDING', series: [], placements: [] }

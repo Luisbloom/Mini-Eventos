@@ -46,9 +46,11 @@
       const detail = document.createElement('dd'); detail.textContent = String(value);
       wrapper.append(term, detail); return wrapper;
     }));
-    id('league-veto-state').textContent = estado.veto?.status === 'CONFIGURED'
-      ? 'VETO CONFIGURADO'
-      : 'VETO PENDIENTE DE CONFIGURACIÓN';
+    // Los mapas los elige la organización: lo único que hay que saber es si el
+    // pool ya está anunciado o sigue pendiente.
+    id('league-map-state').textContent = estado.mapPolicy?.status === 'MAP_POOL_ANNOUNCED'
+      ? 'MAP POOL ANUNCIADO'
+      : 'MAP POOL PENDIENTE';
   }
 
   // ------------------------------------------------------------- mapas

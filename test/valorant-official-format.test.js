@@ -99,7 +99,7 @@ describe('formato oficial del torneo de Valorant', () => {
     const detail = await request(app).get('/api/events/torneo-valorant').expect(200);
     assert.equal(detail.body.event.officialFormat.players, 20);
     assert.equal(detail.body.event.registration.available, false);
-    assert.match(detail.body.event.officialFormat.public.veto, /Antes de cada serie/);
+    assert.match(detail.body.event.officialFormat.public.maps, /los decide la organización/);
     const blocked = await request(app).post('/api/events/torneo-valorant/registrations')
       .send({ values: { discord_username: 'nadie', game_name: 'Nadie' } }).expect(404);
     assert.equal(blocked.body.error.code, 'REGISTRATION_FLOW_UNAVAILABLE');
@@ -179,21 +179,35 @@ describe('formato oficial del torneo de Valorant', () => {
       (error) => error.code === 'OFFICIAL_REGULAR_FORMAT_MISMATCH');
   });
 
-  it('mantiene veto y map pool sin configurar hasta una decisión oficial', () => {
+  it('no publica el map pool hasta que la organización lo anuncia', () => {
     const dbPath = databasePath();
     const database = openDatabase(dbPath);
     databases.push(database);
     const event = createOfficialEvent(database);
-    const veto = database.valorantCompetition.getVetoConfiguration(event.id);
-    assert.deepEqual(veto, {
-      status: 'VETO_NOT_CONFIGURED',
-      mapPoolConfigured: false,
-      mapPool: null,
-      rules: { bo1: null, bo3: null }
+
+    // Los mapas los elige la organización: no hay veto que configurar, sólo un
+    // pool que anunciar. Mientras no se anuncie, no se publica a medias.
+    assert.deepEqual(database.valorantCompetition.getMapAnnouncement(event.id), {
+      status: 'MAP_POOL_NOT_ANNOUNCED',
+      chosenBy: 'ORGANISATION',
+      announcedBeforeSeries: true,
+      pool: null
     });
-    assert.ok(database.valorantCompetition.listMaps(event.id).length > 0, 'el catálogo manual sigue disponible');
+    assert.ok(database.valorantCompetition.listMaps(event.id).length > 0,
+      'el catálogo manual sigue disponible');
+
     database.valorantCompetition.setMapPool(event.id, ['ascent', 'bind']);
-    assert.equal(database.valorantCompetition.getVetoConfiguration(event.id).mapPool, null,
-      'ni siquiera un pool parcial se publica sin procedimiento BO1 y BO3');
+    const anunciado = database.valorantCompetition.getMapAnnouncement(event.id);
+    assert.equal(anunciado.status, 'MAP_POOL_ANNOUNCED');
+    assert.deepEqual(anunciado.pool, ['ascent', 'bind']);
+  });
+
+  it('el formato oficial ya no promete un veto que no existe', () => {
+    const { OFFICIAL_VALORANT_FORMAT } = require('../src/valorant-event-format');
+    assert.equal(OFFICIAL_VALORANT_FORMAT.maps.chosenBy, 'ORGANISATION');
+    assert.equal(OFFICIAL_VALORANT_FORMAT.veto, undefined);
+    const texto = JSON.stringify(OFFICIAL_VALORANT_FORMAT.public);
+    assert.ok(!/veto de mapas/i.test(texto), 'el texto público no puede prometer un veto');
+    assert.ok(!OFFICIAL_VALORANT_FORMAT.pending.some((x) => /veto/i.test(x)));
   });
 });

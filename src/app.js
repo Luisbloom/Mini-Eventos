@@ -1005,7 +1005,7 @@ function createApp({
       response.json({
         format: officialValorantFormatForSlug(event?.slug),
         maps: database.valorantCompetition.listMaps(id),
-        veto: database.valorantCompetition.getVetoConfiguration(id),
+        mapPolicy: database.valorantCompetition.getMapAnnouncement(id),
         settings: database.valorantCompetition.getSettings(id),
         matchdays: database.valorantCompetition.matchdays(id),
         teams: database.valorant.listTeams(id),
@@ -1020,15 +1020,6 @@ function createApp({
       const maps = database.valorantCompetition.setMapPool(id, request.body?.enabled);
       draftStream.publish(id, 'competition_updated');
       response.json({ maps });
-    } catch (error) { next(error); }
-  });
-
-  app.put('/api/admin/events/:id/competition/veto', (request, response, next) => {
-    const id = parseId(request.params.id);
-    try {
-      const veto = database.valorantCompetition.setVetoRules(id, request.body?.vetoRules);
-      draftStream.publish(id, 'competition_updated');
-      response.json({ veto });
     } catch (error) { next(error); }
   });
 
