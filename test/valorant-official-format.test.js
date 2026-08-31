@@ -202,6 +202,35 @@ describe('formato oficial del torneo de Valorant', () => {
     assert.deepEqual(anunciado.pool, ['ascent', 'bind']);
   });
 
+  it('las decisiones tomadas dejan de figurar como pendientes', () => {
+    const { OFFICIAL_VALORANT_FORMAT: F } = require('../src/valorant-event-format');
+
+    // No se pausa dentro de una partida; entre mapas de una serie, sí hay pausa.
+    assert.deepEqual(F.pauses, { duringGame: false, betweenGames: true });
+    assert.match(F.public.pauses, /No hay pausas dentro de una partida/);
+    assert.ok(!F.pending.some((x) => /pausa/i.test(x)),
+      'una regla ya decidida no puede seguir en la lista de pendientes');
+
+    // El map pool se anuncia el mismo día, y el texto público lo dice.
+    assert.equal(F.mapPoolAnnouncement, 'TOURNAMENT_DAY');
+    assert.match(F.public.maps, /el mismo día del torneo/);
+
+    // Lo que sigue sin decidirse sí debe figurar.
+    for (const abierto of ['Fecha', 'Horarios', 'Servidor o región', 'Map pool']) {
+      assert.ok(F.pending.includes(abierto), `${abierto} sigue pendiente`);
+    }
+  });
+
+  it('la pagina de informacion enseña mapas, partidas y pausas', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'informacion.html'), 'utf8');
+    const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'information.js'), 'utf8');
+    // Un texto declarado y no pintado es un texto que nadie lee.
+    for (const clave of ['maps', 'matches', 'pauses']) {
+      assert.ok(html.includes(`id="valorant-info-${clave}"`), `falta el hueco de ${clave}`);
+      assert.ok(js.includes(`format.public.${clave}`), `${clave} no se pinta`);
+    }
+  });
+
   it('el formato oficial ya no promete un veto que no existe', () => {
     const { OFFICIAL_VALORANT_FORMAT } = require('../src/valorant-event-format');
     assert.equal(OFFICIAL_VALORANT_FORMAT.maps.chosenBy, 'ORGANISATION');

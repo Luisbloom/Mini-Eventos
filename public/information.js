@@ -119,6 +119,11 @@ function renderValorantFormat(format) {
   setText('#valorant-info-draft', format.public.draft);
   setText('#valorant-info-regular', format.public.regularSeason);
   setText('#valorant-info-playoffs', format.public.playoffs);
+  // Mapas, partidas y pausas son las tres preguntas que más se repiten antes
+  // de un torneo. Estaban declaradas en el formato y no se enseñaban.
+  setText('#valorant-info-maps', format.public.maps);
+  setText('#valorant-info-matches', format.public.matches);
+  setText('#valorant-info-pauses', format.public.pauses);
 }
 
 function render(data) {

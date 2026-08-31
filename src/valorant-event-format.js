@@ -54,15 +54,22 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     status: 'MAP_POOL_NOT_ANNOUNCED',
     pool: null
   }),
+  /*
+    Decidido: no se pausa dentro de una partida. Lo que hay entre mapas de una
+    misma serie es el descanso normal, no una pausa que alguien pida.
+  */
+  pauses: Object.freeze({ duringGame: false, betweenGames: true }),
+
+  // El map pool existe, pero se anuncia el mismo día del torneo.
+  mapPoolAnnouncement: 'TOURNAMENT_DAY',
+
   pending: Object.freeze([
     'Fecha',
     'Horarios',
     'Orden definitivo del draft',
     'Map pool',
     'Criterio definitivo de desempate',
-    'Servidor o región',
-    'Reglas de pausa',
-    'Configuración exacta de las salas'
+    'Servidor o región'
   ]),
   public: Object.freeze({
     headline: '20 jugadores. 4 equipos. Un solo campeón.',
@@ -74,9 +81,10 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     tiebreakers: 'En caso de empate se utilizarán criterios deportivos como enfrentamiento directo y diferencia de rondas. Si fuese necesario, la organización resolverá el desempate.',
     playoffs: 'El 1º jugará contra el 4º y el 2º contra el 3º. La primera derrota envía al cuadro inferior; la segunda elimina. Todas las series de playoffs serán BO3.',
     grandFinalReset: 'Si el equipo procedente del cuadro inferior gana la primera Gran Final al equipo que seguía invicto, se disputará una serie final de desempate, ya que ambos tendrán entonces una derrota.',
-    matches: 'Las series se jugarán en partidas personalizadas de VALORANT. Los horarios, servidor, reglas de pausa y configuración exacta de las salas se publicarán junto al calendario definitivo.',
+    matches: 'Las series se jugarán en partidas personalizadas de VALORANT. La fecha, los horarios y el servidor de juego se anunciarán antes del torneo.',
+    pauses: 'No hay pausas dentro de una partida: una vez empezada, se juega hasta el final. Entre las partidas de una misma serie sí hay un descanso antes de pasar al siguiente mapa.',
     formats: 'BO1: un mapa. BO3: primero en ganar dos mapas. La Gran Final será BO3 por defecto y podrá anunciarse previamente como BO5 si el horario lo permite.',
-    maps: 'Los mapas los decide la organización y se anuncian antes de cada serie: no hay veto ni sorteo entre los equipos. En BO3 no se repite mapa dentro de la misma serie. El map pool se publicará antes del torneo.',
+    maps: 'Los mapas los decide la organización y se anuncian antes de cada serie: no hay veto ni sorteo entre los equipos. En BO3 no se repite mapa dentro de la misma serie. El map pool se publica el mismo día del torneo.',
     results: 'Los resultados oficiales se registrarán en la plataforma y serán revisados por la organización.',
     stats: 'Los marcadores y estadísticas confirmados de las partidas personalizadas se publicarán en la plataforma.',
     registration: 'Las inscripciones todavía no están abiertas.'
