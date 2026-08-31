@@ -97,13 +97,37 @@
                 <p id="final-format"></p>
               </article>
             </div>
-            <div id="valorant-information-format" class="valorant-information-format" hidden>
-              <article><span>01</span><h3>Draft</h3><p id="valorant-info-draft"></p></article>
-              <article><span>02</span><h3>Fase regular</h3><p id="valorant-info-regular"></p></article>
-              <article><span>03</span><h3>Playoffs</h3><p id="valorant-info-playoffs"></p></article>
-              <article><span>04</span><h3>Mapas</h3><p id="valorant-info-maps"></p></article>
-              <article><span>05</span><h3>Las partidas</h3><p id="valorant-info-matches"></p></article>
-              <article><span>06</span><h3>Pausas</h3><p id="valorant-info-pauses"></p></article>
+            <div id="valorant-information" hidden>
+              <p id="valorant-info-headline" class="valorant-headline"></p>
+              <p id="valorant-info-summary" class="valorant-summary"></p>
+
+              <div class="valorant-information-format">
+                <article><span>01</span><h3>Inscripción</h3><p id="valorant-info-registration"></p></article>
+                <article><span>02</span><h3>Capitanes</h3><p id="valorant-info-captains"></p></article>
+                <article><span>03</span><h3>Draft</h3><p id="valorant-info-draft"></p></article>
+                <article><span>04</span><h3>Fase regular</h3><p id="valorant-info-regular"></p></article>
+                <article><span>05</span><h3>Clasificación</h3><p id="valorant-info-standings"></p></article>
+                <article><span>06</span><h3>Desempates</h3><p id="valorant-info-tiebreakers"></p></article>
+                <article><span>07</span><h3>Playoffs</h3><p id="valorant-info-playoffs"></p></article>
+                <article><span>08</span><h3>Reset de la Gran Final</h3><p id="valorant-info-reset"></p></article>
+                <article><span>09</span><h3>Formatos</h3><p id="valorant-info-formats"></p></article>
+                <article><span>10</span><h3>Mapas</h3><p id="valorant-info-maps"></p></article>
+                <article><span>11</span><h3>Las partidas</h3><p id="valorant-info-matches"></p></article>
+                <article><span>12</span><h3>Pausas</h3><p id="valorant-info-pauses"></p></article>
+                <article><span>13</span><h3>Resultados</h3><p id="valorant-info-results"></p></article>
+                <article><span>14</span><h3>Estadísticas</h3><p id="valorant-info-stats"></p></article>
+              </div>
+
+              <section class="valorant-journey" aria-labelledby="valorant-journey-title">
+                <h3 id="valorant-journey-title">Tu recorrido, paso a paso</h3>
+                <ol id="valorant-info-journey"></ol>
+              </section>
+
+              <section id="valorant-pending-block" class="valorant-pending" aria-labelledby="valorant-pending-title" hidden>
+                <h3 id="valorant-pending-title">Todavía sin anunciar</h3>
+                <p>Esto se confirmará antes de que empiece el torneo. Mientras no esté decidido, no se inventa.</p>
+                <ul id="valorant-info-pending"></ul>
+              </section>
             </div>
           </section>
 

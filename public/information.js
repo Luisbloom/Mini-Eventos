@@ -112,18 +112,61 @@ async function loadSchedule(event) {
   }
 }
 
+/**
+ * Todo lo que el formato oficial declara, explicado en la página.
+ *
+ * ⚠️ Cada texto declarado tiene que tener aquí su hueco. Un texto escrito,
+ * revisado y que no pinta nadie es trabajo que no llega a existir para quien
+ * viene a informarse: ya pasó con los mapas, las partidas y las pausas.
+ */
+const VALORANT_TEXTOS = Object.freeze({
+  headline: '#valorant-info-headline',
+  summary: '#valorant-info-summary',
+  registration: '#valorant-info-registration',
+  captains: '#valorant-info-captains',
+  draft: '#valorant-info-draft',
+  regularSeason: '#valorant-info-regular',
+  standings: '#valorant-info-standings',
+  tiebreakers: '#valorant-info-tiebreakers',
+  playoffs: '#valorant-info-playoffs',
+  grandFinalReset: '#valorant-info-reset',
+  formats: '#valorant-info-formats',
+  maps: '#valorant-info-maps',
+  matches: '#valorant-info-matches',
+  pauses: '#valorant-info-pauses',
+  results: '#valorant-info-results',
+  stats: '#valorant-info-stats'
+});
+
 function renderValorantFormat(format) {
-  const block = document.querySelector('#valorant-information-format');
+  const block = document.querySelector('#valorant-information');
   block.hidden = !format;
   if (!format) return;
-  setText('#valorant-info-draft', format.public.draft);
-  setText('#valorant-info-regular', format.public.regularSeason);
-  setText('#valorant-info-playoffs', format.public.playoffs);
-  // Mapas, partidas y pausas son las tres preguntas que más se repiten antes
-  // de un torneo. Estaban declaradas en el formato y no se enseñaban.
-  setText('#valorant-info-maps', format.public.maps);
-  setText('#valorant-info-matches', format.public.matches);
-  setText('#valorant-info-pauses', format.public.pauses);
+
+  for (const [clave, selector] of Object.entries(VALORANT_TEXTOS)) {
+    setText(selector, format.public[clave] ?? '');
+  }
+
+  // El recorrido del participante, numerado: es lo que responde «¿y yo qué
+  // tengo que hacer?» sin leerse el resto.
+  const recorrido = document.querySelector('#valorant-info-journey');
+  recorrido.replaceChildren(...(format.participantJourney || []).map((paso) => {
+    const punto = document.createElement('li');
+    punto.textContent = paso;
+    return punto;
+  }));
+
+  /*
+    Lo que aún no se sabe se enseña, en vez de callarlo. Quien lee esto quiere
+    saber si ya hay fecha; que no aparezca la pregunta no la responde.
+  */
+  const pendientes = format.pending || [];
+  document.querySelector('#valorant-pending-block').hidden = pendientes.length === 0;
+  document.querySelector('#valorant-info-pending').replaceChildren(...pendientes.map((cosa) => {
+    const punto = document.createElement('li');
+    punto.textContent = cosa;
+    return punto;
+  }));
 }
 
 function render(data) {

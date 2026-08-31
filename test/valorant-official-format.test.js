@@ -221,14 +221,38 @@ describe('formato oficial del torneo de Valorant', () => {
     }
   });
 
-  it('la pagina de informacion enseña mapas, partidas y pausas', () => {
-    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'informacion.html'), 'utf8');
+  it('la pagina de informacion explica TODO lo que el formato declara', () => {
+    const { OFFICIAL_VALORANT_FORMAT: F } = require('../src/valorant-event-format');
     const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'information.js'), 'utf8');
-    // Un texto declarado y no pintado es un texto que nadie lee.
-    for (const clave of ['maps', 'matches', 'pauses']) {
-      assert.ok(html.includes(`id="valorant-info-${clave}"`), `falta el hueco de ${clave}`);
-      assert.ok(js.includes(`format.public.${clave}`), `${clave} no se pinta`);
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'informacion.html'), 'utf8');
+
+    /*
+      Un texto escrito, revisado y que no pinta nadie es trabajo que no llega a
+      existir para quien viene a informarse. Aquí se comprueba que cada texto
+      declarado tiene su hueco y alguien que lo escribe.
+    */
+    const mapa = js.slice(js.indexOf('VALORANT_TEXTOS'), js.indexOf('function renderValorantFormat'));
+    for (const clave of Object.keys(F.public)) {
+      assert.ok(mapa.includes(`${clave}:`), `el texto "${clave}" no se pinta en ninguna parte`);
+      // Se saca el selector sin expresiones regulares: un escape mal puesto en
+      // una plantilla hace que la prueba mienta en vez de fallar por lo suyo.
+      const desde = mapa.indexOf(`${clave}: '#`) + `${clave}: '#`.length;
+      const selector = mapa.slice(desde, mapa.indexOf("'", desde));
+      assert.ok(selector, `"${clave}" no tiene selector`);
+      assert.ok(html.includes(`id="${selector}"`), `falta el hueco de "${clave}" en el HTML`);
     }
+  });
+
+  it('la pagina explica el recorrido del participante y lo que falta por anunciar', () => {
+    const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'information.js'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'informacion.html'), 'utf8');
+
+    assert.ok(js.includes('participantJourney'), 'el recorrido paso a paso no se pinta');
+    assert.ok(html.includes('id="valorant-info-journey"'));
+
+    // Lo que aún no se sabe se enseña: callarlo no responde la pregunta.
+    assert.ok(js.includes('format.pending'), 'los pendientes no se enseñan');
+    assert.ok(html.includes('id="valorant-info-pending"'));
   });
 
   it('el formato oficial ya no promete un veto que no existe', () => {

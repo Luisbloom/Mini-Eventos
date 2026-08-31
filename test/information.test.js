@@ -75,7 +75,11 @@ describe('tournament information', () => {
     assert.match(html, /id="formato"/);
     assert.match(html, /id="reglas"/);
     assert.match(html, /id="faq"/);
-    assert.match(html, /id="valorant-information-format"/);
+    assert.match(html, /id="valorant-information"/);
+    // El bloque de Valorant explica el formato, el recorrido y lo que falta.
+    assert.match(html, /class="valorant-information-format"/);
+    assert.match(html, /id="valorant-info-journey"/);
+    assert.match(html, /id="valorant-info-pending"/);
     assert.doesNotMatch(html, /id="info-prizes"/);
   });
 });

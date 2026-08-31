@@ -195,3 +195,83 @@
   .event-prizes h3 { margin: .9rem 0 .55rem; font-size: 1.5rem; overflow-wrap: anywhere; }
   .event-prizes p { font-size: .92rem; }
 }
+
+/* -------------------------------------------- información de Valorant
+
+   Todo lo que el formato declara, explicado. Antes se pintaban seis de
+   dieciséis textos y el resto estaba escrito para nadie. */
+
+.valorant-headline {
+  margin: 3rem 0 .8rem;
+  font: clamp(1.6rem, 4vw, 2.6rem)/1.05 var(--display);
+  text-transform: uppercase;
+  color: var(--event-accent, var(--cyan));
+}
+.valorant-summary {
+  margin: 0 0 1rem;
+  max-width: 62ch;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: #cfd6d4;
+}
+
+/* Cuatro columnas en pantalla ancha: catorce tarjetas en tres columnas
+   obligan a un scroll larguísimo. */
+@media (min-width: 1100px) {
+  .valorant-information-format { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.valorant-journey { margin-top: 3rem; }
+.valorant-journey h3, .valorant-pending h3 {
+  margin: 0 0 1.2rem;
+  font: clamp(1.5rem, 3vw, 2.2rem)/1 var(--display);
+  text-transform: uppercase;
+}
+.valorant-journey ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: paso;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.valorant-journey li {
+  counter-increment: paso;
+  padding: 1rem 1.2rem 1rem 3.6rem;
+  background: var(--surface);
+  position: relative;
+  line-height: 1.6;
+}
+.valorant-journey li::before {
+  content: counter(paso);
+  position: absolute;
+  left: 1.2rem;
+  color: var(--event-accent, var(--cyan));
+  font: 1.1rem/1.5 var(--display);
+}
+
+.valorant-pending {
+  margin-top: 3rem;
+  padding: 1.4rem 1.6rem;
+  border: 1px solid var(--gold, #d7b23f);
+  background: var(--surface);
+}
+.valorant-pending > p { margin: 0 0 1rem; color: #aab2b0; line-height: 1.6; }
+.valorant-pending ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.valorant-pending li {
+  padding: .45rem .8rem;
+  border: 1px solid var(--line);
+  font: .58rem/1 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #cfd6d4;
+}
