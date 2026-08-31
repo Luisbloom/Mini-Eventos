@@ -15,21 +15,23 @@
     <script src="/information.js" defer></script>
   </head>
   <body class="information-page">
+    <a class="skip-link" href="#info-main">Saltar al contenido</a>
     <div class="grain" aria-hidden="true"></div>
-    <header class="topbar">
+    <header class="topbar compact-topbar">
       <a class="brand" href="/" aria-label="Mini Eventos Jartiland">
         <img class="brand-logo" src="/images/logo-96.png" alt="" aria-hidden="true" width="40" height="40" decoding="async">
         <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
       </a>
-      <nav class="primary-nav" aria-label="Navegación principal">
-        <a href="/">Eventos</a>
+      <nav class="primary-nav is-return-only" aria-label="Navegación principal">
         <a id="info-event-link" href="/">Volver al evento</a>
-        <a class="active" href="#general" aria-current="page">Información</a>
       </nav>
-      <div class="broadcast"><span id="info-status-dot" class="live-dot loading"></span><span id="info-status">CARGANDO</span></div>
+      <div class="topbar-utilities">
+        <div class="broadcast"><span id="info-status-dot" class="live-dot loading"></span><span id="info-status">CARGANDO</span></div>
+        <a class="profile-entry" href="/perfil"><span aria-hidden="true">ID</span> Mi perfil</a>
+      </div>
     </header>
 
-    <main class="info-main">
+    <main id="info-main" class="info-main">
       <section class="info-hero">
         <p class="kicker"><span>MANUAL DEL PARTICIPANTE</span> · EDICIÓN 01</p>
         <h1 aria-label="INFORMACIÓN DEL TORNEO">Información<br><span>del torneo</span></h1>
@@ -44,7 +46,6 @@
           <a data-module="schedule" href="#agenda" hidden>Agenda</a>
           <a data-among-only href="#puntuacion">Puntuaciones</a><a href="#reglas">Reglas</a>
           <a data-among-only href="#automatico">Sistema automático</a><a href="#desempates">Desempates</a>
-          <a data-module="prizes" href="#premios" hidden>Premios</a>
           <a href="#faq">Preguntas frecuentes</a>
         </nav>
       </details>
@@ -57,10 +58,8 @@
             <a data-module="schedule" href="#agenda" hidden>03 · Agenda</a>
             <a data-among-only href="#roles">04 · Roles</a><a data-among-only href="#puntuacion">05 · Puntuación</a>
             <a data-among-only href="#automatico">06 · Sistema</a><a href="#reglas">07 · Reglas</a>
-            <a href="#desempates">08 · Desempates</a><a data-module="prizes" href="#premios" hidden>09 · Premios</a>
-            <a href="#faq">10 · FAQ</a>
+            <a href="#desempates">08 · Desempates</a><a href="#faq">09 · FAQ</a>
           </nav>
-          <a class="admin-link" href="/admin">Administración ↗</a>
         </aside>
 
         <div class="info-content">
@@ -80,12 +79,12 @@
           <section id="formato" class="info-section">
             <p class="section-index">02 / ESTRUCTURA</p>
             <h2>Formato del torneo</h2>
-            <div class="phase-flow" aria-label="Fases del torneo">
+            <div class="phase-flow" aria-label="Fases del torneo" data-among-only>
               <article><span>01</span><strong>FASE DE CLASIFICACIÓN</strong></article><i>↓</i>
               <article><span>02</span><strong>GRAN FINAL</strong></article><i>↓</i>
               <article class="champion"><span>03</span><strong>CAMPEÓN</strong></article>
             </div>
-            <div class="split-cards">
+            <div class="split-cards" data-among-only>
               <article>
                 <span class="card-tag">FASE DE GRUPOS</span>
                 <h3>Sumar para avanzar</h3>
@@ -97,6 +96,11 @@
                 <h3>Todo se decide aquí</h3>
                 <p id="final-format"></p>
               </article>
+            </div>
+            <div id="valorant-information-format" class="valorant-information-format" hidden>
+              <article><span>01</span><h3>Draft</h3><p id="valorant-info-draft"></p></article>
+              <article><span>02</span><h3>Fase regular</h3><p id="valorant-info-regular"></p></article>
+              <article><span>03</span><h3>Playoffs</h3><p id="valorant-info-playoffs"></p></article>
             </div>
           </section>
 
@@ -188,22 +192,8 @@
             <ol id="tiebreakers-list" class="tiebreaker-list"></ol>
           </section>
 
-          <section id="premios" class="info-section" data-module="prizes" hidden>
-            <p class="section-index">09 / RECOMPENSAS</p>
-            <h2>Premios</h2>
-            <p class="large-copy">El podio de la Gran Final se lleva premio, y hay dos bonificaciones que salen de las estadísticas de todo el torneo, grupos incluidos.</p>
-            <div id="info-prizes" class="event-prizes"></div>
-          </section>
-
-          <section id="estadisticas" class="info-section">
-            <p class="section-index">10 / DATOS</p>
-            <h2>Estadísticas</h2>
-            <p class="large-copy">La web puede mostrar partidas jugadas, victorias, win rate, kills, veces como impostor, tareas, muertes y supervivencia.</p>
-            <div class="signal-note">Que una estadística aparezca en la web no significa necesariamente que otorgue puntos.</div>
-          </section>
-
           <section id="faq" class="info-section faq-section">
-            <p class="section-index">11 / RESPUESTAS RÁPIDAS</p>
+            <p class="section-index">09 / RESPUESTAS RÁPIDAS</p>
             <h2>Preguntas frecuentes</h2>
             <div id="faq-list" class="faq-list"></div>
           </section>

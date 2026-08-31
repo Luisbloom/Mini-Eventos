@@ -13,6 +13,7 @@
     PAUSED: 'Pausado'
   };
   const METRICS = {
+    overall: ['Global', 'Índice global de rendimiento'],
     acs: ['ACS', 'Puntuación media de combate'],
     kills: ['Kills', 'Bajas totales'],
     deaths: ['Deaths', 'Muertes totales (menos es mejor)'],
@@ -174,27 +175,6 @@
     table.append(head, body); wrap.append(table); return wrap;
   }
 
-  function teamCards(context) {
-    const grid = node('div', 'team-grid');
-    for (const team of context.state.teams || []) {
-      const card = node('article', 'public-team-card');
-      const top = node('header');
-      top.append(node('span', 'team-seed', `#${team.seed || '—'}`), node('h3', '', team.name));
-      const captain = team.members?.find((member) => member.participantId === team.captainParticipantId)
-        || team.members?.[0];
-      const list = node('ul', 'team-members');
-      for (const member of team.members || []) {
-        const item = node('li');
-        item.append(node('span', '', member.displayName));
-        if (member.participantId === captain?.participantId) item.append(badge('CAPITÁN', 'captain'));
-        list.append(item);
-      }
-      card.append(top, node('p', 'team-captain', captain ? `Capitán · ${captain.displayName}` : 'Capitán por confirmar'), list);
-      grid.append(card);
-    }
-    return grid;
-  }
-
   function recordCards(context) {
     const cards = node('div', 'team-performance-grid');
     (context.state.standings || []).forEach((row) => {
@@ -299,24 +279,13 @@
 
     const phases = node('section', 'hub-section');
     phases.append(sectionHeader(1, 'NAVEGACIÓN', 'Elige tu vista', 'Cada apartado tiene ahora su propia página y una sola función.'));
-    const cards = node('div', 'phase-grid');
-    const top = context.state.standings?.[0]?.name || 'Sin líder';
-    const completeResults = View.allSeries(context.state).filter((series) => series.status === 'COMPLETED').length;
+    const cards = node('div', 'phase-grid is-minimal');
     [
       { number: '01', title: 'Draft', copy: upcoming ? `${format?.captains || 4} capitanes · ${format?.draftPicks || 16} elecciones` : `${context.draft?.teams?.length || 0} equipos · ${statusLabel(context.draft?.status)}`, status: upcoming ? 'PRÓXIMAMENTE' : statusLabel(context.draft?.status), ready: context.draft?.status === 'COMPLETED', href: `${root}/draft`, accent: 'draft' },
       { number: '02', title: 'Fase regular', copy: upcoming ? `${format?.regularSeason?.matchdays || 3} jornadas · ${format?.regularSeason?.series || 6} BO1` : `${context.state.seriesPlayed || 0} de ${context.state.seriesTotal || 0} partidos`, status: upcoming ? 'TODOS CONTRA TODOS' : context.state.complete ? 'TERMINADA' : 'EN JUEGO', ready: context.state.generated, href: `${root}/fase-regular`, accent: 'league' },
-      { number: '03', title: 'Clasificación', copy: upcoming ? 'Ordenará el seeding del 1º al 4º' : `Líder actual · ${top}`, status: upcoming ? 'TODOS CLASIFICAN' : `${context.state.standings?.length || 0} POSICIONES`, ready: context.state.standings?.length > 0, href: `${root}/fase-regular/clasificacion`, accent: 'standings' },
-      { number: '04', title: 'Jornadas', copy: `${context.state.matchdays?.length || format?.regularSeason?.matchdays || 0} bloques de calendario`, status: context.state.generated ? 'PUBLICADAS' : 'POR ANUNCIAR', ready: context.state.generated, href: `${root}/fase-regular/jornadas`, accent: 'calendar' },
-      { number: '05', title: 'Playoffs', copy: '1º–4º · 2º–3º · cuadro alto y bajo', status: upcoming ? 'DOBLE ELIMINACIÓN' : playoffStatus(context.state), ready: context.state.playoffs?.generated, href: `${root}/playoffs`, accent: 'playoffs' },
-      { number: '06', title: 'Estadísticas', copy: `${context.state.playerStats?.length || 0} jugadores con datos`, status: 'RANKINGS', ready: context.state.playerStats?.length > 0, href: `${root}/estadisticas`, accent: 'stats' },
-      { number: '07', title: 'Resultados', copy: `${completeResults} series cerradas`, status: 'MARCADOR', ready: completeResults > 0, href: `${root}/resultados`, accent: 'results' }
+      { number: '03', title: 'Playoffs', copy: '1º–4º · 2º–3º · cuadro alto y bajo', status: upcoming ? 'DOBLE ELIMINACIÓN' : playoffStatus(context.state), ready: context.state.playoffs?.generated, href: `${root}/playoffs`, accent: 'playoffs' }
     ].forEach((item) => cards.append(phaseCard(context, item)));
     phases.append(cards); container.append(phases);
-
-    const teams = node('section', 'hub-section');
-    teams.append(sectionHeader(2, 'PARTICIPANTES', 'Los equipos', 'Plantillas públicas y capitanes del torneo.', link(`${root}/draft`, 'text-cta', 'VER DRAFT →')));
-    teams.append(context.state.teams?.length ? teamCards(context) : emptyState('Equipos por confirmar', 'Los equipos aparecerán aquí cuando el draft esté preparado.'));
-    container.append(teams);
     return container;
   }
 
@@ -327,37 +296,34 @@
       const section = node('section', 'content-section');
       section.append(sectionHeader(1, 'FORMATO OFICIAL', 'Todos contra todos', `${format.regularSeason.matchdays} jornadas · ${format.regularSeason.series} series · BO${format.regularSeason.bestOf}`));
       section.append(node('p', 'competition-notice', 'Cada equipo jugará una vez contra sus tres rivales. Nadie queda eliminado: los cuatro equipos avanzan y la tabla sólo decide el seeding.'));
-      const routes = node('div', 'regular-route-grid');
-      routes.append(
-        phaseCard(context, { number: 'A', title: 'Clasificación', copy: 'Del 1º al 4º. Todos clasifican a playoffs.', status: 'SEEDING', href: `${root}/fase-regular/clasificacion`, accent: 'standings', cta: 'VER FORMATO' }),
-        phaseCard(context, { number: 'B', title: 'Jornadas', copy: `${format.regularSeason.matchdays} jornadas con ${format.regularSeason.matchesPerMatchday} cruces cada una.`, status: 'POR ANUNCIAR', href: `${root}/fase-regular/jornadas`, accent: 'calendar', cta: 'VER CALENDARIO' })
-      );
-      section.append(routes); return section;
+      const days = node('div', 'matchday-grid');
+      for (let day = 1; day <= format.regularSeason.matchdays; day += 1) {
+        const card = node('article', 'matchday-card is-preview');
+        card.append(node('span', 'matchday-index', String(day).padStart(2, '0')), node('h2', '', `Jornada ${day}`), node('p', 'section-copy', `${format.regularSeason.matchesPerMatchday} cruces · equipos por determinar`));
+        days.append(card);
+      }
+      section.append(days); return section;
     }
     if (!context.state.generated) return emptyState('La liga todavía no está generada', 'Cuando termine el draft, las jornadas y la tabla aparecerán aquí.', link(`${root}/draft`, 'primary-cta', 'VER DRAFT →'));
     const layout = node('div', 'page-stack');
-    const summary = node('section', 'regular-summary');
+    const summary = node('section', 'regular-summary is-compact');
     const progress = node('article', 'regular-progress-card');
     progress.append(node('p', 'section-label', 'PROGRESO'), node('h2', '', context.state.complete ? 'Fase cerrada' : 'Liga en juego'), progressBar(context.state.seriesPlayed, context.state.seriesTotal, 'PARTIDOS DISPUTADOS'));
-    const routes = node('div', 'regular-route-grid');
-    routes.append(
-      phaseCard(context, { number: 'A', title: 'Clasificación', copy: context.event.officialFormat ? 'Tabla completa y seeding del 1º al 4º. Todos avanzan.' : 'Tabla completa, récord y corte del Top 4.', status: `${context.state.standings.length} EQUIPOS`, ready: true, href: `${root}/fase-regular/clasificacion`, accent: 'standings', cta: 'ABRIR TABLA' }),
-      phaseCard(context, { number: 'B', title: 'Jornadas', copy: 'Cruces y resultados ordenados por fecha de competición.', status: `${context.state.matchdays.length} JORNADAS`, ready: true, href: `${root}/fase-regular/jornadas`, accent: 'calendar', cta: 'VER CALENDARIO' })
-    );
-    summary.append(progress, routes); layout.append(summary);
-    const records = node('section', 'content-section');
-    records.append(sectionHeader(1, 'PULSO DE LA LIGA', 'Récord por equipo', 'Una lectura rápida de victorias y derrotas para los cuatro equipos.'));
-    records.append(recordCards(context)); layout.append(records);
+    summary.append(progress); layout.append(summary);
     const tableSection = node('section', 'content-section');
-    tableSection.append(sectionHeader(2, 'VISTA RÁPIDA', 'Seeding de la liga', 'Todos avanzan; la posición decide los cruces.', link(`${root}/fase-regular/clasificacion`, 'text-cta', 'TABLA COMPLETA →')), standingsTable(context, context.state.standings, { limit: 4 }));
+    tableSection.append(sectionHeader(2, 'CLASIFICACIÓN', 'Seeding de la liga', 'Todos avanzan; la posición decide los cruces.'), standingsTable(context, context.state.standings));
     layout.append(tableSection);
-    const last = [...(context.state.matchdays || [])].reverse().find((day) => day.series.some((series) => series.status === 'COMPLETED')) || context.state.matchdays?.[0];
-    if (last) {
-      const day = node('section', 'content-section');
-      day.append(sectionHeader(3, 'CALENDARIO', `Jornada ${last.matchday}`, 'El último bloque con actividad registrada.', link(`${root}/fase-regular/jornadas/${last.matchday}`, 'text-cta', 'ABRIR JORNADA →')));
-      const grid = node('div', 'series-grid'); last.series.forEach((series) => grid.append(seriesCard(context, { ...series, stage: 'REGULAR', matchday: last.matchday }, { compact: true })));
-      day.append(grid); layout.append(day);
+    if (context.state.matchdays?.length) {
+      const days = node('section', 'content-section');
+      days.append(sectionHeader(3, 'CALENDARIO', 'Jornadas', 'Todos los cruces y marcadores de la fase regular.'));
+      const grid = node('div', 'matchday-grid');
+      context.state.matchdays.forEach((day) => grid.append(matchdaySummary(context, day)));
+      days.append(grid); layout.append(days);
     }
+    const secondary = node('nav', 'competition-secondary-links');
+    secondary.setAttribute('aria-label', 'Datos de la fase regular');
+    secondary.append(link(`${root}/estadisticas`, '', 'RANKING DE JUGADORES →'), link(`${root}/resultados`, '', 'TODOS LOS RESULTADOS →'));
+    layout.append(secondary);
     return layout;
   }
 
@@ -439,7 +405,7 @@
       bracket.append(zone);
     }
     section.append(bracket);
-    const confirmedPlacements = (context.state.playoffs.placements || []).filter((place) => Number.isFinite(Number(place.position)));
+    const confirmedPlacements = View.confirmedPlacements(context.state.playoffs.placements);
     if (confirmedPlacements.length) {
       const placements = node('section', 'placements-panel');
       placements.append(node('p', 'section-label', 'PUESTOS CONFIRMADOS'));
@@ -449,6 +415,10 @@
       });
       placements.append(list); section.append(placements);
     }
+    const secondary = node('nav', 'competition-secondary-links');
+    secondary.setAttribute('aria-label', 'Resultados de playoffs');
+    secondary.append(link(`${competitionRoot(context.slug)}/resultados`, '', 'TODOS LOS RESULTADOS →'));
+    section.append(secondary);
     return section;
   }
 
@@ -463,23 +433,27 @@
     const wrap = node('div', 'competition-table-scroll');
     const table = node('table', 'competition-table player-ranking-table');
     const head = node('thead'); const header = node('tr');
-    ['#', 'JUGADOR', 'EQUIPO', 'PJ', 'ACS', 'K', 'D', 'A', 'K/D', 'ADR', 'HS%', 'KAST', 'FB'].forEach((label) => { const cell = node('th', '', label); cell.scope = 'col'; header.append(cell); });
+    ['#', 'JUGADOR', 'EQUIPO', 'PJ', 'GLOBAL', 'ACS', 'K', 'D', 'A', 'K/D', 'ADR', 'HS%', 'KAST', 'FB'].forEach((label) => { const cell = node('th', '', label); cell.scope = 'col'; header.append(cell); });
     head.append(header); const body = node('tbody');
     rows.forEach((row, index) => {
       const tr = node('tr', index < 3 ? 'is-top-player' : '');
       const position = node('th', 'position-cell', String(index + 1).padStart(2, '0')); position.scope = 'row';
       const value = (field) => row[field] === null || row[field] === undefined ? '—' : row[field];
-      tr.append(position, node('td', 'team-name-cell', names.get(row.participantId) || `Jugador ${row.participantId}`), node('td', '', teams.get(row.teamId) || '—'), node('td', '', value('games')), node('td', metric === 'acs' ? 'is-highlight' : '', value('acs')), node('td', metric === 'kills' ? 'is-highlight' : '', value('kills')), node('td', '', value('deaths')), node('td', metric === 'assists' ? 'is-highlight' : '', value('assists')), node('td', metric === 'kd' ? 'is-highlight' : '', value('kd')), node('td', '', value('adr')), node('td', '', value('hsPercent')), node('td', '', value('kastPercent')), node('td', metric === 'firstKills' ? 'is-highlight' : '', value('firstKills')));
+      tr.append(position, node('td', 'team-name-cell', names.get(row.participantId) || `Jugador ${row.participantId}`), node('td', '', teams.get(row.teamId) || '—'), node('td', '', value('games')), node('td', metric === 'overall' ? 'is-highlight global-score-cell' : 'global-score-cell', value('globalScore')), node('td', metric === 'acs' ? 'is-highlight' : '', value('acs')), node('td', metric === 'kills' ? 'is-highlight' : '', value('kills')), node('td', '', value('deaths')), node('td', metric === 'assists' ? 'is-highlight' : '', value('assists')), node('td', metric === 'kd' ? 'is-highlight' : '', value('kd')), node('td', '', value('adr')), node('td', '', value('hsPercent')), node('td', '', value('kastPercent')), node('td', metric === 'firstKills' ? 'is-highlight' : '', value('firstKills')));
       body.append(tr);
     });
     table.append(head, body); wrap.append(table); return wrap;
   }
 
   function renderStats(context) {
-    const stats = context.state.playerStats || [];
-    if (!stats.length) return emptyState('Todavía no hay estadísticas', context.state.preview ? 'Las estadísticas aparecerán cuando comiencen los partidos.' : 'Aparecerán cuando existan partidas con datos de jugadores confirmados.');
+    const rawStats = context.state.playerStats || [];
+    if (!rawStats.length) return emptyState('Todavía no hay estadísticas', context.state.preview ? 'Las estadísticas aparecerán cuando comiencen los partidos.' : 'Aparecerán cuando existan partidas con datos de jugadores confirmados.');
+    const stats = View.scoreGlobalPlayers(rawStats);
     const section = node('section', 'content-section stats-section');
-    section.append(sectionHeader(1, 'RANKING INDIVIDUAL', 'Rendimiento de jugadores', 'Ordena por la métrica que te interese y reduce la lista por equipo.'));
+    section.append(sectionHeader(1, 'CLASIFICACIÓN INDIVIDUAL', 'Ranking global de jugadores', 'Una lectura conjunta del rendimiento confirmado durante todo el torneo.'));
+    const formula = node('aside', 'global-ranking-note');
+    formula.append(node('strong', '', 'ÍNDICE GLOBAL · 0–100'), node('p', '', 'Combina todas las fases y ACS, K/D, ADR, KAST, kills, deaths, asistencias, headshots y primeras bajas y muertes. Compara promedios por partida, pondera la muestra real y los datos ausentes no suman.'));
+    section.append(formula);
     const controls = node('form', 'stats-controls'); controls.addEventListener('submit', (event) => event.preventDefault());
     const searchLabel = node('label'); searchLabel.append(node('span', '', 'BUSCAR JUGADOR'));
     const search = node('input'); search.type = 'search'; search.name = 'q'; search.autocomplete = 'off'; search.placeholder = 'Nombre del jugador…'; searchLabel.append(search);
@@ -498,10 +472,14 @@
     const repaint = () => {
       const names = playerNameMap(context);
       const normalizedSearch = search.value.trim().toLocaleLowerCase('es');
-      const rows = View.rankPlayers(stats.filter((row) => (!team.value || Number(team.value) === row.teamId) && (!normalizedSearch || (names.get(row.participantId) || '').toLocaleLowerCase('es').includes(normalizedSearch))), metric.value, metric.value === 'deaths' ? 'asc' : 'desc');
+      const metricField = metric.value === 'overall' ? 'globalScore' : metric.value;
+      const rows = View.rankPlayers(stats.filter((row) => (!team.value || Number(team.value) === row.teamId) && (!normalizedSearch || (names.get(row.participantId) || '').toLocaleLowerCase('es').includes(normalizedSearch))), metricField, metric.value === 'deaths' ? 'asc' : 'desc');
       podium.replaceChildren(...rows.slice(0, 3).map((row, index) => {
         const card = node('article', `stat-leader place-${index + 1}`);
-        card.append(node('span', '', `#${index + 1} · ${METRICS[metric.value][0]}`), node('strong', '', names.get(row.participantId) || `Jugador ${row.participantId}`), node('b', '', row[metric.value] ?? '—'));
+        const displayedValue = row[metricField] === null || row[metricField] === undefined
+          ? '—'
+          : `${row[metricField]}${metric.value === 'overall' ? ' / 100' : ''}`;
+        card.append(node('span', '', `#${index + 1} · ${METRICS[metric.value][0]}`), node('strong', '', names.get(row.participantId) || `Jugador ${row.participantId}`), node('b', '', displayedValue));
         return card;
       }));
       tableTarget.replaceChildren(renderStatsTable(context, rows, metric.value));
@@ -509,7 +487,7 @@
     const update = () => {
       const params = new URLSearchParams();
       if (search.value.trim()) params.set('q', search.value.trim());
-      if (metric.value !== 'acs') params.set('metric', metric.value);
+      if (metric.value !== 'overall') params.set('metric', metric.value);
       if (team.value) params.set('team', team.value);
       history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`);
       repaint();

@@ -35,13 +35,15 @@ p { text-wrap: pretty; }
   grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem;
   background: rgba(8, 11, 13, .86); backdrop-filter: blur(16px);
 }
-.competition-topbar .broadcast { justify-self: end; }
+.competition-topbar .topbar-utilities { justify-self: end; }
+.competition-topbar-links { display: flex; align-items: center; justify-content: center; gap: clamp(1rem, 2.5vw, 2.5rem); }
 .competition-back {
   color: var(--muted); text-decoration: none; text-transform: uppercase;
   font: .56rem/1 var(--mono); letter-spacing: .12em;
 }
 .competition-back:hover { color: var(--paper); }
 .competition-back span { color: var(--phase-accent); }
+.competition-topbar .profile-entry:hover { color: var(--phase-accent); }
 
 .competition-nav {
   position: sticky; top: 0; z-index: 9; display: flex; justify-content: center;
@@ -141,6 +143,8 @@ p { text-wrap: pretty; }
 }
 .phase-card:nth-child(1), .phase-card:nth-child(2) { grid-column: span 6; min-height: 300px; }
 .phase-card:nth-child(6), .phase-card:nth-child(7) { grid-column: span 6; }
+.phase-grid.is-minimal { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.phase-grid.is-minimal .phase-card { grid-column: auto; min-height: 300px; }
 .phase-card.phase-draft { --card-accent: #ff4655; }
 .phase-card.phase-league, .phase-card.phase-calendar { --card-accent: var(--cyan); }
 .phase-card.phase-standings { --card-accent: var(--lime); }
@@ -170,6 +174,8 @@ p { text-wrap: pretty; }
 
 /* Regular overview and tables */
 .regular-summary { padding: clamp(2.5rem, 5vw, 4rem) 0 0; display: grid; grid-template-columns: .72fr 1.28fr; gap: 1px; background: var(--line); }
+.regular-summary.is-compact { grid-template-columns: 1fr; }
+.regular-summary.is-compact .regular-progress-card { min-height: 280px; }
 .regular-progress-card { min-height: 340px; padding: clamp(1.5rem, 4vw, 3rem); background: var(--surface); display: flex; flex-direction: column; justify-content: flex-end; }
 .regular-progress-card h2 { font: clamp(2.4rem, 4.5vw, 4.6rem)/.88 var(--display); }
 .regular-route-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; }
@@ -194,6 +200,8 @@ p { text-wrap: pretty; }
 .matchday-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }
 .matchday-card { min-width: 0; min-height: 330px; padding: 1.25rem; background: var(--surface); color: var(--paper); text-decoration: none; display: flex; flex-direction: column; transition: background .18s ease; }
 .matchday-card:hover { background: var(--surface-raised); }
+.matchday-card.is-preview { cursor: default; }
+.matchday-card.is-preview:hover { background: var(--surface); }
 .matchday-card header { display: flex; justify-content: space-between; gap: .8rem; }
 .matchday-index { color: rgba(var(--phase-rgb), .25); font: 3rem/1 var(--display); }
 .matchday-card h2 { margin: auto 0 1rem; font: 2.25rem/1 var(--display); }
@@ -205,6 +213,9 @@ p { text-wrap: pretty; }
 
 .series-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }
 .series-grid.is-detail { grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); }
+.competition-secondary-links { display: flex; justify-content: flex-end; gap: 1.5rem; padding: 1.4rem 0; border-bottom: 1px solid var(--line); }
+.competition-secondary-links a { color: var(--muted); text-decoration: none; font: .54rem/1 var(--mono); letter-spacing: .1em; }
+.competition-secondary-links a:hover { color: var(--phase-accent); }
 .series-card { min-width: 0; padding: 1.15rem; background: var(--surface); }
 .series-card[data-status="COMPLETED"] { box-shadow: inset 2px 0 0 var(--phase-accent); }
 .series-card > header { display: flex; align-items: center; justify-content: space-between; gap: .8rem; }
@@ -234,6 +245,9 @@ p { text-wrap: pretty; }
 .placements-panel b { color: var(--gold); font: .8rem/1 var(--mono); }
 
 /* Statistics */
+.global-ranking-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; align-items: center; margin-bottom: 1px; padding: 1rem 1.2rem; border: 1px solid rgba(var(--phase-rgb), .35); background: linear-gradient(90deg, rgba(var(--phase-rgb), .12), rgba(var(--phase-rgb), .025)); }
+.global-ranking-note strong { color: var(--phase-accent); font: .58rem/1 var(--mono); letter-spacing: .12em; white-space: nowrap; }
+.global-ranking-note p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.55; }
 .stats-controls { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 1px; margin-bottom: 1px; background: var(--line); border: 1px solid var(--line); }
 .stats-controls label { padding: .8rem; background: var(--surface); }
 .stats-controls label > span { display: block; margin-bottom: .5rem; color: var(--muted); font: .48rem/1 var(--mono); letter-spacing: .1em; }
@@ -244,6 +258,7 @@ p { text-wrap: pretty; }
 .stat-leader span { color: var(--muted); font: .5rem/1 var(--mono); letter-spacing: .1em; }
 .stat-leader strong { margin-top: auto; font: 1.8rem/1 var(--display); text-transform: uppercase; }
 .stat-leader b { margin-top: .7rem; color: var(--phase-accent); font: 2.4rem/1 var(--display); }
+.player-ranking-table .global-score-cell { color: var(--phase-accent); font-weight: 700; }
 .team-performance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border: 1px solid var(--line); background: var(--line); }
 .team-performance-grid article { padding: 1.2rem; background: var(--surface); }
 .team-performance-grid span { color: var(--phase-accent); font: .55rem/1 var(--mono); }
@@ -312,8 +327,8 @@ p { text-wrap: pretty; }
 }
 
 @media (max-width: 720px) {
-  .competition-topbar { grid-template-columns: 1fr auto; }
-  .competition-topbar .competition-back { display: none; }
+  .competition-topbar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .competition-topbar .competition-back { max-width: 7.5rem; text-align: center; }
   .competition-topbar .broadcast { font-size: .48rem; }
   .competition-nav { justify-content: flex-start; padding-inline: .6rem; }
   .competition-nav a { padding-inline: .7rem; }
@@ -327,12 +342,15 @@ p { text-wrap: pretty; }
   .hub-spotlight { grid-template-columns: 1fr; }
   .hub-overview, .hub-next { min-height: 270px; }
   .phase-grid { grid-template-columns: 1fr; }
+  .phase-grid.is-minimal { grid-template-columns: 1fr; }
   .phase-card, .phase-card:nth-child(1), .phase-card:nth-child(2),
   .phase-card:nth-child(6), .phase-card:nth-child(7) { grid-column: auto; min-height: 235px; }
   .team-grid, .matchday-grid, .team-performance-grid, .result-list, .series-grid,
   .competition-bracket, .regular-route-grid, .stats-podium { grid-template-columns: 1fr; }
   .bracket-zone.zone-grand { grid-column: auto; }
   .stats-controls, .results-controls { grid-template-columns: 1fr; }
+  .global-ranking-note { grid-template-columns: 1fr; gap: .65rem; }
+  .global-ranking-note strong { white-space: normal; }
   .series-matchup, .match-scoreboard-teams { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .45rem; }
   .series-team strong { font-size: 1rem; }
   .match-scoreboard { min-height: 310px; }
@@ -344,7 +362,14 @@ p { text-wrap: pretty; }
 @media (max-width: 420px) {
   .brand-copy strong { font-size: .8rem; }
   .brand-copy small { font-size: .43rem; }
-  .competition-topbar { padding-inline: 1rem; }
+  .competition-topbar { padding-inline: 1rem; grid-template-columns: minmax(0, 1fr) auto; }
+  .competition-topbar .topbar-utilities { gap: 0; }
+  .competition-topbar .broadcast { display: none; }
+  .competition-topbar-links { display: none; }
+  .competition-topbar-links { gap: .65rem; }
+  .competition-topbar .profile-entry { font-size: .46rem; letter-spacing: .07em; }
+  .competition-topbar .competition-back { max-width: 5rem; font-size: .46rem; letter-spacing: .08em; }
+  .competition-topbar .competition-back span { display: none; }
   .competition-main { padding-inline: 1rem; }
   .series-matchup { grid-template-columns: 1fr; }
   .series-team:last-child { text-align: left; }

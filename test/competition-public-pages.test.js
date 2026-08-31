@@ -9,6 +9,7 @@ const request = require('supertest');
 const { createApp } = require('../src/app');
 const { openDatabase } = require('../src/database');
 const View = require('../public/competition-view');
+const AmongUsView = require('../public/amongus-competition-view');
 
 describe('páginas públicas de la competición', () => {
   const directories = [];
@@ -68,6 +69,89 @@ describe('páginas públicas de la competición', () => {
     });
   });
 
+  it('mantiene la competición de Among Us separada del visor de Valorant', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-game-pages-'));
+    directories.push(directory);
+    const database = openDatabase(path.join(directory, 'test.db'));
+    databases.push(database);
+    database.createEvent({
+      slug: 'copa-valorant',
+      name: 'Copa Valorant',
+      game: 'Valorant',
+      description: 'Torneo por equipos',
+      modules: { competition: true, draft: true }
+    });
+    const application = createApp({ database, adminToken: 'test-admin' });
+
+    const amongUs = await request(application)
+      .get('/eventos/among-us-agosto-2026/competicion')
+      .expect(200);
+    assert.match(amongUs.text, /amongus-competition\.js/);
+    assert.match(amongUs.text, /id="stage-board"/);
+    assert.match(amongUs.text, /id="group-tabs"/);
+    assert.match(amongUs.text, /id="participant-list"/);
+    assert.match(amongUs.text, /id="match-list"/);
+    assert.doesNotMatch(amongUs.text, /competition-pages\.js/);
+
+    const valorant = await request(application)
+      .get('/eventos/copa-valorant/competicion')
+      .expect(200);
+    assert.match(valorant.text, /competition-pages\.js/);
+    assert.doesNotMatch(valorant.text, /amongus-competition\.js/);
+
+    const legacyLeaderboard = await request(application).get('/clasificacion').expect(302);
+    assert.equal(legacyLeaderboard.headers.location, '/eventos/among-us-agosto-2026/competicion');
+  });
+
+  it('presenta cada partida de Among Us con el contrato público y respeta sus módulos', () => {
+    const stages = [{ id: 7, name: 'Clasificación', groups: [{ id: 9, name: 'Grupo B' }] }];
+    const match = AmongUsView.describeMatch({
+      id: 31,
+      stageId: 7,
+      groupId: 9,
+      playedAt: '2026-08-20T18:00:00.000Z',
+      receivedAt: '2026-08-28T00:00:00.000Z',
+      result: { map: 'The Skeld', winner: 'crew', playerCount: 10 }
+    }, stages);
+
+    assert.deepEqual(match, {
+      title: 'The Skeld',
+      context: 'Clasificación · Grupo B',
+      timestamp: '2026-08-20T18:00:00.000Z',
+      winner: 'crew',
+      playerCount: 10
+    });
+    assert.deepEqual(AmongUsView.enabledSections({ modules: {
+      competition: true, participants: false, matches: true, schedule: false
+    } }), ['competition', 'matches']);
+  });
+
+  it('publica la rotación completa de mapas en grupos y final', async () => {
+    const application = app();
+    const response = await request(application)
+      .get('/api/events/among-us-agosto-2026/competition')
+      .expect(200);
+    const [groups, final] = response.body.stages;
+    assert.deepEqual(groups.mapSchedule.map((slot) => slot.map), [
+      'The Skeld', 'Mira HQ', 'Polus', 'The Airship', 'The Fungle'
+    ]);
+    assert.deepEqual(final.mapSchedule.map((slot) => slot.map), [
+      'Polus', 'The Fungle', 'Mira HQ', 'The Airship', 'The Skeld'
+    ]);
+  });
+
+  it('expone las tres fases y el ranking en la navegación principal', () => {
+    assert.deepEqual(View.navItems('copa-roja').map((item) => item.label), [
+      'Resumen', 'Draft', 'Fase regular', 'Playoffs', 'Ranking'
+    ]);
+  });
+
+  it('mantiene el mismo menu reducido tambien dentro del Draft', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'draft.html'), 'utf8');
+    assert.match(html, /id="draft-nav-stats"/);
+    assert.doesNotMatch(html, /id="draft-nav-results"/);
+  });
+
   it('crea un estado público vacío para un torneo anunciado sin filtrar datos', () => {
     const preview = View.previewCompetitionState();
     assert.equal(preview.preview, true);
@@ -118,5 +202,38 @@ describe('páginas públicas de la competición', () => {
       { participantId: 2, deaths: 12 },
       { participantId: 3, deaths: 8 }
     ], 'deaths', 'asc').map((row) => row.participantId).join(','), '3,2,1');
+  });
+
+  it('calcula un ranking global comparable sin alterar las estadísticas originales', () => {
+    const rows = [
+      { participantId: 1, games: 4, acs: 260, kd: 1.5, adr: 170, kastPercent: 78, hsPercent: 31, kills: 80, deaths: 54, assists: 28, firstKills: 12, firstDeaths: 5 },
+      { participantId: 2, games: 4, acs: 205, kd: 1.05, adr: 135, kastPercent: 69, hsPercent: 24, kills: 60, deaths: 58, assists: 22, firstKills: 7, firstDeaths: 8 },
+      { participantId: 3, games: 1, acs: 280, kd: 1.7, adr: 180, kastPercent: 81, hsPercent: 35, kills: 22, deaths: 13, assists: 8, firstKills: 4, firstDeaths: 1 }
+    ];
+    const ranked = View.rankPlayers(View.scoreGlobalPlayers(rows), 'globalScore');
+    assert.deepEqual(ranked.map((row) => row.participantId), [1, 3, 2]);
+    assert.ok(ranked.every((row) => row.globalScore >= 0 && row.globalScore <= 100));
+    assert.equal(rows[0].globalScore, undefined);
+
+    const incomplete = View.scoreGlobalPlayers([
+      { participantId: 10, games: 3, acs: 220, kd: 1.1, deaths: 45, sampleSizes: { acs: 3, kd: 3, deaths: 3 } },
+      { participantId: 11, games: 3, acs: 220, kd: 1.1, deaths: null, sampleSizes: { acs: 3, kd: 3, deaths: 0 } }
+    ]);
+    assert.ok(incomplete[0].globalScore > incomplete[1].globalScore, 'omitir deaths no puede mejorar el índice');
+
+    const partial = View.scoreGlobalPlayers([
+      { participantId: 20, games: 4, acs: 220, sampleSizes: { acs: 4 } },
+      { participantId: 21, games: 4, acs: 220, sampleSizes: { acs: 1 } }
+    ]);
+    assert.ok(partial[0].globalScore > partial[1].globalScore, 'una sola muestra no pesa como cuatro');
+  });
+
+  it('no publica puestos de playoffs hasta que esten decididos', () => {
+    const placements = View.confirmedPlacements([
+      { teamId: 1, position: null },
+      { teamId: 2, position: undefined },
+      { teamId: 3, position: 3 }
+    ]);
+    assert.deepEqual(placements, [{ teamId: 3, position: 3 }]);
   });
 });

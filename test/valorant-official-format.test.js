@@ -101,8 +101,8 @@ describe('formato oficial del torneo de Valorant', () => {
     assert.equal(detail.body.event.registration.available, false);
     assert.match(detail.body.event.officialFormat.public.veto, /Antes de cada serie/);
     const blocked = await request(app).post('/api/events/torneo-valorant/registrations')
-      .send({ values: { discord_username: 'nadie', game_name: 'Nadie' } }).expect(403);
-    assert.equal(blocked.body.error.code, 'REGISTRATION_CLOSED');
+      .send({ values: { discord_username: 'nadie', game_name: 'Nadie' } }).expect(404);
+    assert.equal(blocked.body.error.code, 'REGISTRATION_FLOW_UNAVAILABLE');
 
     // La sincronización es una migración, no un proceso que vuelva a pisar
     // decisiones futuras de la organización en cada arranque.
@@ -141,6 +141,12 @@ describe('formato oficial del torneo de Valorant', () => {
     const event = await request(app).get('/api/events/torneo-valorant').expect(200);
     assert.equal(event.body.event.officialFormat.players, 20);
     assert.equal(event.body.event.participantCount, 0);
+
+    const information = await request(app)
+      .get('/api/events/torneo-valorant/tournament-information')
+      .expect(200);
+    assert.equal(information.body.event.officialFormat.teams, 4);
+    assert.match(information.body.event.officialFormat.public.draft, /draft/i);
   });
 
   it('impide convertir el evento real en una demo de cinco o seis equipos', () => {

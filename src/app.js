@@ -10,7 +10,7 @@ const compression = require('compression');
 const { buildLeaderboard } = require('./leaderboard');
 const { getPublicScoringRules, SCORING_CONFIG } = require('./services/scoring');
 const { InformationValidationError } = require('./tournament-information');
-const { EventValidationError } = require('./events');
+const { EventValidationError, VALORANT_PEAK_RANKS } = require('./events');
 const { CompetitionError } = require('./competition');
 const { createMatchIngestor } = require('./services/match-ingest');
 const {
@@ -31,6 +31,7 @@ const {
 const { readCapture, buildPreview } = require('./services/captures/ingest');
 const { createTesseractProvider } = require('./services/ocr');
 const { createReporterContextResolver } = require('./services/reporter-context');
+const { mapScheduleForStage } = require('./amongus-maps');
 const {
   ReporterAuthError,
   createReporterAuthorizer,
@@ -133,6 +134,7 @@ function createApp({
   reporterToken = null,
   reporterPrivateUrl = null,
   discord = null,
+  discordAvatarFetch = globalThis.fetch,
   secureCookies = false,
   // El OCR se puede sustituir por uno falso en las pruebas: lo que hay que
   // probar es el parser y la confirmación, no que Tesseract acierte.
@@ -256,7 +258,13 @@ function createApp({
         ? database.listRegistrationFields(event.id, { publicOnly: true })
         : [];
       response.set('Cache-Control', 'no-store').json({
-        event: { ...event, officialFormat: officialValorantFormatForSlug(event.slug) },
+        event: {
+          ...event,
+          officialFormat: officialValorantFormatForSlug(event.slug),
+          valorantPeakRanks: String(event.game).trim().toLocaleLowerCase('es') === 'valorant'
+            ? VALORANT_PEAK_RANKS
+            : []
+        },
         registrationFields
       });
     } catch (error) { next(error); }
@@ -266,6 +274,10 @@ function createApp({
     try {
       const event = eventFromSlug(request, response);
       if (!event) return;
+      if (event.modules.draft) {
+        return sendError(response, 404, 'REGISTRATION_FLOW_UNAVAILABLE',
+          'Este evento utiliza inscripción con Discord y Riot ID.');
+      }
       const participant = database.createParticipant(event.id, request.body?.values);
       response.status(201).json({ participant: publicParticipant(participant), message: 'Inscripción recibida. Queda pendiente de confirmación.' });
     } catch (error) { next(error); }
@@ -297,7 +309,7 @@ function createApp({
       const stages = database.competition.listStages(event.id).filter((stage) => stage.enabled).map((stage) => {
         const groups = stage.groups.map((group) => ({ ...group, leaderboard: database.competition.getStageLeaderboard(stage.id, group.id) }));
         const leaderboard = stage.type === 'group_stage' ? null : database.competition.getStageLeaderboard(stage.id);
-        return { ...stage, groups, leaderboard };
+        return { ...stage, groups, leaderboard, mapSchedule: mapScheduleForStage(stage) };
       });
       const champion = stages.flatMap((stage) => stage.participants).find((participant) => participant.competitiveStatus === 'champion') || null;
       response.set('Cache-Control', 'no-store').json({ stages, champion });
@@ -347,7 +359,7 @@ function createApp({
       if (!event) return;
       if (!event.modules.information) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no publica información ampliada.');
       response.set('Cache-Control', 'no-store').json({
-        event,
+        event: { ...event, officialFormat: officialValorantFormatForSlug(event.slug) },
         ...database.getTournamentInformation(event.id),
         scoring: eventScoring(event)
       });
@@ -774,6 +786,8 @@ function createApp({
             participantId: registro?.participantId ?? null,
             registrationStatus: registro?.status ?? null,
             riotId: registro?.riotId ?? null,
+            peakRank: registro?.peakRank ?? null,
+            playerBio: registro?.playerBio ?? null,
             // En un evento sin draft no se inventa un papel que no existe.
             draftRole: event.modules.draft
               ? database.valorant.draftRole(event.id, registro?.participantId)
@@ -784,6 +798,55 @@ function createApp({
 
       response.json(payload);
     } catch (error) { next(error); }
+  });
+
+  app.get('/api/me/profile', (request, response, next) => {
+    try {
+      const session = currentSession(request);
+      response.set('Cache-Control', 'no-store');
+      if (!session) return response.json({ authenticated: false });
+      response.json({
+        authenticated: true,
+        displayName: session.account.displayName || session.account.username,
+        // La ruta propia entrega los píxeles sin revelar el id ni el hash de Discord.
+        avatar: session.account.avatar ? '/api/me/avatar' : null,
+        registrations: database.valorant.profileRegistrations(session.account.id)
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/me/avatar', async (request, response) => {
+    const session = currentSession(request);
+    if (!session) return sendError(response, 401, 'AUTH_REQUIRED', 'Entra con Discord para ver tu avatar.');
+    const { discordUserId, avatar } = session.account;
+    if (!discordUserId || !avatar) {
+      return sendError(response, 404, 'AVATAR_NOT_FOUND', 'Esta cuenta no tiene avatar de Discord.');
+    }
+
+    try {
+      const id = encodeURIComponent(String(discordUserId));
+      const hash = encodeURIComponent(String(avatar));
+      const upstream = await discordAvatarFetch(
+        `https://cdn.discordapp.com/avatars/${id}/${hash}.png?size=256`,
+        { headers: { Accept: 'image/png' }, signal: AbortSignal.timeout(5000) }
+      );
+      const contentType = upstream.headers.get('content-type') || '';
+      const contentLength = Number(upstream.headers.get('content-length') || 0);
+      if (!upstream.ok || !/^image\/(png|jpeg|webp|gif)(;|$)/i.test(contentType) || contentLength > 2 * 1024 * 1024) {
+        return sendError(response, 502, 'AVATAR_UNAVAILABLE', 'No se ha podido obtener el avatar de Discord.');
+      }
+      const bytes = Buffer.from(await upstream.arrayBuffer());
+      if (bytes.length > 2 * 1024 * 1024) {
+        return sendError(response, 502, 'AVATAR_UNAVAILABLE', 'El avatar de Discord supera el tamaño permitido.');
+      }
+      response.set({
+        'Content-Type': contentType,
+        'Cache-Control': 'private, max-age=300, no-transform'
+      });
+      return response.send(bytes);
+    } catch {
+      return sendError(response, 502, 'AVATAR_UNAVAILABLE', 'No se ha podido obtener el avatar de Discord.');
+    }
   });
 
   /**
@@ -805,7 +868,10 @@ function createApp({
         discordAccountId: session.account.id,
         riotId: request.body?.riotId,
         // Lo que el navegador diga sobre identidad se ignora por completo.
-        values: {}
+        values: {
+          peak_rank: request.body?.peakRank ?? 'Sin rango',
+          player_bio: request.body?.playerBio ?? ''
+        }
       }, (eventId, values) => database.createParticipant(eventId, values));
 
       response.status(201).json({ registration: registro });
@@ -1625,7 +1691,8 @@ function createApp({
   app.use('/api', (_request, response) => sendError(response, 404, 'API_NOT_FOUND', 'La ruta de API no existe.'));
 
   app.get('/informacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/informacion`));
-  app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}#clasificacion`));
+  app.get('/clasificacion', (_request, response) => response.redirect(302, `/eventos/${database.getDefaultEvent().slug}/competicion`));
+
   /*
     Las plantillas se leen una vez y se guardan en memoria: lo que cambia entre
     dos peticiones son los metadatos, no el fichero.
@@ -1664,8 +1731,21 @@ function createApp({
     response.type('html').send(injectMetadata(leerPlantilla(fichero), metadata));
   };
 
+  app.get('/perfil', enviarPagina('profile.html'));
   const sendDraftPage = enviarPagina('draft.html', 'draft');
   const sendCompetitionPage = enviarPagina('competition-page.html', 'competicion');
+
+  /*
+    Cada juego tiene su portada de competición, pero las dos pasan por el mismo
+    sitio para que la tarjeta social salga bien también ahí.
+  */
+  const sendCompetitionHome = (request, response) => {
+    const event = database.getEventBySlug(request.params.slug);
+    const page = String(event?.game || '').trim().toLowerCase() === 'among us'
+      ? 'amongus-competition.html'
+      : 'competition-page.html';
+    return enviarPagina(page, 'competicion')(request, response);
+  };
   app.get('/eventos/:slug/draft', sendDraftPage);
   app.get('/eventos/:slug/competicion/draft', sendDraftPage);
   app.get('/eventos/:slug/competicion/fase-regular/jornadas/:jornada', sendCompetitionPage);
@@ -1676,7 +1756,7 @@ function createApp({
   app.get('/eventos/:slug/competicion/estadisticas', sendCompetitionPage);
   app.get('/eventos/:slug/competicion/resultados', sendCompetitionPage);
   app.get('/eventos/:slug/competicion/partidos/:matchId', sendCompetitionPage);
-  app.get('/eventos/:slug/competicion', sendCompetitionPage);
+  app.get('/eventos/:slug/competicion', sendCompetitionHome);
   app.get('/eventos/:slug/informacion', enviarPagina('informacion.html', 'informacion'));
   app.get('/eventos/:slug', enviarPagina('event.html'));
   app.get('/eventos/:slug/:section', enviarPagina('event.html'));

@@ -662,14 +662,17 @@ describe('resultados por captura, de punta a punta', () => {
           mapKey: preview.map,
           teamARounds: preview.teamARounds,
           teamBRounds: preview.teamBRounds,
-          players: preview.players.map((jugador, indice) => ({
-            participantId: jugador.participantId,
-            agent: jugador.agent,
-            acs: jugador.acs, kills: jugador.kills,
-            deaths: jugador.deaths, assists: jugador.assists,
-            ...(extra.adrDesde !== undefined && indice < (extra.conAdr ?? 99)
-              ? { adr: extra.adrDesde + indice * 10 } : {})
-          }))
+          players: preview.players.map((jugador, indice) => {
+            const base = {
+              participantId: jugador.participantId,
+              agent: jugador.agent,
+              acs: jugador.acs, kills: jugador.kills,
+              deaths: jugador.deaths, assists: jugador.assists,
+              ...(extra.adrDesde !== undefined && indice < (extra.conAdr ?? 99)
+                ? { adr: extra.adrDesde + indice * 10 } : {})
+            };
+            return { ...base, ...(extra.transformPlayer?.(base, indice) || {}) };
+          })
         });
     }
 
@@ -702,6 +705,31 @@ describe('resultados por captura, de punta a punta', () => {
         assert.ok(fila.adr >= 150,
           `la media de ADR (${fila.adr}) no puede hundirse por la partida sin dato`);
       }
+    });
+
+    it('calcula K/D sólo con mapas que tengan kills y deaths emparejadas', async () => {
+      const { app, database, event, serie, guion, ocrProvider } = torneoConGuion();
+      const participantId = guion.equipoA.members[0].participantId;
+
+      await confirmar(app, event, serie, guion, {
+        transformPlayer: (player) => player.participantId === participantId ? { deaths: null } : null
+      }).then((response) => assert.equal(response.status, 200, JSON.stringify(response.body)));
+
+      const otra = database.valorantCompetition.listSeries(event.id)
+        .find((item) => item.id !== serie.id
+          && (item.teamAId === guion.equipoA.id || item.teamBId === guion.equipoA.id));
+      const guionOtra = guionDelPartido(database, event, otra);
+      ocrProvider.setScript(guionOtra.texto);
+      await confirmar(app, event, otra, guionOtra, {
+        transformPlayer: (player) => player.participantId === participantId ? { kills: null } : null
+      }).then((response) => assert.equal(response.status, 200, JSON.stringify(response.body)));
+
+      const player = database.valorantCompetition.tournamentPlayerStats(event.id)
+        .find((row) => row.participantId === participantId);
+      assert.equal(player.kd, null);
+      assert.equal(player.sampleSizes.kd, 0);
+      assert.equal(player.sampleSizes.kills, 1);
+      assert.equal(player.sampleSizes.deaths, 1);
     });
 
     it('la tabla del partido llega completa y sin nada privado', async () => {

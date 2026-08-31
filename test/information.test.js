@@ -69,4 +69,13 @@ describe('tournament information', () => {
       InformationValidationError
     );
   });
+
+  it('mantiene el contenido largo en Información y no repite los premios', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'informacion.html'), 'utf8');
+    assert.match(html, /id="formato"/);
+    assert.match(html, /id="reglas"/);
+    assert.match(html, /id="faq"/);
+    assert.match(html, /id="valorant-information-format"/);
+    assert.doesNotMatch(html, /id="info-prizes"/);
+  });
 });

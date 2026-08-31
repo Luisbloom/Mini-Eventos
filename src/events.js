@@ -106,6 +106,31 @@ const DEFAULT_REGISTRATION_FIELDS = Object.freeze([
   }
 ]);
 
+const VALORANT_PEAK_RANKS = Object.freeze([
+  'Sin rango',
+  'Hierro 1', 'Hierro 2', 'Hierro 3',
+  'Bronce 1', 'Bronce 2', 'Bronce 3',
+  'Plata 1', 'Plata 2', 'Plata 3',
+  'Oro 1', 'Oro 2', 'Oro 3',
+  'Platino 1', 'Platino 2', 'Platino 3',
+  'Diamante 1', 'Diamante 2', 'Diamante 3',
+  'Ascendente 1', 'Ascendente 2', 'Ascendente 3',
+  'Inmortal 1', 'Inmortal 2', 'Inmortal 3',
+  'Radiante'
+]);
+
+const VALORANT_PROFILE_FIELDS = Object.freeze([
+  {
+    key: 'peak_rank', label: 'Rango máximo alcanzado', type: 'select', required: false,
+    placeholder: '', options: VALORANT_PEAK_RANKS, position: 5, enabled: true
+  },
+  {
+    key: 'player_bio', label: 'Sobre ti', type: 'text', required: false,
+    placeholder: 'Cuánto tiempo llevas jugando, roles preferidos o cualquier comentario',
+    options: [], position: 6, enabled: true
+  }
+]);
+
 class EventValidationError extends Error {
   constructor(message, code = 'INVALID_EVENT', status = 400) {
     super(message);
@@ -288,10 +313,14 @@ function normalizeRegistrationFields(fields) {
 // El Friend Code identifica una cuenta de Among Us, así que sólo se pide en
 // eventos de ese juego. Un torneo de otro juego no debe heredar el campo.
 function registrationFieldsForGame(game) {
-  const isAmongUs = String(game ?? '').trim().toLocaleLowerCase('es') === 'among us';
-  return DEFAULT_REGISTRATION_FIELDS
+  const normalizedGame = String(game ?? '').trim().toLocaleLowerCase('es');
+  const isAmongUs = normalizedGame === 'among us';
+  const base = DEFAULT_REGISTRATION_FIELDS
     .filter((field) => field.key !== 'friend_code' || isAmongUs)
     .map((field) => ({ ...field }));
+  return normalizedGame === 'valorant'
+    ? [...base, ...VALORANT_PROFILE_FIELDS.map((field) => ({ ...field, options: [...field.options] }))]
+    : base;
 }
 
 function normalizeRegistrationValues(fields, input) {
@@ -335,6 +364,8 @@ module.exports = {
   DEFAULT_EVENT,
   DEFAULT_MODULES,
   DEFAULT_REGISTRATION_FIELDS,
+  VALORANT_PEAK_RANKS,
+  VALORANT_PROFILE_FIELDS,
   EVENT_STATUSES,
   PARTICIPANT_STATUSES,
   EventValidationError,

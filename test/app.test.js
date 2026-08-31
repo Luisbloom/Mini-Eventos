@@ -38,6 +38,29 @@ describe('Jartiland Among Us API', () => {
     assert.match(response.text, /MINI EVENTOS JARTILAND/);
   });
 
+  it('serves the global profile page', async () => {
+    const response = await request(app).get('/perfil');
+    assert.equal(response.status, 200);
+    assert.match(response.headers['content-type'], /text\/html/);
+    assert.match(response.text, /id="profile-main"/);
+    assert.match(response.text, /id="profile-avatar-image"/);
+    assert.match(response.text, /src="\/profile\.js"/);
+  });
+
+  it('keeps one global profile entry in every public topbar', async () => {
+    const routes = [
+      '/',
+      '/eventos/among-us-agosto-2026',
+      '/eventos/among-us-agosto-2026/informacion',
+      '/eventos/torneo-valorant/competicion',
+      '/eventos/torneo-valorant/competicion/draft'
+    ];
+    for (const route of routes) {
+      const response = await request(app).get(route).expect(200);
+      assert.equal((response.text.match(/href="\/perfil"/g) || []).length, 1, route);
+    }
+  });
+
   it('serves the public information and administration pages', async () => {
     const information = await request(app).get('/informacion');
     assert.equal(information.status, 302);

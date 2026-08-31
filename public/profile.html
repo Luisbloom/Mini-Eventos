@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Tu perfil de participante en Mini Eventos Jartiland">
+    <title>Mi perfil · Mini Eventos Jartiland</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
+    <link rel="apple-touch-icon" href="/images/logo.png">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/profile.css">
+    <script src="/profile.js" defer></script>
+  </head>
+  <body class="profile-page">
+    <a class="skip-link" href="#profile-main">Saltar al contenido</a>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar profile-topbar">
+      <a class="brand" href="/" aria-label="Mini Eventos Jartiland">
+        <img class="brand-logo" src="/images/logo-96.png" alt="" aria-hidden="true" width="40" height="40" decoding="async">
+        <span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span>
+      </a>
+      <nav class="primary-nav" aria-label="Navegación principal">
+        <a href="/">Eventos</a>
+      </nav>
+      <div class="topbar-utilities">
+        <div class="broadcast" aria-live="polite">
+          <span id="profile-dot" class="live-dot loading"></span><span id="profile-state">CARGANDO</span>
+        </div>
+        <a class="profile-entry active" href="/perfil" aria-current="page"><span aria-hidden="true">ID</span> Mi perfil</a>
+      </div>
+    </header>
+
+    <main id="profile-main" class="profile-main">
+      <section id="profile-loading" class="profile-loading" role="status" aria-label="Cargando perfil">
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="skeleton-copy"><span class="skeleton skeleton-line-short"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line-medium"></span></div>
+        <div class="skeleton skeleton-card"></div>
+      </section>
+
+      <section id="profile-login" class="profile-login" hidden aria-labelledby="login-title">
+        <div class="profile-login-card">
+          <span class="profile-login-mark" aria-hidden="true">J</span>
+          <p class="profile-eyebrow">Tu cuenta de Jartiland</p>
+          <h1 id="login-title">Entra a tu perfil</h1>
+          <p>Consulta en un mismo sitio tus inscripciones, el equipo que te corresponde y el estado de cada evento.</p>
+          <a id="profile-login-button" class="profile-primary-action" href="/auth/discord?redirect=%2Fperfil">
+            Continuar con Discord <span aria-hidden="true">→</span>
+          </a>
+          <p id="profile-login-note" class="profile-note">Usaremos tu cuenta únicamente para identificar tus inscripciones.</p>
+        </div>
+      </section>
+
+      <div id="profile-content" hidden>
+        <section class="profile-account" aria-labelledby="profile-title">
+          <nav class="profile-breadcrumb" aria-label="Ruta de navegación"><a href="/">Eventos</a><span aria-hidden="true">/</span><span>Mi perfil</span></nav>
+          <div class="profile-identity">
+            <span class="profile-avatar" aria-hidden="true">
+              <span id="profile-initials">?</span>
+              <img id="profile-avatar-image" alt="" hidden>
+            </span>
+            <div class="profile-identity-copy">
+              <p class="profile-eyebrow">Perfil de jugador</p>
+              <h1 id="profile-title"><span id="profile-name">—</span></h1>
+              <p class="profile-connected"><span aria-hidden="true"></span> Cuenta de Discord conectada</p>
+            </div>
+            <button id="profile-logout" type="button">Cerrar sesión</button>
+          </div>
+          <dl class="profile-summary" aria-label="Resumen del perfil">
+            <div><dt>Inscripciones</dt><dd id="profile-event-count">0</dd></div>
+            <div><dt>Eventos activos</dt><dd id="profile-active-count">0</dd></div>
+            <div><dt>Equipos</dt><dd id="profile-team-count">0</dd></div>
+          </dl>
+        </section>
+
+        <section class="profile-events" aria-labelledby="profile-events-title">
+          <header class="profile-section-heading">
+            <div><p class="profile-eyebrow">Participación</p><h2 id="profile-events-title">Tus eventos</h2></div>
+            <p>Aquí aparecen únicamente las inscripciones asociadas a tu cuenta.</p>
+          </header>
+          <div id="profile-registrations" class="profile-registration-list"></div>
+          <div id="profile-empty" class="profile-empty" hidden>
+            <span class="profile-empty-mark" aria-hidden="true">J</span>
+            <div><h3>Aún no te has apuntado a ningún evento</h3><p>Explora los eventos disponibles y completa una inscripción con esta misma cuenta de Discord.</p><a href="/">Ver eventos disponibles <b aria-hidden="true">→</b></a></div>
+          </div>
+        </section>
+      </div>
+
+      <section id="profile-error" class="profile-system-state is-error" role="alert" hidden>
+        <span aria-hidden="true">!</span><div><strong>No hemos podido abrir tu perfil</strong><p>Recarga la página para volver a intentarlo.</p></div>
+      </section>
+    </main>
+
+    <footer class="profile-footer"><span>Mini Eventos Jartiland</span><a href="/">Volver a los eventos</a></footer>
+    <nav class="legal-strip" aria-label="Enlaces legales">
+      <span>© Jartiland · Mini Eventos</span>
+      <a href="/privacidad">Privacidad</a>
+      <a href="/terminos">Términos</a>
+      <a href="/contacto">Contacto</a>
+    </nav>
+  </body>
+</html>

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#080b0d">
+    <meta name="description" content="Grupos y clasificación del torneo de Among Us de Jartiland">
+    <title>Competición de Among Us · Mini Eventos Jartiland</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/event.css">
+    <link rel="stylesheet" href="/competition.css">
+    <link rel="stylesheet" href="/amongus-competition.css">
+    <script src="/amongus-competition-view.js" defer></script>
+    <script src="/amongus-competition.js" defer></script>
+  </head>
+  <body class="event-page amongus-competition-page">
+    <a class="skip-link" href="#fases">Saltar a la clasificación</a>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar compact-topbar">
+      <a class="brand" href="/"><img class="brand-logo" src="/images/logo-96.png" alt="" aria-hidden="true" width="40" height="40"><span class="brand-copy"><strong>JARTILAND</strong><small>MINI EVENTOS</small></span></a>
+      <nav class="primary-nav is-return-only" aria-label="Navegación principal"><a id="event-back" href="/"><span class="back-long">Volver al </span>evento</a></nav>
+      <div class="topbar-utilities">
+        <div class="broadcast" aria-live="polite"><span id="competition-dot" class="live-dot loading"></span><span id="competition-connection">CARGANDO</span></div>
+        <a class="profile-entry" href="/perfil"><span aria-hidden="true">ID</span> Mi perfil</a>
+      </div>
+    </header>
+
+    <main id="amongus-main" hidden>
+      <header class="amongus-competition-hero">
+        <div>
+          <p class="kicker">AMONG US · COMPETICIÓN</p>
+          <h1 id="event-name">Torneo Among Us</h1>
+          <p id="event-description" class="subtitle"></p>
+        </div>
+        <dl class="amongus-summary">
+          <div><dt>FASE ACTUAL</dt><dd id="current-stage">—</dd></div>
+          <div><dt>PARTICIPANTES</dt><dd id="participant-summary">—</dd></div>
+          <div><dt>PARTIDAS</dt><dd id="match-summary">—</dd></div>
+        </dl>
+      </header>
+
+      <nav class="amongus-section-nav" aria-label="Secciones de la competición">
+        <a data-module-link="competition" href="#fases">Grupos y clasificación</a>
+        <a data-module-link="schedule" href="#agenda">Agenda</a>
+        <a data-module-link="participants" href="#participantes">Participantes</a>
+        <a data-module-link="matches" href="#partidas">Partidas</a>
+        <a id="information-link" href="#">Información</a>
+      </nav>
+
+      <section id="fases" class="competition-section content-section" data-module-section="competition" aria-labelledby="competition-title">
+        <header class="section-bar">
+          <div><p class="section-index">01 / TORNEO</p><h2 id="competition-title">Grupos y clasificación</h2></div>
+          <button id="refresh-competition" class="refresh" type="button"><span aria-hidden="true">↻</span> ACTUALIZAR</button>
+        </header>
+        <ol id="stage-progress" class="stage-progress"></ol>
+        <section class="map-plan" aria-labelledby="map-plan-title">
+          <header><span>ROTACIÓN OFICIAL</span><h3 id="map-plan-title">Mapas de la fase</h3></header>
+          <ol id="map-schedule" class="map-schedule"></ol>
+        </section>
+        <div id="champion-banner" class="champion-banner" hidden></div>
+        <div id="finalists-panel" class="finalists-panel" hidden><span>FINALISTAS</span><div id="finalists-list" class="finalists-list"></div></div>
+        <div id="competition-empty" class="state-panel empty" hidden><span class="empty-number">00</span><div><h3>Fases pendientes</h3><p>La organización publicará aquí los grupos y el camino a la final.</p></div></div>
+        <div id="stage-board" class="stage-board"><div id="group-tabs" class="group-tabs" role="tablist" aria-label="Grupos"></div><div id="stage-leaderboard" role="tabpanel"></div></div>
+      </section>
+
+      <section id="agenda" class="schedule-section content-section" data-module-section="schedule" aria-labelledby="schedule-title">
+        <header class="section-bar"><div><p class="section-index">02 / HORARIOS</p><h2 id="schedule-title">Agenda del torneo</h2></div><span class="section-stat">HORA LOCAL</span></header>
+        <ol id="event-schedule" class="event-schedule"></ol>
+        <div id="schedule-empty" class="state-panel empty compact" hidden><div><h3>Horario pendiente</h3><p>La agenda aparecerá cuando quede confirmada.</p></div></div>
+      </section>
+
+      <section id="participantes" class="content-section stack-section" data-module-section="participants" aria-labelledby="participants-title">
+        <header class="section-bar"><div><p class="section-index">03 / COMUNIDAD</p><h2 id="participants-title">Participantes</h2></div><span id="public-participant-count" class="section-stat">00 CONFIRMADOS</span></header>
+        <div id="participants-loading" class="state-panel">Cargando participantes…</div>
+        <div id="participants-empty" class="state-panel empty compact" hidden><span class="empty-number">00</span><div><h3>Aún no hay confirmados</h3><p>Las inscripciones aprobadas aparecerán aquí.</p></div></div>
+        <ol id="participant-list" class="participant-list" hidden></ol>
+      </section>
+
+      <section id="partidas" class="content-section stack-section" data-module-section="matches" aria-labelledby="matches-title">
+        <header class="section-bar"><div><p class="section-index">04 / RESULTADOS</p><h2 id="matches-title">Partidas</h2></div><span id="match-total" class="section-stat">00 REGISTRADAS</span></header>
+        <div id="matches-loading" class="state-panel">Cargando resultados…</div>
+        <div id="matches-empty" class="state-panel empty compact" hidden><span class="empty-number">00</span><div><h3>Esperando la primera partida</h3><p>Los resultados enviados por el Reporter aparecerán aquí.</p></div></div>
+        <div id="match-list" class="match-list" hidden></div>
+      </section>
+    </main>
+
+    <section id="amongus-error" class="event-fatal" hidden><span>!</span><h1>No disponible</h1><p>No se ha podido cargar la competición de Among Us.</p><a href="/">VOLVER A EVENTOS</a></section>
+    <footer class="ticker"><div><span>AMONG US JARTILAND</span><b>✦</b><span>GRUPOS Y CLASIFICACIÓN</span><b>✦</b><span>RESULTADOS EN DIRECTO</span><b>✦</b><span aria-hidden="true">AMONG US JARTILAND</span><b aria-hidden="true">✦</b></div></footer>
+    <nav class="legal-strip" aria-label="Enlaces legales">
+      <span>© Jartiland · Mini Eventos</span>
+      <a href="/privacidad">Privacidad</a>
+      <a href="/terminos">Términos</a>
+      <a href="/contacto">Contacto</a>
+    </nav>
+  </body>
+</html>

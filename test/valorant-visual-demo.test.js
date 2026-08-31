@@ -64,6 +64,7 @@ describe('demo visual reproducible de Valorant', () => {
     assert.equal(publicState.body.seriesPlayed, 6);
     assert.equal(publicState.body.standings.length, 4);
     assert.equal(publicState.body.playerStats.length, 20);
+    assert.ok(publicState.body.playerStats.every((row) => row.games === 5), 'el ranking global incluye los tres mapas de liga y los dos de playoffs');
     assert.equal(publicState.body.playoffs.generated, true);
     assert.ok(publicState.body.playoffs.series.length >= 6);
     assert.equal(publicState.body.matchdays[0].series[0].games[0].stats.length, 10);

@@ -36,13 +36,11 @@ function mostrarNoDisponible(titulo, copia, upcoming = false) {
 function configurarNavegacion() {
   byId('back-to-event').href = `/eventos/${encodeURIComponent(slug)}`;
   const competition = `/eventos/${encodeURIComponent(slug)}/competicion`;
-  byId('back-to-competition').href = competition;
   byId('draft-nav-hub').href = competition;
   byId('draft-nav-draft').href = `${competition}/draft`;
   byId('draft-nav-regular').href = `${competition}/fase-regular`;
   byId('draft-nav-playoffs').href = `${competition}/playoffs`;
   byId('draft-nav-stats').href = `${competition}/estadisticas`;
-  byId('draft-nav-results').href = `${competition}/resultados`;
 }
 
 function mostrarPrevia(event) {

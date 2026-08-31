@@ -42,6 +42,14 @@ body {
 button, a { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; }
 
+.skip-link {
+  position: fixed; z-index: 100; top: .75rem; left: .75rem; padding: .75rem 1rem;
+  background: var(--paper); color: var(--void); text-decoration: none;
+  font: .58rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  transform: translateY(-180%);
+}
+.skip-link:focus-visible { transform: translateY(0); outline: 2px solid var(--cyan); outline-offset: 3px; }
+
 .topbar {
   height: 82px;
   padding: 0 clamp(1.25rem, 4vw, 4.5rem);
@@ -61,6 +69,21 @@ button { font: inherit; }
 .primary-nav a:hover, .primary-nav a.active { color: var(--paper); }
 .primary-nav a:hover::after, .primary-nav a.active::after { transform: scaleX(1); transform-origin: left; }
 .primary-nav a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+.topbar-utilities {
+  display: flex; align-items: center; justify-content: flex-end; gap: clamp(.8rem, 1.8vw, 1.6rem);
+}
+.profile-entry {
+  display: inline-flex; align-items: center; gap: .55rem; padding: .58rem .72rem;
+  border: 1px solid rgba(236, 241, 232, .18); color: var(--paper); text-decoration: none;
+  text-transform: uppercase; white-space: nowrap; font: .56rem/1 var(--mono); letter-spacing: .12em;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.profile-entry > span {
+  display: grid; width: 1.45rem; height: 1.45rem; place-items: center; border-radius: 50%;
+  background: var(--lime); color: var(--void); font-size: .43rem; letter-spacing: .04em;
+}
+.profile-entry:hover, .profile-entry.active { border-color: var(--lime); color: var(--lime); background: rgba(184, 255, 44, .04); }
+.profile-entry:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
 
 .mini-crew,
 .crew {
@@ -235,10 +258,17 @@ h2 { font: clamp(2.8rem, 6vw, 5.8rem)/.9 var(--display); letter-spacing: -.025em
 
 @media (max-width: 660px) {
   .topbar { height: auto; min-height: 102px; padding-top: .75rem; padding-bottom: .65rem; flex-wrap: wrap; }
+  .topbar.compact-topbar { min-height: 76px; padding-top: .55rem; padding-bottom: .55rem; flex-wrap: nowrap; }
+  .topbar.portal-topbar { min-height: 76px; padding-top: .55rem; padding-bottom: .55rem; flex-wrap: nowrap; }
+  .compact-topbar .broadcast { display: none; }
+  .compact-topbar .topbar-utilities { margin-left: 0; }
   .brand-copy small { display: none; }
   .broadcast { margin-left: auto; }
   .primary-nav { width: 100%; order: 3; justify-content: space-between; border-top: 1px solid var(--line); padding-top: .35rem; }
+  .primary-nav.is-return-only { width: auto; order: initial; border-top: 0; padding-top: 0; }
   .primary-nav a { font-size: .53rem; }
+  .profile-entry { padding: .48rem .55rem; font-size: .49rem; letter-spacing: .08em; }
+  .profile-entry > span { width: 1.25rem; height: 1.25rem; font-size: .38rem; }
   .intro { padding-top: 3.5rem; }
   h1 { font-size: clamp(3.4rem, 16vw, 6.5rem); }
   .tournament-stats { grid-template-columns: 1fr 1fr; }

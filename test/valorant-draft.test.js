@@ -35,12 +35,12 @@ describe('draft de Valorant', () => {
     };
   }
 
-  function montar({ discord = fakeDiscord(), slug = 'torneo-valorant' } = {}) {
+  function montar({ discord = fakeDiscord(), slug = 'torneo-valorant', discordAvatarFetch } = {}) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-valorant-'));
     directories.push(directory);
     const database = openDatabase(path.join(directory, 'tournament.db'));
     bases.push(database);
-    const app = createApp({ database, adminToken: ADMIN, discord });
+    const app = createApp({ database, adminToken: ADMIN, discord, discordAvatarFetch });
     // El evento de Valorant ya existe en la plataforma; aqui se crea igual.
     const event = database.createEvent({
       slug, name: 'Torneo Valorant', game: 'Valorant',
@@ -823,6 +823,50 @@ describe('draft de Valorant', () => {
   describe('inscripción con Discord', () => {
     const slug = 'torneo-valorant';
 
+    it('prepara los campos de perfil para cualquier evento de Valorant', () => {
+      const { database, event } = montar();
+      const fields = database.listRegistrationFields(event.id);
+      assert.deepEqual(fields.slice(-2).map((field) => field.key), ['peak_rank', 'player_bio']);
+      const rank = fields.find((field) => field.key === 'peak_rank');
+      assert.equal(rank.type, 'select');
+      assert.deepEqual(rank.options, [
+        'Sin rango',
+        'Hierro 1', 'Hierro 2', 'Hierro 3',
+        'Bronce 1', 'Bronce 2', 'Bronce 3',
+        'Plata 1', 'Plata 2', 'Plata 3',
+        'Oro 1', 'Oro 2', 'Oro 3',
+        'Platino 1', 'Platino 2', 'Platino 3',
+        'Diamante 1', 'Diamante 2', 'Diamante 3',
+        'Ascendente 1', 'Ascendente 2', 'Ascendente 3',
+        'Inmortal 1', 'Inmortal 2', 'Inmortal 3',
+        'Radiante'
+      ]);
+      assert.equal(fields.find((field) => field.key === 'player_bio').required, false);
+    });
+
+    it('publica el contrato canónico de rangos aunque se editen los metadatos del campo', async () => {
+      const { app, database, event } = montar();
+      const fields = database.listRegistrationFields(event.id);
+      database.replaceRegistrationFields(event.id, fields.map((field) => field.key === 'peak_rank'
+        ? { ...field, options: ['<img src=x onerror=alert(1)>'] }
+        : field));
+      const response = await request(app).get(`/api/events/${slug}`).expect(200);
+      assert.equal(response.body.event.valorantPeakRanks.length, 26);
+      assert.equal(response.body.event.valorantPeakRanks[0], 'Sin rango');
+      assert.equal(response.body.event.valorantPeakRanks.at(-1), 'Radiante');
+      assert.equal(response.body.event.valorantPeakRanks.includes('<img src=x onerror=alert(1)>'), false);
+    });
+
+    it('bloquea la ruta genérica para que nadie se salte Discord y Riot ID', async () => {
+      const { app, database, event } = montar();
+      const response = await request(app).post(`/api/events/${slug}/registrations`).send({
+        values: { discord_username: 'inventado', game_name: 'Sin dueño', peak_rank: 'Radiante' }
+      });
+      assert.equal(response.status, 404);
+      assert.equal(response.body.error.code, 'REGISTRATION_FLOW_UNAVAILABLE');
+      assert.equal(database.listParticipants(event.id).length, 0);
+    });
+
     it('exige sesión y no acepta identidades del navegador', async () => {
       const { app } = montar();
       const anonimo = await request(app).post(`/api/events/${slug}/valorant/registrations`)
@@ -838,10 +882,16 @@ describe('draft de Valorant', () => {
       const { sesion } = await login(app);
 
       const alta = await request(app).post(`/api/events/${slug}/valorant/registrations`)
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', sesion).send({
+          riotId: 'Luisbloom#NANO',
+          peakRank: 'Ascendente 2',
+          playerBio: 'Llevo tres años jugando y suelo jugar controlador.'
+        }).expect(201);
 
       assert.equal(alta.body.registration.riotId, 'Luisbloom#NANO');
       assert.equal(alta.body.registration.displayName, 'Luis', 'el nombre sale de Discord');
+      assert.equal(alta.body.registration.peakRank, 'Ascendente 2');
+      assert.equal(alta.body.registration.playerBio, 'Llevo tres años jugando y suelo jugar controlador.');
 
       // Queda atada de verdad, sin que nadie eligiera a qué inscripción.
       const cuenta = database.valorant.getDiscordAccountByUserId('9001');
@@ -850,6 +900,24 @@ describe('draft de Valorant', () => {
       assert.equal(ligada.riot_game_name, 'Luisbloom');
       assert.equal(ligada.riot_tag_line, 'NANO');
       assert.equal(ligada.riot_puuid, null, 'sin Riot API todavía');
+      const participant = database.listParticipants(event.id).find((item) => item.id === ligada.id);
+      assert.equal(participant.values.peak_rank, 'Ascendente 2');
+      assert.equal(participant.values.player_bio, 'Llevo tres años jugando y suelo jugar controlador.');
+    });
+
+    it('valida el rango máximo y limita el comentario personal', async () => {
+      const { app } = montar();
+      const { sesion } = await login(app);
+
+      const invalidRank = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Madera 7' });
+      assert.equal(invalidRank.status, 400);
+      assert.equal(invalidRank.body.error.code, 'INVALID_PEAK_RANK');
+
+      const longBio = await request(app).post(`/api/events/${slug}/valorant/registrations`)
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Sin rango', playerBio: 'x'.repeat(161) });
+      assert.equal(longBio.status, 400);
+      assert.equal(longBio.body.error.code, 'PLAYER_BIO_TOO_LONG');
     });
 
     it('ignora lo que el navegador diga sobre quién es', async () => {
@@ -930,12 +998,14 @@ describe('draft de Valorant', () => {
       assert.equal(antes.body.event.registrationsOpen, true);
 
       await request(app).post('/api/events/torneo-valorant/valorant/registrations')
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO', peakRank: 'Diamante 1', playerBio: 'Main centinela.' }).expect(201);
 
       const despues = await request(app).get('/api/me').query({ event: 'torneo-valorant' })
         .set('Cookie', sesion).expect(200);
       assert.equal(despues.body.event.registered, true);
       assert.equal(despues.body.event.riotId, 'Luisbloom#NANO');
+      assert.equal(despues.body.event.peakRank, 'Diamante 1');
+      assert.equal(despues.body.event.playerBio, 'Main centinela.');
       assert.equal(despues.body.event.draftRole, 'participant');
       // No hay avatar: su URL lleva el id de Discord dentro, así que publicarla
       // sería publicar el id. La interfaz usa las iniciales del nombre.
@@ -951,6 +1021,126 @@ describe('draft de Valorant', () => {
       const { app } = montar();
       const anonimo = await request(app).get('/api/me').query({ event: 'torneo-valorant' }).expect(200);
       assert.deepEqual(anonimo.body, { authenticated: false });
+    });
+  });
+
+  describe('perfil global', () => {
+    it('sin sesión no expone ninguna cuenta ni inscripción', async () => {
+      const { app } = montar();
+      const response = await request(app).get('/api/me/profile').expect(200);
+      assert.deepEqual(response.body, { authenticated: false });
+      assert.match(response.headers['cache-control'], /no-store/);
+    });
+
+    it('reúne sólo las inscripciones vinculadas a la cuenta conectada', async () => {
+      const { app, database, event } = montar({
+        discord: fakeDiscord({
+          discordUserId: 'perfil-9001', username: 'luis', displayName: 'Luis', avatar: 'privado'
+        })
+      });
+      const { sesion } = await login(app);
+      await request(app).post('/api/events/torneo-valorant/valorant/registrations')
+        .set('Cookie', sesion).send({
+          riotId: 'Luisbloom#NANO', peakRank: 'Ascendente 2', playerBio: 'Main controlador.'
+        }).expect(201);
+
+      // El jugador entra como capitán en un draft preparado. Los otros 19 no
+      // pertenecen a esta cuenta y no deben aparecer en su perfil.
+      const account = database.valorant.getDiscordAccountByUserId('perfil-9001');
+      const mine = database.valorant.findParticipantByDiscord(event.id, account.id);
+      database.updateParticipant(mine.id, { status: 'confirmed' });
+      const others = inscribir(database, event, 19);
+      database.valorant.configureDraft(event.id, {
+        captains: [mine.id, ...others.slice(0, 3).map((participant) => participant.id)],
+        teamCount: 4,
+        teamSize: 5
+      });
+
+      // Una segunda cuenta real queda vinculada a otro jugador: tampoco puede
+      // aparecer en el perfil de Luis.
+      const otherAccount = database.valorant.upsertDiscordAccount({
+        discordUserId: 'perfil-otra-cuenta', username: 'otra', displayName: 'Otra cuenta', avatar: null
+      });
+      database.valorant.linkParticipantToDiscord(others[0].id, otherAccount.id);
+
+      // El perfil es global: también reúne una inscripción no-Valorant cuando
+      // está vinculada de forma explícita a la misma identidad de Discord.
+      const among = database.getDefaultEvent();
+      database.updateEvent(among.id, { ...among, status: 'Inscripciones abiertas', registrationsOpen: true });
+      const amongRegistration = database.createParticipant(among.id, {
+        discord_username: 'luis', game_name: 'Luis AU', friend_code: 'luis#1234'
+      });
+      database.valorant.linkParticipantToDiscord(amongRegistration.id, account.id);
+
+      const response = await request(app).get('/api/me/profile').set('Cookie', sesion).expect(200);
+      assert.equal(response.body.authenticated, true);
+      assert.equal(response.body.displayName, 'Luis');
+      assert.equal(response.body.avatar, '/api/me/avatar');
+      assert.equal(response.body.registrations.length, 2);
+      assert.deepEqual(response.body.registrations[0], {
+        slug: 'torneo-valorant',
+        eventName: 'Torneo Valorant',
+        game: 'Valorant',
+        eventStatus: 'Inscripciones abiertas',
+        coverImage: '/images/events/x.png',
+        accentColor: '#ff4655',
+        archived: false,
+        registrationStatus: 'confirmed',
+        riotId: 'Luisbloom#NANO',
+        peakRank: 'Ascendente 2',
+        playerBio: 'Main controlador.',
+        role: 'captain',
+        team: { name: 'Equipo de Luis', role: 'captain' }
+      });
+      assert.deepEqual(response.body.registrations[1], {
+        slug: among.slug,
+        eventName: among.name,
+        game: 'Among Us',
+        eventStatus: 'Inscripciones abiertas',
+        coverImage: among.coverImage,
+        accentColor: among.accentColor,
+        archived: false,
+        registrationStatus: 'pending',
+        riotId: null,
+        peakRank: null,
+        playerBio: '',
+        role: null,
+        team: null
+      });
+      const serialized = JSON.stringify(response.body);
+      assert.equal(serialized.includes('Jugador 01'), false);
+      assert.equal(serialized.includes('Otra cuenta'), false);
+      for (const privateKey of ['discordUserId', 'discordAccountId', 'participantId', 'sessionId', 'riot_puuid']) {
+        assert.equal(serialized.includes(privateKey), false, privateKey);
+      }
+      assert.match(response.headers['cache-control'], /no-store/);
+    });
+
+    it('sirve la foto de Discord sin exponer su identificador al navegador', async () => {
+      const requests = [];
+      const discordAvatarFetch = async (url) => {
+        requests.push(String(url));
+        return new Response(Buffer.from([137, 80, 78, 71]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png', 'Content-Length': '4' }
+        });
+      };
+      const { app } = montar({
+        discord: fakeDiscord({
+          discordUserId: '9001', username: 'luis', displayName: 'Luis', avatar: 'avatar_hash'
+        }),
+        discordAvatarFetch
+      });
+      const { sesion } = await login(app);
+
+      await request(app).get('/api/me/avatar').expect(401);
+      const response = await request(app).get('/api/me/avatar').set('Cookie', sesion).expect(200);
+
+      assert.equal(response.headers['content-type'], 'image/png');
+      assert.match(response.headers['cache-control'], /private/);
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0], 'https://cdn.discordapp.com/avatars/9001/avatar_hash.png?size=256');
+      assert.equal(response.text?.includes('9001') || false, false);
     });
   });
 
@@ -1084,6 +1274,7 @@ describe('draft de Valorant', () => {
 
   describe('el identificador de Discord no sale nunca', () => {
     const DISCORD_ID = '9001123456789';
+    const PRIVATE_BIO = 'BIO-PRIVADA-QUE-NUNCA-DEBE-SER-PUBLICA';
 
     it('no aparece en ninguna respuesta pública, ni dentro de una URL', async () => {
       const { app, database, event } = montar({
@@ -1094,7 +1285,9 @@ describe('draft de Valorant', () => {
       const { sesion } = await login(app);
 
       await request(app).post('/api/events/torneo-valorant/valorant/registrations')
-        .set('Cookie', sesion).send({ riotId: 'Luisbloom#NANO' }).expect(201);
+        .set('Cookie', sesion).send({
+          riotId: 'Luisbloom#NANO', peakRank: 'Inmortal 3', playerBio: PRIVATE_BIO
+        }).expect(201);
 
       // Un draft en marcha, para que el estado publico tenga contenido.
       const resto = inscribir(database, event, 19);
@@ -1123,6 +1316,11 @@ describe('draft de Valorant', () => {
           assert.equal(texto.includes(prohibido), false, `${prohibido} en ${respuesta.request.url}`);
         }
       }
+      for (const respuesta of respuestas.slice(1)) {
+        const texto = JSON.stringify(respuesta.body);
+        assert.equal(texto.includes(PRIVATE_BIO), false, 'la biografía no es pública');
+        assert.equal(texto.includes('Inmortal 3'), false, 'el rango declarado no es público');
+      }
     });
   });
 
@@ -1145,8 +1343,24 @@ describe('draft de Valorant', () => {
         accentColor: '#ff4655', icon: 'crosshair', coverImage: '/images/events/x.png'
       });
       const idOriginal = creado.id;
+      primera.updateEvent(idOriginal, { ...creado, registrationsOpen: true });
+      const inscrito = primera.createParticipant(creado.id, {
+        discord_username: 'jugador-antiguo', game_name: 'Jugador antiguo'
+      });
+      primera.updateEvent(idOriginal, { ...creado, registrationsOpen: false });
       assert.equal(creado.modules.draft, false, 'todavía sin draft');
       primera.close();
+
+      // Simula la base anterior al despliegue del perfil: el evento y su
+      // participante existen, pero aún no existen los campos nuevos ni la marca.
+      const antigua = new BetterSqlite3(ruta);
+      antigua.prepare("DELETE FROM event_registration_fields WHERE event_id=? AND field_key IN ('peak_rank','player_bio')")
+        .run(idOriginal);
+      antigua.prepare('UPDATE event_participants SET field_values_json=? WHERE id=?').run(JSON.stringify({
+        discord_username: 'jugador-antiguo', game_name: 'Jugador antiguo'
+      }), inscrito.id);
+      antigua.prepare("DELETE FROM app_settings WHERE setting_key='valorant_profile_fields_v1'").run();
+      antigua.close();
 
       // --- se reabre: aquí corre el backfill ---
       const segunda = openDatabase(ruta);
@@ -1158,6 +1372,17 @@ describe('draft de Valorant', () => {
       assert.equal(valorant.registration.available, false);
       assert.equal(segunda.getDefaultEvent().modules.draft, false, 'Among Us intacto');
       assert.equal(segunda.listEvents().length, 2);
+      assert.deepEqual(
+        segunda.listRegistrationFields(idOriginal).filter((field) => ['peak_rank', 'player_bio'].includes(field.key))
+          .map((field) => field.key),
+        ['peak_rank', 'player_bio'],
+        'la migración añade los dos campos al evento existente'
+      );
+      const conservado = segunda.listParticipants(idOriginal).find((participant) => participant.id === inscrito.id);
+      assert.equal(conservado.displayName, 'Jugador antiguo');
+      assert.equal(conservado.values.game_name, 'Jugador antiguo', 'los datos anteriores no se reescriben');
+      assert.equal(Object.hasOwn(conservado.values, 'peak_rank'), false);
+      assert.equal(Object.hasOwn(conservado.values, 'player_bio'), false);
       segunda.close();
 
       // --- y otra vez, sin duplicar ni revertir ---
@@ -1167,6 +1392,11 @@ describe('draft de Valorant', () => {
       assert.equal(otraVez.id, idOriginal);
       assert.equal(otraVez.status, 'Próximamente');
       assert.equal(tercera.listEvents().length, 2);
+      assert.equal(
+        tercera.listRegistrationFields(idOriginal).filter((field) => ['peak_rank', 'player_bio'].includes(field.key)).length,
+        2,
+        'la segunda apertura no duplica campos'
+      );
       tercera.close();
     });
   });
