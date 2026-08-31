@@ -9,15 +9,61 @@
  */
 const OFFICIAL_VALORANT_SLUG = 'torneo-valorant';
 
+const TEAM_SIZE = 5;
+const MIN_PLAYERS = 20;
+const MAX_PLAYERS = 40;
+/*
+  Se suma de diez en diez, y no de cinco en cinco, para que el número de
+  equipos sea siempre PAR: 20→4, 30→6, 40→8. Con un número impar de equipos
+  alguien descansa cada jornada, y una tarde de torneo con gente esperando
+  sentada es peor que dejar fuera a los que no completan la decena.
+*/
+const PLAYERS_STEP = 10;
+
+/** Todo lo que se deriva de cuánta gente hay. Nada de esto se decide aparte. */
+function sizeFor(players) {
+  const teams = players / TEAM_SIZE;
+  const series = (teams * (teams - 1)) / 2;
+  return Object.freeze({
+    players,
+    teams,
+    teamSize: TEAM_SIZE,
+    captains: teams,
+    draftEligible: players - teams,
+    draftPicks: players - teams,
+    draftRounds: TEAM_SIZE - 1,
+    regularSeason: Object.freeze({
+      series,
+      seriesPerTeam: teams - 1,
+      matchdays: teams - 1,
+      matchesPerMatchday: teams / 2
+    })
+  });
+}
+
+/** Las plantillas posibles: 20, 30 y 40 jugadores. */
+const OFFICIAL_SIZES = Object.freeze(
+  Array.from({ length: (MAX_PLAYERS - MIN_PLAYERS) / PLAYERS_STEP + 1 },
+    (_, indice) => sizeFor(MIN_PLAYERS + indice * PLAYERS_STEP)));
+
 const OFFICIAL_VALORANT_FORMAT = Object.freeze({
   source: Object.freeze({ document: 'Jartiland_Torneo_VALORANT_Informacion.pdf', version: '2026-08-23' }),
-  players: 20,
-  teams: 4,
-  teamSize: 5,
-  captains: 4,
-  draftEligible: 16,
-  draftPicks: 16,
-  draftRounds: 4,
+
+  // El mínimo es también lo que se anuncia mientras no haya más inscritos.
+  players: MIN_PLAYERS,
+  teams: MIN_PLAYERS / TEAM_SIZE,
+  teamSize: TEAM_SIZE,
+  captains: MIN_PLAYERS / TEAM_SIZE,
+  draftEligible: MIN_PLAYERS - MIN_PLAYERS / TEAM_SIZE,
+  draftPicks: MIN_PLAYERS - MIN_PLAYERS / TEAM_SIZE,
+  draftRounds: TEAM_SIZE - 1,
+
+  minPlayers: MIN_PLAYERS,
+  maxPlayers: MAX_PLAYERS,
+  playersStep: PLAYERS_STEP,
+  sizes: OFFICIAL_SIZES,
+  allowedTeamCounts: Object.freeze(OFFICIAL_SIZES.map((size) => size.teams)),
+
   regularSeason: Object.freeze({
     format: 'ROUND_ROBIN',
     bestOf: 1,
@@ -72,12 +118,13 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     'Servidor o región'
   ]),
   public: Object.freeze({
-    headline: '20 jugadores. 4 equipos. Un solo campeón.',
-    summary: 'Primero se forman cuatro equipos mediante un draft en directo. Después juegan todos contra todos para ordenar el seeding. Los cuatro equipos entran en playoffs de doble eliminación.',
-    captains: 'Los cuatro jugadores considerados de mayor nivel serán capitanes. Los otros 16 participantes quedarán disponibles para ser elegidos. Cada equipo terminará con un capitán y cuatro jugadores elegidos.',
+    headline: 'De 20 a 40 jugadores. Un solo campeón.',
+    size: 'El torneo se juega con 20, 30 o 40 jugadores: equipos de cinco y siempre un número par de equipos, para que nadie descanse. Las plazas van de diez en diez, así que una decena a medias no entra: con 25 confirmados se juega con 20 y cinco se quedan fuera.',
+    summary: 'Primero se forman los equipos mediante un draft en directo. Después juegan todos contra todos para ordenar el seeding. Los cuatro primeros entran en playoffs de doble eliminación.',
+    captains: 'Los jugadores considerados de mayor nivel serán capitanes, uno por equipo. El resto de participantes quedarán disponibles para ser elegidos. Cada equipo terminará con un capitán y cuatro jugadores elegidos.',
     draft: 'El draft se realizará en directo, en un canal de voz y con elecciones públicas por turnos. Habrá cuatro rondas de elección. La organización anunciará el orden definitivo antes del draft y podrá utilizar orden serpiente.',
-    regularSeason: 'Cada equipo se enfrentará una vez a cada rival: tres BO1 por equipo, seis series totales y tres jornadas. Esta fase no elimina a nadie; sólo ordena del 1º al 4º.',
-    standings: 'Las victorias son la prioridad. Todos clasifican a playoffs y la posición obtenida determina los cruces.',
+    regularSeason: 'Cada equipo se enfrentará una vez a cada rival, en BO1. Con 20 jugadores son seis series en tres jornadas; con 30, quince en cinco; con 40, veintiocho en siete. Esta fase no elimina a nadie; sólo ordena del 1º al 4º.',
+    standings: 'Las victorias son la prioridad. Con cuatro equipos todos clasifican a playoffs; con seis u ocho, sólo los cuatro primeros. La posición obtenida determina los cruces.',
     tiebreakers: 'En caso de empate se utilizarán criterios deportivos como enfrentamiento directo y diferencia de rondas. Si fuese necesario, la organización resolverá el desempate.',
     playoffs: 'El 1º jugará contra el 4º y el 2º contra el 3º. La primera derrota envía al cuadro inferior; la segunda elimina. Todas las series de playoffs serán BO3.',
     grandFinalReset: 'Si el equipo procedente del cuadro inferior gana la primera Gran Final al equipo que seguía invicto, se disputará una serie final de desempate, ya que ambos tendrán entonces una derrota.',
@@ -99,6 +146,44 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
   ])
 });
 
+/** La plantilla que corresponde a esa cantidad de gente, o null si no cuadra. */
+function officialSizeForPlayers(players) {
+  return OFFICIAL_SIZES.find((size) => size.players === Number(players)) ?? null;
+}
+
+/** La plantilla que corresponde a ese número de equipos, o null. */
+function officialSizeForTeams(teams) {
+  return OFFICIAL_SIZES.find((size) => size.teams === Number(teams)) ?? null;
+}
+
+/**
+ * En qué punto está la inscripción respecto a las decenas.
+ *
+ * El torneo se juega con 20, 30 o 40. Con 25 confirmados no se juega con 25:
+ * o se completa la decena o se juega con 20 y cinco se quedan fuera. Esto lo
+ * dice en vez de dejar que se descubra al intentar arrancar el draft.
+ */
+function officialRosterState(confirmed) {
+  const gente = Number(confirmed) || 0;
+  const exacta = officialSizeForPlayers(gente);
+  // La mayor plantilla que ya cabe con la gente que hay.
+  const jugable = exacta
+    ?? [...OFFICIAL_SIZES].reverse().find((size) => size.players < gente) ?? null;
+  // La siguiente decena que se podría completar, si queda alguna.
+  const siguiente = OFFICIAL_SIZES.find((size) => size.players > gente) ?? null;
+
+  return {
+    confirmed: gente,
+    exact: exacta,
+    playable: exacta ?? jugable,
+    next: siguiente,
+    missingForNext: siguiente ? siguiente.players - gente : 0,
+    // Cuántos se quedarían fuera si se jugara ya con la plantilla que cabe.
+    leftOut: exacta ? 0 : (jugable ? gente - jugable.players : gente),
+    full: gente >= MAX_PLAYERS
+  };
+}
+
 function officialValorantFormatForSlug(slug) {
   return String(slug || '').trim().toLowerCase() === OFFICIAL_VALORANT_SLUG
     ? OFFICIAL_VALORANT_FORMAT
@@ -108,5 +193,9 @@ function officialValorantFormatForSlug(slug) {
 module.exports = {
   OFFICIAL_VALORANT_SLUG,
   OFFICIAL_VALORANT_FORMAT,
+  OFFICIAL_SIZES,
+  officialSizeForPlayers,
+  officialSizeForTeams,
+  officialRosterState,
   officialValorantFormatForSlug
 };

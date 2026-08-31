@@ -122,6 +122,7 @@ async function loadSchedule(event) {
 const VALORANT_TEXTOS = Object.freeze({
   headline: '#valorant-info-headline',
   summary: '#valorant-info-summary',
+  size: '#valorant-info-size',
   registration: '#valorant-info-registration',
   captains: '#valorant-info-captains',
   draft: '#valorant-info-draft',

@@ -149,16 +149,57 @@ describe('formato oficial del torneo de Valorant', () => {
     assert.match(information.body.event.officialFormat.public.draft, /draft/i);
   });
 
-  it('impide convertir el evento real en una demo de cinco o seis equipos', () => {
+  it('el evento real admite 4, 6 u 8 equipos y rechaza los impares', () => {
     const dbPath = databasePath();
     const database = openDatabase(dbPath);
     databases.push(database);
     const event = createOfficialEvent(database);
-    for (const teamCount of [5, 6]) {
+
+    // Los impares dejan a alguien descansando cada jornada: por eso las plazas
+    // van de diez en diez y no de cinco en cinco.
+    for (const teamCount of [3, 5, 7, 9]) {
       assert.throws(() => database.valorant.configureDraft(event.id, {
         captains: [], teamCount, teamSize: 5
-      }), (error) => error.code === 'OFFICIAL_EVENT_FORMAT_MISMATCH');
+      }), (error) => error.code === 'OFFICIAL_EVENT_FORMAT_MISMATCH',
+      `debería rechazar ${teamCount} equipos`);
     }
+
+    // Los pares admitidos pasan esta comprobación y fallan más adelante por
+    // los capitanes, que es otra cosa.
+    for (const teamCount of [4, 6, 8]) {
+      assert.throws(() => database.valorant.configureDraft(event.id, {
+        captains: [], teamCount, teamSize: 5
+      }), (error) => error.code === 'CAPTAIN_COUNT_MISMATCH',
+      `${teamCount} equipos debería llegar más lejos`);
+    }
+  });
+
+  it('las plantillas oficiales van de diez en diez, de 20 a 40', () => {
+    const { OFFICIAL_VALORANT_FORMAT: F, officialRosterState } = require('../src/valorant-event-format');
+
+    assert.deepEqual(F.sizes.map((s) => s.players), [20, 30, 40]);
+    assert.deepEqual(F.allowedTeamCounts, [4, 6, 8]);
+    assert.equal(F.minPlayers, 20);
+    assert.equal(F.maxPlayers, 40);
+    // Siempre par: nadie descansa.
+    assert.ok(F.allowedTeamCounts.every((n) => n % 2 === 0));
+
+    // Los números de cada plantilla se derivan, no se escriben a mano.
+    const treinta = F.sizes.find((s) => s.players === 30);
+    assert.equal(treinta.teams, 6);
+    assert.equal(treinta.draftPicks, 24);
+    assert.equal(treinta.regularSeason.series, 15);
+    assert.equal(treinta.regularSeason.matchdays, 5);
+
+    // Una decena a medias no es una plantilla.
+    const veinticinco = officialRosterState(25);
+    assert.equal(veinticinco.exact, null);
+    assert.equal(veinticinco.playable.players, 20);
+    assert.equal(veinticinco.missingForNext, 5);
+    assert.equal(veinticinco.leftOut, 5);
+
+    assert.equal(officialRosterState(30).exact.teams, 6);
+    assert.equal(officialRosterState(40).full, true);
   });
 
   it('fija la liga real a cuatro equipos, BO1 y sólo los desempates ya decididos', () => {

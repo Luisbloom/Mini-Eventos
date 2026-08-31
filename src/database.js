@@ -513,8 +513,8 @@ function openDatabase(dbPath) {
     const official = officialValorantFormatForSlug(input?.slug);
     const event = normalizeEvent(official ? {
       ...input,
-      minParticipants: official.players,
-      maxParticipants: official.players
+      minParticipants: official.minPlayers,
+      maxParticipants: official.maxPlayers
     } : input);
     let result;
     try {

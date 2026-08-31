@@ -192,7 +192,7 @@ describe('eliminatorias de Valorant', () => {
     });
 
     it('no si hay un empate sin resolver que afecte a los clasificados', async () => {
-      const contexto = ligaMontada(5);
+      const contexto = ligaMontada(6);
       const { database, app, event, equipos } = contexto;
 
       // Se deja un solo criterio, y se monta un ciclo donde varios empatan.
@@ -502,7 +502,7 @@ describe('eliminatorias de Valorant', () => {
   // ================================================ CLASIFICADOS 4/5/6
 
   describe('siempre clasifican cuatro', () => {
-    for (const teamCount of [4, 5, 6]) {
+    for (const teamCount of [4, 6, 8]) {
       it(`con ${teamCount} equipos entran los cuatro primeros`, async () => {
         const contexto = ligaMontada(teamCount);
         const tabla = jugarLiga(contexto);

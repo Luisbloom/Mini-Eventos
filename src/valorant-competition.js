@@ -2,7 +2,7 @@
 
 const { roundRobinSchedule, scheduleSummary } = require('./services/round-robin');
 const { validateValorantScore, DEFAULT_SCORE_POLICY } = require('./services/valorant-score');
-const { officialValorantFormatForSlug } = require('./valorant-event-format');
+const { officialValorantFormatForSlug, officialSizeForTeams } = require('./valorant-event-format');
 
 /**
  * Fase regular de un torneo por equipos: calendario, mapas, resultados y
@@ -737,9 +737,9 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       }
       const event = connection.prepare('SELECT slug FROM events WHERE id=?').get(eventId);
       const official = officialValorantFormatForSlug(event?.slug);
-      if (official && (teamIds.length !== official.teams || Number(bestOf) !== official.regularSeason.bestOf)) {
+      if (official && (!officialSizeForTeams(teamIds.length) || Number(bestOf) !== official.regularSeason.bestOf)) {
         throw new CompetitionError(
-          `El torneo oficial requiere ${official.teams} equipos y fase regular BO${official.regularSeason.bestOf}.`,
+          `El torneo oficial se juega con ${official.allowedTeamCounts.join(', ')} equipos y fase regular BO${official.regularSeason.bestOf}.`,
           'OFFICIAL_REGULAR_FORMAT_MISMATCH');
       }
 

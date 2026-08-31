@@ -184,7 +184,7 @@ describe('fase regular de Valorant', () => {
   // ===================== DRAFT 4 / 5 / 6 =====================
 
   describe('el draft se adapta al número de equipos', () => {
-    for (const teamCount of [4, 5, 6]) {
+    for (const teamCount of [4, 6, 8]) {
       it(`${teamCount} equipos: ${teamCount * 5} jugadores, ${teamCount * 4} elecciones`, () => {
         const { database, event, orden } = draftTerminado(teamCount);
         const draft = database.valorant.getDraft(event.id);
@@ -208,7 +208,7 @@ describe('fase regular de Valorant', () => {
       });
     }
 
-    it('sólo admite cuatro, cinco o seis equipos de cinco', () => {
+    it('sólo admite un número PAR de equipos: cuatro, seis u ocho', () => {
       const { database, event } = montar({ slug: 'valorant-generico-limites' });
       const gente = [];
       for (let i = 1; i <= 20; i++) {
@@ -219,7 +219,9 @@ describe('fase regular de Valorant', () => {
       }
       const ids = gente.map((p) => p.id);
 
-      for (const malo of [2, 3, 7, 8]) {
+      // Los impares quedan fuera a propósito: con ellos alguien descansa cada
+      // jornada. 10 equipos serían 50 personas, más de lo que cabe en una tarde.
+      for (const malo of [2, 3, 5, 7, 9, 10]) {
         assert.throws(() => database.valorant.configureDraft(event.id, {
           captains: ids.slice(0, malo), teamCount: malo, teamSize: 5
         }), (e) => e.code === 'INVALID_TEAM_COUNT', `debería rechazar ${malo} equipos`);
@@ -230,7 +232,7 @@ describe('fase regular de Valorant', () => {
     });
 
     it('la plantilla tiene que ser exacta para cada tamaño', () => {
-      for (const [teamCount, sobrantes] of [[4, 1], [5, 2], [6, 1]]) {
+      for (const [teamCount, sobrantes] of [[4, 1], [6, 2], [8, 1]]) {
         const { database, event } = montar({ slug: `valorant-generico-plantilla-${teamCount}` });
         const total = teamCount * 5 + sobrantes;
         const gente = [];
@@ -473,21 +475,21 @@ describe('fase regular de Valorant', () => {
     });
   });
 
-  describe('liga de cinco equipos', () => {
-    it('cada jornada tiene un equipo descansando', async () => {
-      const { database, app, event } = draftTerminado(5);
+  describe('liga de ocho equipos', () => {
+    it('siete jornadas de cuatro partidos y nadie descansa', async () => {
+      const { database, app, event } = draftTerminado(8);
       await admin(app, 'post', `/api/admin/events/${event.id}/competition/generate`, {}).expect(201);
 
       const jornadas = database.valorantCompetition.matchdays(event.id);
-      assert.equal(jornadas.length, 5);
-      assert.equal(jornadas.every((j) => j.series.length === 2), true);
+      assert.equal(jornadas.length, 7);
+      assert.equal(jornadas.every((j) => j.series.length === 4), true);
 
-      const descansos = jornadas.map((j) => j.bye);
-      assert.equal(descansos.filter(Boolean).length, 5);
-      assert.equal(new Set(descansos).size, 5, 'cada equipo descansa una vez');
+      // Con un número par de equipos nadie se queda mirando: eso es justo por
+      // lo que las plazas van de diez en diez.
+      assert.equal(jornadas.every((j) => j.bye === null), true);
 
       const series = database.valorantCompetition.listSeries(event.id);
-      assert.equal(series.length, 10);
+      assert.equal(series.length, 28);
     });
   });
 
@@ -1076,8 +1078,8 @@ describe('fase regular de Valorant', () => {
       assert.equal(bien.body.settings.qualifiers, 4);
     });
 
-    it('clasifican cuatro con cuatro, cinco o seis equipos', async () => {
-      for (const teamCount of [4, 5, 6]) {
+    it('clasifican cuatro con cuatro, seis u ocho equipos', async () => {
+      for (const teamCount of [4, 6, 8]) {
         const { app, database, event } = draftTerminado(teamCount);
         await admin(app, 'post', `/api/admin/events/${event.id}/competition/generate`, {}).expect(201);
         await ponerMapas(app, database, event);

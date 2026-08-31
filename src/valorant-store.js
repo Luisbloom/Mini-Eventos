@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { parseRiotId, riotIdError } = require('./services/riot-id');
 const { VALORANT_PEAK_RANKS } = require('./events');
-const { officialValorantFormatForSlug } = require('./valorant-event-format');
+const { officialValorantFormatForSlug, officialSizeForTeams } = require('./valorant-event-format');
 
 /**
  * Equipos, draft e identidad de Discord. Convive con la competición individual
@@ -19,7 +19,11 @@ const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 const DRAFT_STATUSES = Object.freeze(['PENDING', 'ACTIVE', 'PAUSED', 'COMPLETED']);
 
 /** Tamaños admitidos del torneo: cuatro, cinco o seis equipos de cinco. */
-const TEAM_COUNTS = Object.freeze([4, 5, 6]);
+/*
+  Siempre par: con un número impar de equipos alguien descansa cada jornada.
+  Son 20, 30 o 40 jugadores de cinco en cinco.
+*/
+const TEAM_COUNTS = Object.freeze([4, 6, 8]);
 const TEAM_SIZE = 5;
 
 const hash = (value) => crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
@@ -709,13 +713,15 @@ function createValorantStore(connection) {
       const size = Number(teamSize);
       const event = connection.prepare('SELECT slug FROM events WHERE id=?').get(eventId);
       const official = officialValorantFormatForSlug(event?.slug);
-      if (official && (total !== official.teams || size !== official.teamSize)) {
+      // El evento oficial admite cualquiera de sus plantillas: 4, 6 u 8 equipos
+      // según cuánta gente se haya inscrito, siempre de cinco.
+      if (official && (!officialSizeForTeams(total) || size !== official.teamSize)) {
         throw new ValorantError(
-          `El evento oficial requiere exactamente ${official.teams} equipos de ${official.teamSize}.`,
+          `El evento oficial se juega con ${official.allowedTeamCounts.join(', ')} equipos de ${official.teamSize}.`,
           'OFFICIAL_EVENT_FORMAT_MISMATCH');
       }
-      // Cuatro, cinco o seis equipos de cinco. Con menos no hay liga y con más
-      // no da tiempo en una tarde; el límite es deportivo, no técnico.
+      // Con menos no hay liga y con más no da tiempo en una tarde; el límite es
+      // deportivo, no técnico.
       if (!TEAM_COUNTS.includes(total)) {
         throw new ValorantError(
           `El torneo se juega con ${TEAM_COUNTS.join(', ')} equipos.`, 'INVALID_TEAM_COUNT');
