@@ -24,6 +24,7 @@ const { CompetitionError: ValorantCompetitionError } = require('./valorant-compe
 const { CaptureError } = require('./valorant-captures');
 const { PlayoffError } = require('./valorant-playoffs');
 const { officialValorantFormatForSlug } = require('./valorant-event-format');
+const { gameProfile, isAmongUs, isValorant } = require('./games');
 const { buildMetadata, injectMetadata } = require('./services/social-metadata');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
@@ -123,7 +124,7 @@ function publicMatch(match) {
 }
 
 function eventScoring(event) {
-  return event.game.toLocaleLowerCase('es') === 'among us' ? scoringPayload() : null;
+  return isAmongUs(event.game) ? scoringPayload() : null;
 }
 
 function createApp({
@@ -261,9 +262,7 @@ function createApp({
         event: {
           ...event,
           officialFormat: officialValorantFormatForSlug(event.slug),
-          valorantPeakRanks: String(event.game).trim().toLocaleLowerCase('es') === 'valorant'
-            ? VALORANT_PEAK_RANKS
-            : []
+          valorantPeakRanks: isValorant(event.game) ? VALORANT_PEAK_RANKS : []
         },
         registrationFields
       });
@@ -683,7 +682,7 @@ function createApp({
   function valorantEventFromSlug(request, response) {
     const event = draftEventFromSlug(request, response);
     if (!event) return null;
-    if (String(event.game).trim().toLowerCase() !== 'valorant') {
+    if (!isValorant(event.game)) {
       sendError(response, 404, 'MODULE_DISABLED', 'Este evento no usa inscripción de Valorant.');
       return null;
     }
@@ -1769,10 +1768,9 @@ function createApp({
   */
   const sendCompetitionHome = (request, response) => {
     const event = database.getEventBySlug(request.params.slug);
-    const page = String(event?.game || '').trim().toLowerCase() === 'among us'
-      ? 'amongus-competition.html'
-      : 'competition-page.html';
-    return enviarPagina(page, 'competicion')(request, response);
+    // Cada juego declara su portada de competición; el que no declare
+    // ninguna usa la genérica.
+    return enviarPagina(gameProfile(event?.game).competitionPage, 'competicion')(request, response);
   };
   app.get('/eventos/:slug/draft', sendDraftPage);
   app.get('/eventos/:slug/competicion/draft', sendDraftPage);

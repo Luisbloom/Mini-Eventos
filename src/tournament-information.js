@@ -1,5 +1,7 @@
 'use strict';
 
+const { isAmongUs } = require('./games');
+
 class InformationValidationError extends Error {
   constructor(message) {
     super(message);
@@ -70,7 +72,7 @@ const DEFAULT_TOURNAMENT_INFORMATION = Object.freeze({
 
 function createDefaultEventInformation(game) {
   const gameName = String(game || 'este juego').trim();
-  if (gameName.toLocaleLowerCase('es') === 'among us') {
+  if (isAmongUs(gameName)) {
     return DEFAULT_TOURNAMENT_INFORMATION;
   }
   return {
