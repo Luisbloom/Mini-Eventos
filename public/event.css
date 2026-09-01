@@ -359,3 +359,6 @@ button.availability-day:hover, button.availability-day:focus-visible {
   background: color-mix(in srgb, var(--event-accent, var(--lime)) 16%, transparent);
   color: var(--event-accent, var(--lime));
 }
+
+/* Con avatar, el cuadro de color sobra: la imagen lo ocupa entero. */
+.discord-initials.has-avatar { background: none; overflow: hidden; }

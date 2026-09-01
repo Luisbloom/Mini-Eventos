@@ -1010,9 +1010,15 @@ describe('draft de Valorant', () => {
       assert.equal(despues.body.event.peakRank, 'Diamante 1');
       assert.equal(despues.body.event.playerBio, 'Main centinela.');
       assert.equal(despues.body.event.draftRole, 'participant');
-      // No hay avatar: su URL lleva el id de Discord dentro, así que publicarla
-      // sería publicar el id. La interfaz usa las iniciales del nombre.
-      assert.equal(despues.body.avatar, null);
+      /*
+        El avatar sale por la ruta propia, nunca por la de Discord: la URL del
+        CDN lleva el id de la cuenta dentro, así que publicarla sería publicar el
+        id. Lo que no puede aparecer aquí es ni el id ni el CDN.
+      */
+      assert.equal(despues.body.avatar, '/api/me/avatar');
+      const cuerpo = JSON.stringify(despues.body);
+      assert.ok(!cuerpo.includes('9001'), 'el id de Discord no puede salir');
+      assert.ok(!cuerpo.includes('cdn.discordapp.com'));
 
       const texto = JSON.stringify(despues.body);
       for (const prohibido of ['discordUserId', 'discordAccountId', 'sessionId', 'riot_puuid', 'binding']) {

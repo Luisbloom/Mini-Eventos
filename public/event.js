@@ -263,7 +263,7 @@ function pintarIdentidad(yo) {
   const caja = byId('discord-identity');
   if (!yo.authenticated) { caja.hidden = true; return; }
   caja.hidden = false;
-  byId('discord-initials').textContent = iniciales(yo.displayName);
+  window.Avatar?.pintar(byId('discord-initials'), yo);
   byId('discord-name').textContent = yo.displayName;
 }
 

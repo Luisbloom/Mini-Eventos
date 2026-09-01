@@ -892,11 +892,15 @@ function createApp({
       const payload = {
         authenticated: true,
         displayName: session.account.displayName || session.account.username,
-        // Sin avatar: la URL del CDN de Discord lleva el id dentro, así que
-        // publicarla es publicar el id por mucho que no exista el campo. Servirlo
-        // sin filtrarlo exigiría copiar la imagen a nuestro lado, y eso no toca
-        // en este bloque. La interfaz usa las iniciales del nombre.
-        avatar: null
+        /*
+          La ruta propia, nunca la del CDN de Discord: esa lleva el id de la
+          cuenta dentro de la URL, así que publicarla es publicar el id por mucho
+          que el campo no se llame así. `/api/me/avatar` trae los píxeles con la
+          sesión y no revela nada.
+
+          Estuvo en null mientras esa ruta no existía. Ya existe.
+        */
+        avatar: session.account.avatar ? '/api/me/avatar' : null
       };
 
       const slug = typeof request.query.event === 'string' ? request.query.event : null;

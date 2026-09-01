@@ -337,3 +337,8 @@ h2 { font: clamp(2.8rem, 6vw, 5.8rem)/.9 var(--display); letter-spacing: -.025em
 }
 .legal-strip a { color: var(--muted); text-decoration: none; border-bottom: 1px solid transparent; }
 .legal-strip a:hover, .legal-strip a:focus-visible { color: var(--paper); border-bottom-color: currentColor; }
+
+/* El avatar propio, dentro del hueco que ocupaban las iniciales. Se sirve desde
+   /api/me/avatar: la URL del CDN de Discord lleva el id de la cuenta dentro. */
+.account-avatar { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.profile-entry > span.has-avatar { background: none; padding: 0; overflow: hidden; }
