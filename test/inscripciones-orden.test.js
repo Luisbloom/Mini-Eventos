@@ -31,6 +31,14 @@ describe('inscripciones', () => {
     directorios.splice(0).forEach((carpeta) => fs.rmSync(carpeta, { recursive: true, force: true }));
   });
 
+  /** Una cuenta de Discord con sesión: sin ella no se puede inscribir nadie. */
+  function sesionDe(database, sufijo, nombre) {
+    const cuenta = database.valorant.upsertDiscordAccount({
+      discordUserId: `u-${sufijo}`, username: nombre.toLowerCase(), displayName: nombre
+    });
+    return { cuenta, cookie: `jarti_session=${database.valorant.createSession(cuenta.id)}` };
+  }
+
   function montar(game = 'Fall Guys') {
     const database = openDatabase(rutaTemporal());
     bases.push(database);
@@ -43,9 +51,10 @@ describe('inscripciones', () => {
     return { database, app, evento };
   }
 
-  const inscribir = (app, slug, nombre) => request(app)
+  const inscribir = (app, database, slug, nombre) => request(app)
     .post(`/api/events/${slug}/registrations`)
-    .send({ values: { discord_username: nombre, game_name: nombre }, acceptedTerms: true });
+    .set('Cookie', sesionDe(database, nombre, nombre).cookie)
+    .send({ values: { game_name: nombre }, acceptedTerms: true });
 
   describe('orden de llegada', () => {
     it('los inscritos salen por orden de inscripción, no alfabético', async () => {
@@ -53,7 +62,7 @@ describe('inscripciones', () => {
       // A propósito al revés del alfabeto: si se ordenara por nombre saldría
       // Ana la primera, y la primera fue Zoe.
       for (const nombre of ['Zoe', 'Marco', 'Ana']) {
-        await inscribir(app, evento.slug, nombre).expect(201);
+        await inscribir(app, database, evento.slug, nombre).expect(201);
       }
       database.listParticipants(evento.id)
         .forEach((p) => database.updateParticipant(p.id, { status: 'confirmed' }));
@@ -65,7 +74,7 @@ describe('inscripciones', () => {
     it('cada inscripción dice qué número de la cola es', async () => {
       const { app, database, evento } = montar();
       for (const nombre of ['Zoe', 'Marco', 'Ana']) {
-        await inscribir(app, evento.slug, nombre).expect(201);
+        await inscribir(app, database, evento.slug, nombre).expect(201);
       }
       const inscritos = database.listParticipants(evento.id);
       assert.deepEqual(inscritos.map((p) => p.registrationOrder), [1, 2, 3]);
@@ -75,7 +84,7 @@ describe('inscripciones', () => {
 
     it('la fecha exacta de inscripción es pública', async () => {
       const { app, database, evento } = montar();
-      await inscribir(app, evento.slug, 'Zoe').expect(201);
+      await inscribir(app, database, evento.slug, 'Zoe').expect(201);
       database.listParticipants(evento.id)
         .forEach((p) => database.updateParticipant(p.id, { status: 'confirmed' }));
 
@@ -107,28 +116,53 @@ describe('inscripciones', () => {
       assert.equal(perfil.body.registrations[0].slug, evento.slug);
     });
 
-    it('sin sesión la inscripción vale igual, sólo que no tiene perfil al que ir', async () => {
-      const { app, database, evento } = montar();
-      await inscribir(app, evento.slug, 'Anónima').expect(201);
-      assert.equal(database.listParticipants(evento.id).length, 1);
+    it('sin sesión no se puede uno inscribir', async () => {
+      const { app, evento } = montar();
+      // La identidad no se teclea: para apuntarse hace falta Discord.
+      const respuesta = await request(app).post(`/api/events/${evento.slug}/registrations`)
+        .send({ values: { game_name: 'Anónima' }, acceptedTerms: true });
+      assert.equal(respuesta.status, 401);
+      assert.equal(respuesta.body.error.code, 'AUTH_REQUIRED');
     });
 
-    it('se ata a la sesión, no al nombre de Discord que escriba', async () => {
+    it('el usuario de Discord lo pone la sesión, no el formulario', async () => {
       const { app, database, evento } = montar();
       const { cookie } = conSesion(database, app);
 
-      // Escribe el usuario de otra persona: eso es texto libre y no puede
-      // decidir de quién es la inscripción.
+      // Manda el usuario de otra persona: es texto libre y se ignora.
       await request(app).post(`/api/events/${evento.slug}/registrations`)
         .set('Cookie', cookie)
         .send({ values: { discord_username: 'otrapersona', game_name: 'Otra' }, acceptedTerms: true })
         .expect(201);
 
+      const inscrito = database.listParticipants(evento.id)[0];
+      assert.equal(inscrito.discordUsername, 'zoe', 'se guarda quien de verdad tiene la sesión');
+
       const otra = database.valorant.upsertDiscordAccount({
         discordUserId: '99999', username: 'otrapersona', displayName: 'Otra'
       });
-      const suPerfil = database.valorant.profileRegistrations(otra.id);
-      assert.equal(suPerfil.length, 0, 'no puede aparecer en el perfil de otra cuenta');
+      assert.equal(database.valorant.profileRegistrations(otra.id).length, 0,
+        'no puede aparecer en el perfil de otra cuenta');
+    });
+  });
+
+  describe('la puerta de Discord también está en la página', () => {
+    it('sin sesión se ofrece entrar, no un formulario que va a fallar', () => {
+      const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.html'), 'utf8');
+      const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.js'), 'utf8');
+
+      assert.ok(html.includes('id="registration-login"'), 'hay puerta');
+      assert.ok(html.includes('id="registration-login-link"'), 'con su enlace');
+      // El formulario sólo aparece con sesión, y se dice con qué cuenta.
+      assert.ok(js.includes('yo.authenticated'));
+      assert.ok(html.includes('id="registration-as"'));
+    });
+
+    it('el usuario de Discord ya no se teclea', () => {
+      const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.js'), 'utf8');
+      // Se filtra del formulario: lo pone el servidor con la sesión.
+      assert.ok(js.includes("campo.key !== 'discord_username'"),
+        'el campo no puede seguir pidiéndose');
     });
   });
 

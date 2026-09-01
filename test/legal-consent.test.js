@@ -71,43 +71,48 @@ describe('consentimiento legal', () => {
         modules: { registration: true, participants: true }
       });
       const app = createApp({ database, logger: { info() {}, error() {} }, adminToken: 'admin-test' });
-      return { database, app, evento };
+      // Para inscribirse hace falta Discord, así que toda prueba lleva sesión.
+      const cuenta = database.valorant.upsertDiscordAccount({
+        discordUserId: '4242', username: 'luis', displayName: 'Luis'
+      });
+      const cookie = `jarti_session=${database.valorant.createSession(cuenta.id)}`;
+      return { database, app, evento, cookie };
     }
 
-    const inscribir = (app, slug, cuerpo) => request(app)
-      .post(`/api/events/${slug}/registrations`).send(cuerpo);
+    const inscribir = (app, slug, cuerpo, cookie) => request(app)
+      .post(`/api/events/${slug}/registrations`).set('Cookie', cookie).send(cuerpo);
 
     it('no deja inscribirse sin aceptar', async () => {
-      const { app, evento } = montar();
+      const { app, evento, cookie } = montar();
       const respuesta = await inscribir(app, evento.slug, {
-        values: { discord_username: 'nadie', game_name: 'Nadie' }
-      });
+        values: { game_name: 'Nadie' }
+      }, cookie);
       assert.equal(respuesta.status, 400);
       assert.equal(respuesta.body.error.code, 'CONSENT_REQUIRED');
     });
 
     it('tampoco aceptando a medias desde fuera del navegador', async () => {
-      const { app, evento } = montar();
+      const { app, evento, cookie } = montar();
       // La casilla vive en la página, pero quien manda la petición a mano se la
       // salta: por eso se comprueba aquí y no sólo allí.
       for (const trampa of [false, 'false', 0, null, 'quizá']) {
         const respuesta = await inscribir(app, evento.slug, {
-          values: { discord_username: `u${String(trampa)}`, game_name: 'X' },
+          values: { game_name: 'X' },
           acceptedTerms: trampa
-        });
+        }, cookie);
         assert.equal(respuesta.status, 400, `${JSON.stringify(trampa)} no puede colar`);
         assert.equal(respuesta.body.error.code, 'CONSENT_REQUIRED');
       }
     });
 
     it('aceptando, se inscribe y queda registrado con fecha y versión', async () => {
-      const { app, database, evento } = montar();
+      const { app, database, evento, cookie } = montar();
       const antes = new Date().toISOString();
 
       const respuesta = await inscribir(app, evento.slug, {
-        values: { discord_username: 'luis', game_name: 'Luis' },
+        values: { game_name: 'Luis' },
         acceptedTerms: true
-      });
+      }, cookie);
       assert.equal(respuesta.status, 201);
 
       const inscrito = database.listParticipants(evento.id)[0];
@@ -116,10 +121,10 @@ describe('consentimiento legal', () => {
     });
 
     it('el consentimiento no se publica con los participantes', async () => {
-      const { app, database, evento } = montar();
+      const { app, database, evento, cookie } = montar();
       await inscribir(app, evento.slug, {
-        values: { discord_username: 'luis', game_name: 'Luis' }, acceptedTerms: true
-      }).expect(201);
+        values: { game_name: 'Luis' }, acceptedTerms: true
+      }, cookie).expect(201);
       database.listParticipants(evento.id)
         .forEach((p) => database.updateParticipant(p.id, { status: 'confirmed' }));
 

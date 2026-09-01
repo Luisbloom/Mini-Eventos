@@ -84,17 +84,29 @@ describe('Mini Eventos API', () => {
     assert.equal(adminList.body.events.some((event) => event.slug === 'minecraft-noche-2026'), true);
   });
 
+  /** Inscribirse exige Discord: cada quien va con su sesión. */
+  const sesion = (nombre) => {
+    const cuenta = database.valorant.upsertDiscordAccount({
+      discordUserId: `api-${nombre}`, username: nombre, displayName: nombre
+    });
+    return `jarti_session=${database.valorant.createSession(cuenta.id)}`;
+  };
+
   it('validates a fast registration and never exposes Discord or Friend Code publicly', async () => {
     const created = await request(app)
       .post('/api/events/among-us-agosto-2026/registrations')
-      .send({ values: { discord_username: 'Luis', game_name: '', friend_code: 'luis#1001', same_as_discord: true }, acceptedTerms: true });
+      .set('Cookie', sesion('Luis'))
+      .send({ values: { game_name: '', friend_code: 'luis#1001', same_as_discord: true }, acceptedTerms: true });
     assert.equal(created.status, 201);
     assert.equal(created.body.participant.displayName, 'Luis');
     assert.equal(created.body.participant.discordUsername, undefined);
 
+    // La misma cuenta otra vez: el duplicado lo detecta la identidad, no el
+    // texto que se escriba.
     const duplicate = await request(app)
       .post('/api/events/among-us-agosto-2026/registrations')
-      .send({ values: { discord_username: 'luis', game_name: 'Pelusero', friend_code: 'luis#1001' }, acceptedTerms: true });
+      .set('Cookie', sesion('Luis'))
+      .send({ values: { game_name: 'Pelusero', friend_code: 'luis#1002' }, acceptedTerms: true });
     assert.equal(duplicate.status, 409);
     assert.equal(duplicate.body.error.code, 'ALREADY_REGISTERED');
 
@@ -133,15 +145,18 @@ describe('Mini Eventos API', () => {
     const among = database.getDefaultEvent();
     database.updateEvent(among.id, { minParticipants: 1, maxParticipants: 1 });
     await request(app).post(`/api/events/${among.slug}/registrations`)
-      .send({ values: { discord_username: 'uno', game_name: 'Uno', friend_code: 'uno#1001' }, acceptedTerms: true }).expect(201);
+      .set('Cookie', sesion('uno'))
+      .send({ values: { game_name: 'Uno', friend_code: 'uno#1001' }, acceptedTerms: true }).expect(201);
     const full = await request(app).post(`/api/events/${among.slug}/registrations`)
-      .send({ values: { discord_username: 'dos', game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true });
+      .set('Cookie', sesion('dos'))
+      .send({ values: { game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true });
     assert.equal(full.status, 409);
     assert.equal(full.body.error.code, 'REGISTRATION_FULL');
 
     database.updateEvent(among.id, { maxParticipants: 2, registrationsOpen: false });
     const closed = await request(app).post(`/api/events/${among.slug}/registrations`)
-      .send({ values: { discord_username: 'dos', game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true });
+      .set('Cookie', sesion('tres'))
+      .send({ values: { game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true });
     assert.equal(closed.status, 403);
     assert.equal(closed.body.error.code, 'REGISTRATION_CLOSED');
   });

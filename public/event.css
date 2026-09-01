@@ -217,3 +217,27 @@
   letter-spacing: .06em;
 }
 .roster-note.is-ready { color: var(--event-accent, var(--lime)); }
+
+/* Puerta de Discord: sin sesión no hay formulario, porque la identidad no se
+   teclea. Se explica por qué en vez de dejar un botón suelto. */
+.registration-login {
+  padding: 1.4rem 1.5rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .02);
+}
+.registration-login p { margin: 0 0 1.1rem; max-width: 46ch; line-height: 1.6; color: var(--muted); }
+.registration-login-button {
+  display: inline-flex; align-items: center; gap: .6rem;
+  padding: .9rem 1.4rem;
+  border: 1px solid var(--event-accent, var(--lime));
+  color: var(--event-accent, var(--lime));
+  font: .58rem/1 var(--mono); letter-spacing: .12em; text-decoration: none;
+}
+.registration-login-button:hover, .registration-login-button:focus-visible {
+  background: var(--event-accent, var(--lime)); color: var(--void);
+}
+.registration-as {
+  margin: 0 0 1rem;
+  color: var(--event-accent, var(--lime));
+  font: .58rem/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+}

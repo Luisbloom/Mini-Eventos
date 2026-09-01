@@ -107,7 +107,14 @@ function fieldControl(field) {
   return label;
 }
 
-function renderRegistration(event, fields) {
+/**
+ * El formulario, sabiendo ya quién eres.
+ *
+ * Para inscribirse hace falta Discord, así que el usuario no se teclea: lo
+ * pone el servidor con la identidad de la sesión. Se enseña, para que se vea
+ * con qué cuenta te estás apuntando, pero no se puede escribir.
+ */
+function renderRegistration(event, fields, yo = { authenticated: false }) {
   // Los torneos por equipos usan otro camino: la identidad la pone Discord.
   if (event.modules?.draft) { renderDiscordRegistration(event); return; }
 
@@ -120,13 +127,34 @@ function renderRegistration(event, fields) {
     byId('registration-closed-copy').textContent = event.registration.code === 'FULL' ? 'Se ha alcanzado el máximo de participantes.' : 'Ahora mismo no se admiten nuevas inscripciones.';
     return;
   }
-  byId('registration-fields').replaceChildren(...fields.map(fieldControl));
+  // Sin sesión no hay formulario que enseñar: primero se entra con Discord.
+  const puerta = byId('registration-login');
+  if (puerta) {
+    puerta.hidden = Boolean(yo.authenticated);
+    byId('registration-login-link').href =
+      `/auth/discord?redirect=${encodeURIComponent(`/eventos/${event.slug}`)}`;
+  }
+  form.hidden = !yo.authenticated;
+  if (!yo.authenticated) return;
+
+  // El usuario de Discord ya lo sabe el servidor: se enseña, no se pide.
+  const visibles = fields.filter((campo) => campo.key !== 'discord_username');
+  byId('registration-fields').replaceChildren(...visibles.map(fieldControl));
+
+  const quien = byId('registration-as');
+  if (quien) {
+    quien.hidden = false;
+    quien.textContent = `Te inscribes como ${yo.displayName}`;
+  }
+
   const same = form.elements.same_as_discord;
-  const discord = form.elements.discord_username;
   const gameName = form.elements.game_name;
-  if (same && discord && gameName) {
-    const sync = () => { if (same.checked) { gameName.value = discord.value; gameName.disabled = true; } else gameName.disabled = false; };
-    same.addEventListener('change', sync); discord.addEventListener('input', sync);
+  if (same && gameName) {
+    const sync = () => {
+      if (same.checked) { gameName.value = yo.displayName; gameName.disabled = true; }
+      else gameName.disabled = false;
+    };
+    same.addEventListener('change', sync);
   }
 }
 
@@ -170,7 +198,12 @@ async function loadEvent() {
   try {
     const response = await fetch(`/api/events/${encodeURIComponent(slug)}`, { cache: 'no-store' }); if (!response.ok) throw new Error();
     const data = await response.json();
-    currentEvent = data.event; renderEvent(data.event); renderRegistration(data.event, data.registrationFields); setConnection(true, 'EVENTO ONLINE');
+    currentEvent = data.event; renderEvent(data.event);
+    // Quién eres decide qué formulario se enseña, así que se pregunta antes.
+    const yo = await fetch(`/api/me?event=${encodeURIComponent(slug)}`, { cache: 'no-store' })
+      .then((r) => r.json()).catch(() => ({ authenticated: false }));
+    renderRegistration(data.event, data.registrationFields, yo);
+    setConnection(true, 'EVENTO ONLINE');
     const mode = window.DraftView.publicEventMode(data.event);
     if (mode.upcoming) setConnection(false, 'PRÓXIMAMENTE');
     await loadPrizes(data.event);

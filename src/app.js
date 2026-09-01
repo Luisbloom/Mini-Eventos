@@ -288,7 +288,23 @@ function createApp({
       // Se comprueba aquí, no sólo en el navegador: lo que enseña la página
       // es cortesía, lo que vale es lo que llega.
       const consent = requireConsent(request.body?.acceptedTerms);
-      const participant = database.createParticipant(event.id, request.body?.values, consent);
+
+      /*
+        Para inscribirse hace falta Discord, sin excepciones.
+
+        Antes el usuario de Discord se escribía a mano y era texto libre:
+        cualquiera podía apuntarse con el nombre de otro, y la inscripción
+        quedaba con un nombre que no correspondía a ninguna cuenta. Con la
+        sesión, la identidad la pone el servidor y no se puede falsear.
+      */
+      const session = currentSession(request);
+      if (!session) {
+        return sendError(response, 401, 'AUTH_REQUIRED',
+          'Entra con Discord para inscribirte.');
+      }
+      const values = { ...request.body?.values, discord_username: session.account.username };
+
+      const participant = database.createParticipant(event.id, values, consent);
 
       /*
         Si quien se inscribe tiene la sesión de Discord abierta, la inscripción
@@ -300,7 +316,6 @@ function createApp({
         poner el de otro. Y si algo falla al atarla, la inscripción sigue
         siendo válida; lo único que se pierde es que salga en su perfil.
       */
-      const session = currentSession(request);
       if (session) {
         try { database.valorant.linkParticipantToDiscord(participant.id, session.account.id); }
         catch (error) { logger.info?.({ event: 'profile_link_skipped', code: error.code }); }
