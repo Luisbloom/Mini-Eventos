@@ -315,9 +315,22 @@ function normalizeRegistrationFields(fields) {
 function registrationFieldsForGame(game) {
   const normalizedGame = String(game ?? '').trim().toLocaleLowerCase('es');
   const isAmongUs = normalizedGame === 'among us';
+  const nombreDelJuego = String(game ?? '').trim() || 'el juego';
+
+  /*
+    Las etiquetas llevaban «Among Us» escrito dentro, así que en un torneo de
+    Fall Guys se leía «Mi nombre de Among Us es el mismo que mi usuario de
+    Discord». La plataforma aloja torneos de varios juegos: la etiqueta tiene
+    que decir el que toca.
+  */
   const base = DEFAULT_REGISTRATION_FIELDS
     .filter((field) => field.key !== 'friend_code' || isAmongUs)
-    .map((field) => ({ ...field }));
+    .map((field) => ({
+      ...field,
+      label: field.label.replace('Among Us', nombreDelJuego),
+      placeholder: String(field.placeholder ?? '').replace('Among Us', nombreDelJuego)
+    }));
+
   return normalizedGame === 'valorant'
     ? [...base, ...VALORANT_PROFILE_FIELDS.map((field) => ({ ...field, options: [...field.options] }))]
     : base;

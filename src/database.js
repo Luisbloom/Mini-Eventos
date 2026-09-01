@@ -490,7 +490,12 @@ function openDatabase(dbPath) {
   const insertParticipantStatement = connection.prepare(`INSERT INTO event_participants (event_id,discord_username,display_name,field_values_json,internal_friend_code,consent_at,consent_version) VALUES (?,?,?,?,?,?,?)`);
   const getParticipantStatement = connection.prepare('SELECT * FROM event_participants WHERE id=?');
   const listParticipantsStatement = connection.prepare('SELECT * FROM event_participants WHERE event_id=? ORDER BY created_at,id');
-  const listPublicParticipantsStatement = connection.prepare(`SELECT * FROM event_participants WHERE event_id=? AND status='confirmed' ORDER BY display_name COLLATE NOCASE,id`);
+  /*
+    Por orden de inscripción, no alfabético. Quien se apuntó primero aparece
+    primero: en un torneo con plazas contadas eso importa, y el orden
+    alfabético premiaba llamarse Ana.
+  */
+  const listPublicParticipantsStatement = connection.prepare(`SELECT * FROM event_participants WHERE event_id=? AND status='confirmed' ORDER BY created_at,id`);
   const updateParticipantStatement = connection.prepare(`UPDATE event_participants SET status=?,internal_friend_code=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`);
   const deleteParticipantStatement = connection.prepare('DELETE FROM event_participants WHERE id=?');
   const pingStatement = connection.prepare('SELECT 1 ok');
@@ -681,7 +686,12 @@ function openDatabase(dbPath) {
     listParticipants(eventId, { publicView = false } = {}) {
       requireEvent(eventId);
       const rows = publicView ? listPublicParticipantsStatement.all(eventId) : listParticipantsStatement.all(eventId);
-      return rows.map((row) => toParticipant(row, { publicView }));
+      // El número de orden se calcula de la lista ya ordenada: guardarlo sería
+      // otro dato que mantener y que puede discrepar de las fechas.
+      return rows.map((row, indice) => ({
+        ...toParticipant(row, { publicView }),
+        registrationOrder: indice + 1
+      }));
     },
     updateParticipant(id, changes = {}) {
       const row = getParticipantStatement.get(id);

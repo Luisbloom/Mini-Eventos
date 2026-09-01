@@ -289,6 +289,22 @@ function createApp({
       // es cortesía, lo que vale es lo que llega.
       const consent = requireConsent(request.body?.acceptedTerms);
       const participant = database.createParticipant(event.id, request.body?.values, consent);
+
+      /*
+        Si quien se inscribe tiene la sesión de Discord abierta, la inscripción
+        se ata a su cuenta sin pedirle nada. Así aparece sola en «Mi perfil»,
+        que es donde va a buscarla.
+
+        Se ata a la identidad de la SESIÓN, nunca al nombre de Discord que
+        haya escrito en el formulario: ese es texto libre y cualquiera podría
+        poner el de otro. Y si algo falla al atarla, la inscripción sigue
+        siendo válida; lo único que se pierde es que salga en su perfil.
+      */
+      const session = currentSession(request);
+      if (session) {
+        try { database.valorant.linkParticipantToDiscord(participant.id, session.account.id); }
+        catch (error) { logger.info?.({ event: 'profile_link_skipped', code: error.code }); }
+      }
       response.status(201).json({ participant: publicParticipant(participant), message: 'Inscripción recibida. Queda pendiente de confirmación.' });
     } catch (error) { next(error); }
   });
