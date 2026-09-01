@@ -316,9 +316,11 @@ describe('formato oficial del torneo de Valorant', () => {
     assert.equal(F.mapPoolAnnouncement, 'TOURNAMENT_DAY');
     assert.match(F.public.maps, /el mismo día del torneo/);
 
-    // Lo que sigue sin decidirse sí debe figurar.
+    // Lo que sigue sin anunciarse sí debe figurar. Se busca por el principio
+    // de la línea porque alguna lleva detrás la decisión que ya está tomada.
     for (const abierto of ['Fecha', 'Horarios', 'Servidor o región', 'Map pool']) {
-      assert.ok(F.pending.includes(abierto), `${abierto} sigue pendiente`);
+      assert.ok(F.pending.some((linea) => linea.startsWith(abierto)),
+        `${abierto} sigue pendiente`);
     }
   });
 

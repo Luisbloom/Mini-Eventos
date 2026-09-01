@@ -23,7 +23,7 @@ const { createDraftStream } = require('./services/draft-stream');
 const { CompetitionError: ValorantCompetitionError } = require('./valorant-competition');
 const { CaptureError } = require('./valorant-captures');
 const { PlayoffError } = require('./valorant-playoffs');
-const { officialValorantFormatForSlug } = require('./valorant-event-format');
+const { officialValorantFormatForSlug, officialFormatForEvent } = require('./valorant-event-format');
 const { gameProfile, isAmongUs, isValorant } = require('./games');
 const { LEGAL_VERSION, ConsentError, requireConsent } = require('./legal-consent');
 const { officialRosterState } = require('./valorant-event-format');
@@ -263,7 +263,7 @@ function createApp({
       response.set('Cache-Control', 'no-store').json({
         event: {
           ...event,
-          officialFormat: officialValorantFormatForSlug(event.slug),
+          officialFormat: officialFormatForEvent(event),
           /*
             En qué punto está la inscripción respecto a las decenas.
 
@@ -405,7 +405,7 @@ function createApp({
       if (!event) return;
       if (!event.modules.information) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no publica información ampliada.');
       response.set('Cache-Control', 'no-store').json({
-        event: { ...event, officialFormat: officialValorantFormatForSlug(event.slug) },
+        event: { ...event, officialFormat: officialFormatForEvent(event) },
         ...database.getTournamentInformation(event.id),
         scoring: eventScoring(event)
       });

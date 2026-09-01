@@ -127,13 +127,21 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
   // El map pool existe, pero se anuncia el mismo día del torneo.
   mapPoolAnnouncement: 'TOURNAMENT_DAY',
 
+  /*
+    Lo que de verdad falta por anunciar.
+
+    Sólo entra aquí lo que nadie puede leer todavía en esta misma página. El
+    desempate estaba en la lista cuando ya estaba explicado dos párrafos más
+    arriba, y el map pool figuraba como indeciso cuando la decisión —publicarlo
+    el mismo día— ya estaba tomada: una lista de pendientes que miente hacia
+    abajo es peor que no tenerla.
+  */
   pending: Object.freeze([
     'Fecha',
     'Horarios',
+    'Servidor o región',
     'Orden definitivo del draft',
-    'Map pool',
-    'Criterio definitivo de desempate',
-    'Servidor o región'
+    'Map pool (decidido por la organización, se publica el mismo día)'
   ]),
   public: Object.freeze({
     headline: 'De 20 a 40 jugadores. Un solo campeón.',
@@ -153,7 +161,7 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     maps: 'Los mapas los decide la organización y se anuncian antes de cada serie: no hay veto ni sorteo entre los equipos. En BO3 no se repite mapa dentro de la misma serie. El map pool se publica el mismo día del torneo.',
     results: 'Los resultados oficiales se registrarán en la plataforma y serán revisados por la organización.',
     stats: 'Los marcadores y estadísticas confirmados de las partidas personalizadas se publicarán en la plataforma.',
-    registration: 'Las inscripciones todavía no están abiertas.'
+    registration: 'Las inscripciones se abren y se cierran desde la página del evento.'
   }),
   participantJourney: Object.freeze([
     'Te inscribes y entras en el grupo de jugadores disponibles.',
@@ -203,6 +211,44 @@ function officialRosterState(confirmed) {
   };
 }
 
+/**
+ * La frase sobre la inscripción, dicha por el estado real del evento.
+ *
+ * Estuvo escrita a mano —«todavía no están abiertas»— y siguió publicándose
+ * tal cual el día que se abrieron: la misma página anunciaba arriba
+ * «INSCRIPCIONES ABIERTAS» y lo desmentía más abajo. Un dato que cambia solo
+ * no puede quedarse escrito en un texto fijo.
+ */
+function registrationSentence(event) {
+  const abierta = event?.registration?.available === true;
+  const gente = Number(event?.participantCount) || 0;
+  if (!abierta) {
+    return event?.registration?.code === 'FULL'
+      ? `Las inscripciones están cerradas: se ha alcanzado el máximo de ${MAX_PLAYERS} jugadores.`
+      : 'Las inscripciones están cerradas ahora mismo.';
+  }
+  const estado = officialRosterState(gente);
+  if (estado.full) return `Aforo completo: ${MAX_PLAYERS} jugadores inscritos.`;
+  const faltan = estado.next
+    ? ` Faltan ${estado.missingForNext} para completar la siguiente decena (${estado.next.players} jugadores, ${estado.next.teams} equipos).`
+    : '';
+  return `Las inscripciones están abiertas: ${gente} ${gente === 1 ? 'persona apuntada' : 'personas apuntadas'} de ${MAX_PLAYERS}.${faltan}`;
+}
+
+/**
+ * El formato oficial con lo que depende del evento ya resuelto.
+ *
+ * Devuelve null igual que su hermana cuando el evento no es el torneo oficial.
+ */
+function officialFormatForEvent(event) {
+  const formato = officialValorantFormatForSlug(event?.slug);
+  if (!formato) return null;
+  return {
+    ...formato,
+    public: { ...formato.public, registration: registrationSentence(event) }
+  };
+}
+
 function officialValorantFormatForSlug(slug) {
   return String(slug || '').trim().toLowerCase() === OFFICIAL_VALORANT_SLUG
     ? OFFICIAL_VALORANT_FORMAT
@@ -216,5 +262,7 @@ module.exports = {
   officialSizeForPlayers,
   officialSizeForTeams,
   officialRosterState,
-  officialValorantFormatForSlug
+  officialValorantFormatForSlug,
+  officialFormatForEvent,
+  registrationSentence
 };
