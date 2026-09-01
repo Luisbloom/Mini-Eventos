@@ -419,3 +419,6 @@
   display: block; margin-top: .25rem;
   font: .5rem/1.4 var(--mono); letter-spacing: .08em; color: var(--muted); text-transform: uppercase;
 }
+
+/* El partido por el tercer puesto: ni cuadro alto ni bajo, su propio color. */
+.elimination-flow li.is-third { border-top-color: var(--cyan); }

@@ -19,16 +19,33 @@
 
 const {
   SLOTS, PLAN, INITIAL_SLOTS, planFor, dependents,
-  seedPairings, lossesByTeam, needsReset, standings: bracketStandings
+  seedPairings, lossesByTeam, standings: bracketStandings
 } = require('./services/playoffs/bracket');
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 const STAGE = 'PLAYOFFS';
 
-/** Cuántos mapas se juega cada ronda. La gran final se configura aparte. */
+/** Cuántos mapas se juega cada ronda. La gran final tiene su propia regla. */
 const DEFAULT_BEST_OF = 3;
-const GRAND_FINAL_BEST_OF = Object.freeze([3, 5]);
 const PLAYOFF_QUALIFIERS = 4;
+
+/**
+ * La gran final se gana por diferencia de DOS mapas: 2-0, 3-1, 4-2…
+ *
+ * Un 2-1 no cierra nada. Por eso no se sabe de antemano cuántas partidas hacen
+ * falta y se van creando según se necesitan, en vez de nacer todas juntas.
+ */
+const GRAND_FINAL_WIN_BY = 2;
+
+/**
+ * Tope de seguridad.
+ *
+ * Una serie a dos de ventaja termina sola casi siempre —lo raro es pasar de
+ * seis mapas—, pero «casi siempre» no es una garantía y un torneo no puede
+ * quedarse esperando indefinidamente. Al llegar aquí sin diferencia de dos,
+ * decide la organización, igual que con los empates que nada rompe.
+ */
+const GRAND_FINAL_MAX_GAMES = 9;
 
 function unresolvedTieGroups(standings) {
   const groups = [];
@@ -68,6 +85,8 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
     teamASeed: row.team_a_seed,
     teamBSeed: row.team_b_seed,
     bestOf: row.best_of,
+    // Cuando está puesta, manda ella: la serie se gana por diferencia.
+    winBy: row.win_by ?? null,
     status: row.status,
     winnerTeamId: row.winner_team_id
   };
@@ -121,46 +140,6 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
     },
 
     /** Cuántos mapas se juega la gran final. */
-    grandFinalBestOf(eventId) {
-      const fila = connection.prepare(
-        'SELECT grand_final_best_of FROM valorant_settings WHERE event_id=?').get(eventId);
-      return fila?.grand_final_best_of ?? DEFAULT_BEST_OF;
-    },
-
-    /**
-     * Fija el formato de la gran final. Una vez empieza a jugarse el cuadro ya
-     * no se toca: cambiar a cuántos mapas se juega con partidos en marcha es
-     * cambiar las reglas a mitad.
-     */
-    setGrandFinalBestOf(eventId, bestOf, { actor = 'admin' } = {}) {
-      const mapas = Number(bestOf);
-      if (!GRAND_FINAL_BEST_OF.includes(mapas)) {
-        throw new PlayoffError(
-          `La gran final se juega a ${GRAND_FINAL_BEST_OF.join(' o ')} mapas.`, 'INVALID_BEST_OF');
-      }
-      if (this.playedGames(eventId) > 0) {
-        throw new PlayoffError(
-          'Ya se han jugado partidos de la eliminatoria: el formato de la gran final no se cambia a mitad.',
-          'PLAYOFFS_IN_PROGRESS', 409);
-      }
-
-      connection.prepare(`
-        INSERT INTO valorant_settings (event_id, grand_final_best_of) VALUES (?,?)
-        ON CONFLICT(event_id) DO UPDATE SET grand_final_best_of=excluded.grand_final_best_of,
-          updated_at=${NOW}`).run(eventId, mapas);
-      registrar(eventId, actor, 'PLAYOFF_FORMAT_SET', null, null, { grandFinalBestOf: mapas });
-      return mapas;
-    },
-
-    playedGames(eventId) {
-      return connection.prepare(`
-        SELECT COUNT(*) total FROM valorant_games g
-        JOIN valorant_series s ON s.id = g.series_id
-        WHERE s.event_id=? AND s.stage=? AND g.status='COMPLETED'`).get(eventId, STAGE).total;
-    },
-
-    // ------------------------------------------------------ generación
-
     /**
      * Comprueba que la liga puede dar cuatro clasificados sin dudas.
      *
@@ -219,22 +198,32 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
       }
 
       const emparejamientos = seedPairings(clasificados.seeds);
-      const granFinal = this.grandFinalBestOf(eventId);
 
       const montar = connection.transaction(() => {
         const insertarSerie = connection.prepare(`
           INSERT INTO valorant_series
             (event_id, stage, matchday, position, bracket_slot,
-             team_a_id, team_b_id, team_a_seed, team_b_seed, best_of, status)
+             team_a_id, team_b_id, team_a_seed, team_b_seed, best_of, win_by, status)
           VALUES (@eventId, '${STAGE}', @matchday, @position, @slot,
-                  @teamAId, @teamBId, @teamASeed, @teamBSeed, @bestOf, 'PENDING')`);
+                  @teamAId, @teamBId, @teamASeed, @teamBSeed, @bestOf, @winBy, 'PENDING')`);
         const insertarJuego = connection.prepare(
           "INSERT INTO valorant_games (series_id, game_number, status) VALUES (?,?,'PENDING')");
 
         for (const [indice, slot] of INITIAL_SLOTS.entries()) {
           const entrada = planFor(slot);
           const pareja = emparejamientos[slot];
-          const mapas = slot === SLOTS.GRAND_FINAL ? granFinal : DEFAULT_BEST_OF;
+          const esFinal = slot === SLOTS.GRAND_FINAL;
+          /*
+            La final nace con dos mapas: los mínimos para ganarla (2-0). Si se
+            queda 1-1 aparecerá el tercero, y así hasta que alguien saque dos.
+            Las demás series sí saben desde el principio cuántas partidas tienen.
+
+            Ojo: los mapas que se crean y la columna `best_of` no son lo mismo
+            aquí. `best_of` sólo admite 1, 3 o 5 y en una serie por ventaja no
+            decide nada —manda `win_by`—, así que se deja el valor por defecto
+            en vez de intentar meter un 2 que la base rechaza.
+          */
+          const mapas = esFinal ? GRAND_FINAL_WIN_BY : DEFAULT_BEST_OF;
 
           const info = insertarSerie.run({
             eventId,
@@ -246,7 +235,8 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
             teamBId: pareja?.b ?? null,
             teamASeed: pareja?.seedA ?? null,
             teamBSeed: pareja?.seedB ?? null,
-            bestOf: mapas
+            bestOf: DEFAULT_BEST_OF,
+            winBy: esFinal ? GRAND_FINAL_WIN_BY : null
           });
 
           for (let numero = 1; numero <= mapas; numero++) {
@@ -257,7 +247,7 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
       montar();
 
       registrar(eventId, actor, 'PLAYOFFS_GENERATED', null, null, {
-        seeds: clasificados.seeds, grandFinalBestOf: granFinal
+        seeds: clasificados.seeds, grandFinalWinBy: GRAND_FINAL_WIN_BY
       });
       return this.listSeries(eventId);
     },
@@ -300,8 +290,6 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
         const perdedor = serie.winnerTeamId === serie.teamAId ? serie.teamBId : serie.teamAId;
 
         for (const destino of dependents(serie.slot)) {
-          // La reposición no se rellena por aquí: se crea sólo si hace falta.
-          if (destino.slot === SLOTS.GRAND_FINAL_RESET) continue;
           ponerEn(destino.slot, destino.side,
             destino.take === 'winner' ? serie.winnerTeamId : perdedor);
         }
@@ -320,41 +308,40 @@ function createValorantPlayoffStore(connection, { audit, competition } = {}) {
     },
 
     /**
-     * Crea la reposición de la gran final, si la primera la ganó quien venía
-     * del cuadro bajo.
+     * Añade el siguiente mapa de una serie por ventaja que sigue viva.
      *
-     * Es el corazón de la doble eliminación: el finalista del cuadro alto llegó
-     * sin derrotas, así que perder una vez le deja empatado a una, no fuera.
+     * Se llama después de cerrar cada partida. En una serie normal no hace
+     * nada: sus mapas nacieron todos con ella. En la final, si nadie ha sacado
+     * dos de ventaja y ya no quedan mapas por jugar, crea el siguiente.
      */
-    ensureResetIfNeeded(eventId, { actor = 'admin' } = {}) {
-      const series = this.listSeries(eventId);
-      if (!needsReset(series)) return null;
-      if (series.some((serie) => serie.slot === SLOTS.GRAND_FINAL_RESET)) return null;
+    ensureNextFinalGame(eventId, seriesId) {
+      const serie = connection.prepare(
+        'SELECT * FROM valorant_series WHERE id=? AND event_id=?').get(seriesId, eventId);
+      if (!serie || !serie.win_by || serie.status === 'COMPLETED') return null;
 
-      const granFinal = series.find((serie) => serie.slot === SLOTS.GRAND_FINAL);
-      const entrada = planFor(SLOTS.GRAND_FINAL_RESET);
-      const perdedor = granFinal.winnerTeamId === granFinal.teamAId
-        ? granFinal.teamBId : granFinal.teamAId;
+      const juegos = connection.prepare(
+        'SELECT status FROM valorant_games WHERE series_id=?').all(seriesId);
+      // Mientras quede alguno sin jugar, no hace falta inventar otro.
+      if (juegos.some((juego) => juego.status === 'PENDING')) return null;
 
-      const info = connection.prepare(`
-        INSERT INTO valorant_series
-          (event_id, stage, matchday, position, bracket_slot,
-           team_a_id, team_b_id, best_of, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'READY')`).run(
-        eventId, STAGE, entrada.round, 99, SLOTS.GRAND_FINAL_RESET,
-        // La juegan los mismos dos, y empieza el que ganó la primera.
-        granFinal.winnerTeamId, perdedor, granFinal.bestOf);
-
-      const insertarJuego = connection.prepare(
-        "INSERT INTO valorant_games (series_id, game_number, status) VALUES (?,?,'PENDING')");
-      for (let numero = 1; numero <= granFinal.bestOf; numero++) {
-        insertarJuego.run(Number(info.lastInsertRowid), numero);
+      if (juegos.length >= GRAND_FINAL_MAX_GAMES) {
+        connection.prepare(
+          `UPDATE valorant_series SET status='REVIEW_REQUIRED', updated_at=${NOW} WHERE id=?`
+        ).run(seriesId);
+        registrar(eventId, 'sistema', 'PLAYOFF_FINAL_UNRESOLVED', `series:${seriesId}`, null, {
+          reason: `la final ha llegado a ${juegos.length} mapas sin diferencia de ${serie.win_by}`
+        });
+        return null;
       }
 
-      registrar(eventId, actor, 'PLAYOFF_RESET_CREATED', `series:${info.lastInsertRowid}`, null, {
-        reason: 'la gran final la ganó quien venía del cuadro bajo, con una derrota menos que él'
+      const numero = juegos.length + 1;
+      connection.prepare(
+        "INSERT INTO valorant_games (series_id, game_number, status) VALUES (?,?,'PENDING')"
+      ).run(seriesId, numero);
+      registrar(eventId, 'sistema', 'PLAYOFF_FINAL_GAME_ADDED', `series:${seriesId}`, null, {
+        gameNumber: numero, reason: 'la final sigue sin diferencia de dos mapas'
       });
-      return this.getSeries(eventId, Number(info.lastInsertRowid));
+      return numero;
     },
 
     // ------------------------------------------------- dependencias
@@ -505,5 +492,6 @@ function contarMapas(serie) {
 
 module.exports = {
   createValorantPlayoffStore, PlayoffError,
-  STAGE, SLOTS, PLAN, DEFAULT_BEST_OF, GRAND_FINAL_BEST_OF
+  STAGE, SLOTS, PLAN, DEFAULT_BEST_OF,
+  GRAND_FINAL_WIN_BY, GRAND_FINAL_MAX_GAMES
 };

@@ -34,41 +34,47 @@ describe('cuántos partidos', () => {
   });
 
   describe('el cuadro de eliminatorias', () => {
-    it('son seis series, siete si hay final de desempate', () => {
-      assert.equal(PLAYOFF_LOAD.series, 6);
-      assert.equal(PLAYOFF_LOAD.seriesWithReset, 7);
-      // Y coincide con el cuadro declarado, que es de donde sale.
-      assert.equal(PLAYOFF_LOAD.seriesWithReset, PLAN.length);
-      assert.ok(PLAN.some((serie) => serie.slot === SLOTS.GRAND_FINAL_RESET));
+    it('son siete series, y todas se juegan', () => {
+      // Seis del cuadro más el partido por el tercer puesto. Ninguna es
+      // condicional desde que la gran final no tiene reposición.
+      assert.equal(PLAYOFF_LOAD.series, 7);
+      assert.equal(PLAYOFF_LOAD.series, PLAN.length);
+      assert.ok(PLAN.some((serie) => serie.slot === SLOTS.THIRD_PLACE));
     });
 
-    it('cada equipo juega entre 2 y 5 eliminatorias', () => {
-      // 2 el que cae primero; 5 el finalista que fuerza el desempate.
-      assert.deepEqual(PLAYOFF_LOAD.perTeam, { min: 2, max: 5 });
+    it('cada equipo juega 3 o 4 eliminatorias, nunca menos', () => {
+      /*
+        Con el tercer puesto en el cuadro ya no hay quien juegue sólo dos y se
+        vaya a casa: el que cae primero disputa además el 3º-4º. Es la ventaja
+        menos evidente de este formato, y la que más se agradece habiendo
+        venido a jugar.
+      */
+      assert.deepEqual(PLAYOFF_LOAD.perTeam, { min: 3, max: 4 });
     });
 
-    it('el campeón juega 3 si no pierde y 5 si pierde una vez', () => {
-      // Las cinco son las mismas pierda donde pierda: caer antes te ahorra la
-      // final alta pero te añade la ronda baja.
-      assert.deepEqual(PLAYOFF_LOAD.champion, { undefeated: 3, throughLowerBracket: 5 });
+    it('el campeón juega 3 si no pierde y 4 si pierde una vez', () => {
+      // Las cuatro son las mismas pierda donde pierda: caer antes te ahorra la
+      // final alta pero te añade la ronda baja. Y ya no hay una quinta, porque
+      // la gran final se gana una sola vez.
+      assert.deepEqual(PLAYOFF_LOAD.champion, { undefeated: 3, throughLowerBracket: 4 });
     });
   });
 
   describe('el resumen por tamaño', () => {
-    it('con 20 jugadores el campeón juega 6 u 8 partidos', () => {
+    it('con 20 jugadores el campeón juega 6 o 7 partidos', () => {
       const veinte = matchSummary(20);
       assert.equal(veinte.league.perTeam, 3);
       assert.equal(veinte.champion.undefeated.matches, 6);
-      assert.equal(veinte.champion.throughLowerBracket.matches, 8);
-      // Un BO1 es un mapa; un BO3, dos o tres. De ahí la horquilla.
-      assert.deepEqual(veinte.champion.undefeated.maps, { min: 9, max: 12 });
-      assert.deepEqual(veinte.champion.throughLowerBracket.maps, { min: 13, max: 18 });
+      assert.equal(veinte.champion.throughLowerBracket.matches, 7);
+      // Un BO1 es un mapa; un BO3, dos o tres; la final, de dos en adelante.
+      assert.deepEqual(veinte.champion.undefeated.maps, { min: 9, max: 13 });
+      assert.deepEqual(veinte.champion.throughLowerBracket.maps, { min: 11, max: 16 });
     });
 
     it('sólo crece la liga: los playoffs son siempre de cuatro equipos', () => {
       for (const jugadores of [20, 30, 40]) {
         const resumen = matchSummary(jugadores);
-        assert.equal(resumen.playoffs.series, 6, `${jugadores} jugadores`);
+        assert.equal(resumen.playoffs.series, 7, `${jugadores} jugadores`);
         assert.equal(
           resumen.champion.undefeated.matches - resumen.league.perTeam,
           PLAYOFF_LOAD.champion.undefeated);
@@ -76,15 +82,12 @@ describe('cuántos partidos', () => {
       assert.equal(matchSummary(40).league.perTeam, 7);
     });
 
-    it('una gran final a BO5 sube la cuenta de mapas, no la de partidos', () => {
-      const tres = matchSummary(20);
-      const cinco = matchSummary(20, { grandFinalBestOf: 5 });
-      assert.equal(cinco.champion.undefeated.matches, tres.champion.undefeated.matches);
-      assert.ok(cinco.champion.undefeated.maps.max > tres.champion.undefeated.maps.max);
-      // La final de desempate se juega al mismo formato que la gran final, así
-      // que al campeón que viene de abajo le suben las dos.
-      assert.equal(cinco.champion.throughLowerBracket.maps.max
-        - tres.champion.throughLowerBracket.maps.max, 4);
+    it('la final aporta al menos dos mapas, y puede aportar más', () => {
+      // Se gana por diferencia de dos: lo mínimo es un 2-0.
+      const veinte = matchSummary(20);
+      const sinFinal = veinte.league.perTeam + (PLAYOFF_LOAD.champion.undefeated - 1) * 2;
+      assert.equal(veinte.champion.undefeated.maps.min - sinFinal, 2);
+      assert.ok(veinte.champion.undefeated.maps.max > veinte.champion.undefeated.maps.min);
     });
 
     it('un tamaño que no existe no devuelve números inventados', () => {

@@ -288,6 +288,7 @@ function migrateLegacyValorantSchema(connection) {
       migrateExtraStats(connection);
       migratePlayoffSeries(connection);
       migrateSkippedGames(connection);
+  migrateAdvantageSeries(connection);
 
       // Cuántos mapas se juega la gran final. Se fija antes de empezar.
       const ajustes = connection.pragma('table_info(valorant_settings)').map((c) => c.name);
@@ -389,6 +390,20 @@ function migratePlayoffSeries(connection) {
  * PENDING para siempre hace creer que falta algo; y no es lo mismo que
  * cancelarlo a mano, así que tiene su propio estado.
  */
+/**
+ * La columna que convierte una serie en «a dos de ventaja».
+ *
+ * `best_of` no sirve para esto: un BO3 tiene un final fijo —dos mapas— y aquí
+ * el final depende de la distancia entre los dos. Cuando `win_by` está puesta,
+ * manda ella y `best_of` deja de decidir nada.
+ */
+function migrateAdvantageSeries(connection) {
+  const columnas = connection.pragma('table_info(valorant_series)').map((c) => c.name);
+  if (!columnas.includes('win_by')) {
+    connection.exec('ALTER TABLE valorant_series ADD COLUMN win_by INTEGER');
+  }
+}
+
 function migrateSkippedGames(connection) {
   const definicion = connection.prepare(
     "SELECT sql FROM sqlite_master WHERE type='table' AND name='valorant_games'").get();
@@ -1144,7 +1159,6 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         // un 13-8 perdido.
         const oldGameWinner = juego.winner_team_id ?? null;
         const newGameWinner = marcador.winner === 'a' ? serie.team_a_id : serie.team_b_id;
-        const necesarios = Math.floor(serie.best_of / 2) + 1;
         const prospectiveWins = new Map();
         const games = connection.prepare(
           'SELECT id,status,winner_team_id FROM valorant_games WHERE series_id=? ORDER BY game_number'
@@ -1155,8 +1169,23 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
             : (row.status === 'COMPLETED' ? row.winner_team_id : null);
           if (winner) prospectiveWins.set(winner, (prospectiveWins.get(winner) ?? 0) + 1);
         }
-        const newSeriesWinner = [...prospectiveWins.entries()]
-          .find(([, wins]) => wins >= necesarios)?.[0] ?? null;
+
+        /*
+          Dos formas de cerrar una serie, y sólo una se aplica a cada una.
+
+          Al mejor de N gana quien llega a la mitad más uno. Por ventaja gana
+          quien saca `win_by` mapas al otro: 2-0, 3-1, 4-2… Un 2-1 no cierra
+          nada, y por eso estas series no tienen sus partidas creadas de
+          antemano: no se sabe cuántas van a hacer falta.
+        */
+        const ganadasA = prospectiveWins.get(serie.team_a_id) ?? 0;
+        const ganadasB = prospectiveWins.get(serie.team_b_id) ?? 0;
+        const newSeriesWinner = serie.win_by
+          ? (Math.abs(ganadasA - ganadasB) >= serie.win_by
+            ? (ganadasA > ganadasB ? serie.team_a_id : serie.team_b_id)
+            : null)
+          : ([...prospectiveWins.entries()]
+            .find(([, wins]) => wins >= Math.floor(serie.best_of / 2) + 1)?.[0] ?? null);
         const oldSeriesWinner = serie.winner_team_id ?? null;
         const seriesWinnerChanges = oldSeriesWinner !== newSeriesWinner;
 
@@ -1199,7 +1228,7 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         if (serie.stage === 'PLAYOFFS' && playoffs) {
           if (overwrite && seriesWinnerChanges) playoffs.clearDownstream(eventId, serie.bracket_slot);
           playoffs.propagate(eventId, { actor });
-          playoffs.ensureResetIfNeeded(eventId, { actor });
+          playoffs.ensureNextFinalGame(eventId, seriesId);
           playoffs.markUnneededGames(eventId);
         }
 

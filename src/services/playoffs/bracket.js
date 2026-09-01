@@ -3,10 +3,17 @@
 /**
  * El cuadro de eliminatorias, sin base de datos.
  *
- * Doble eliminación de verdad: hacen falta DOS derrotas para quedar fuera. Eso
- * obliga a una pieza que se olvida con facilidad —la **reposición de la gran
- * final**—, porque quien llega desde el cuadro alto lo hace sin ninguna derrota
- * y perder una vez no puede eliminarle.
+ * Doble eliminación para repartir los puestos, pero la GRAN FINAL va aparte.
+ *
+ * Hacen falta dos derrotas para caer del cuadro, así que una primera derrota
+ * manda al cuadro bajo en vez de a casa. Lo que ya no hay es reposición de la
+ * gran final: la final se juega a cero, sin arrastrar derrotas y sin ventaja
+ * para quien llega invicto. Es una decisión deliberada de la organización —
+ * cuesta que quien sube por arriba pueda caer con una sola derrota en la final,
+ * y a cambio la final es una final y no «dos finales para uno de los dos».
+ *
+ * Y los dos que se quedan fuera no heredan el puesto del cuadro: lo juegan en
+ * el partido por el TERCER PUESTO.
  *
  * Todo aquí es una tabla de datos, no una cadena de condiciones: quién juega
  * cada ronda sale de decir de dónde viene cada hueco. Con `if (ronda === 3 &&
@@ -20,8 +27,8 @@ const SLOTS = Object.freeze({
   UPPER_FINAL: 'UPPER_FINAL',
   LOWER_ROUND_1: 'LOWER_ROUND_1',
   LOWER_FINAL: 'LOWER_FINAL',
-  GRAND_FINAL: 'GRAND_FINAL',
-  GRAND_FINAL_RESET: 'GRAND_FINAL_RESET'
+  THIRD_PLACE: 'THIRD_PLACE',
+  GRAND_FINAL: 'GRAND_FINAL'
 });
 
 /**
@@ -63,18 +70,32 @@ const PLAN = Object.freeze([
     eliminates: 3
   },
   {
-    slot: SLOTS.GRAND_FINAL, order: 6, round: 4, bracket: 'GRAND',
+    /*
+      El tercer puesto se juega, no se hereda.
+
+      Lo disputan los dos que caen del cuadro: quien pierde la ronda baja 1 y
+      quien pierde la final baja. Los dos llegan con sus dos derrotas, así que
+      esta serie no elimina a nadie —ya están fuera del título— y sólo ordena
+      el 3º del 4º.
+    */
+    slot: SLOTS.THIRD_PLACE, order: 6, round: 4, bracket: 'THIRD',
+    label: 'Tercer y cuarto puesto',
+    a: { from: SLOTS.LOWER_ROUND_1, take: 'loser' },
+    b: { from: SLOTS.LOWER_FINAL, take: 'loser' }
+  },
+  {
+    /*
+      La gran final, aparte del cuadro.
+
+      Los dos llegan a cero: el que viene del cuadro alto no tiene ventaja y al
+      que viene del bajo le basta con ganarla una vez. Por eso no hay
+      reposición, y por eso esta serie se juega con su propia regla —por
+      diferencia de dos mapas— en vez de al mejor de tres.
+    */
+    slot: SLOTS.GRAND_FINAL, order: 7, round: 5, bracket: 'GRAND',
     label: 'Gran final',
     a: { from: SLOTS.UPPER_FINAL, take: 'winner' },
     b: { from: SLOTS.LOWER_FINAL, take: 'winner' }
-  },
-  {
-    slot: SLOTS.GRAND_FINAL_RESET, order: 7, round: 5, bracket: 'GRAND',
-    label: 'Reposición de la gran final',
-    // Sólo existe si hace falta, y entonces la juegan los mismos dos.
-    a: { from: SLOTS.GRAND_FINAL, take: 'winner' },
-    b: { from: SLOTS.GRAND_FINAL, take: 'loser' },
-    conditional: true
   }
 ]);
 
@@ -137,21 +158,6 @@ function lossesByTeam(series) {
 }
 
 /**
- * ⚠️ Si el ganador de la gran final viene del cuadro bajo, hay reposición.
- *
- * Quien sube por el cuadro alto llega sin ninguna derrota. Que pierda una vez
- * no puede dejarle fuera de un torneo donde hacen falta dos: si eso ocurriera,
- * la «doble eliminación» sería un nombre y no un formato.
- */
-function needsReset(series) {
-  const granFinal = series.find((s) => s.slot === SLOTS.GRAND_FINAL);
-  const finalBaja = series.find((s) => s.slot === SLOTS.LOWER_FINAL);
-  if (!granFinal || granFinal.status !== 'COMPLETED' || !granFinal.winnerTeamId) return false;
-  if (!finalBaja || !finalBaja.winnerTeamId) return false;
-  return granFinal.winnerTeamId === finalBaja.winnerTeamId;
-}
-
-/**
  * Cómo queda cada equipo cuando el cuadro está resuelto, o mientras se juega.
  *
  * @returns {{status: 'PENDING'|'COMPLETED', placements: Array, champion: number|null, runnerUp: number|null}}
@@ -171,23 +177,27 @@ function standings(series) {
     return serie.winnerTeamId === serie.teamAId ? serie.teamBId : serie.teamAId;
   };
 
-  anotar(perdedorDe(SLOTS.LOWER_ROUND_1), 4);
-  anotar(perdedorDe(SLOTS.LOWER_FINAL), 3);
+  /*
+    El 3º y el 4º salen de su partido, no de por dónde cayeron.
 
-  // La última que se juega decide el título: la reposición si existe, y si no
-  // la propia gran final.
-  const reposicion = porSlot.get(SLOTS.GRAND_FINAL_RESET);
-  const decisiva = reposicion && reposicion.status === 'COMPLETED'
-    ? reposicion
-    : porSlot.get(SLOTS.GRAND_FINAL);
+    Mientras ese partido no se juegue, los dos eliminados no tienen puesto: no
+    se les adjudica uno provisional que luego habría que corregir.
+  */
+  const tercerPuesto = porSlot.get(SLOTS.THIRD_PLACE);
+  if (tercerPuesto && tercerPuesto.status === 'COMPLETED' && tercerPuesto.winnerTeamId) {
+    const tercero = tercerPuesto.winnerTeamId;
+    const cuarto = tercero === tercerPuesto.teamAId ? tercerPuesto.teamBId : tercerPuesto.teamAId;
+    anotar(tercero, 3);
+    anotar(cuarto, 4);
+  }
+
+  // El título lo decide la gran final, y sólo ella: ya no hay reposición.
+  const decisiva = porSlot.get(SLOTS.GRAND_FINAL);
 
   let campeon = null;
   let subcampeon = null;
 
-  const pendienteDeReposicion = needsReset(series)
-    && (!reposicion || reposicion.status !== 'COMPLETED');
-
-  if (decisiva && decisiva.status === 'COMPLETED' && decisiva.winnerTeamId && !pendienteDeReposicion) {
+  if (decisiva && decisiva.status === 'COMPLETED' && decisiva.winnerTeamId) {
     campeon = decisiva.winnerTeamId;
     subcampeon = decisiva.winnerTeamId === decisiva.teamAId ? decisiva.teamBId : decisiva.teamAId;
     anotar(campeon, 1);
@@ -201,6 +211,11 @@ function standings(series) {
     losses: derrotas.get(teamId) ?? 0,
     // Dos derrotas dejan fuera. Con una todavía se sigue vivo, y eso es
     // justamente lo que distingue este formato del de eliminación directa.
+    /*
+      Dos derrotas te sacan de la pelea por el título, pero no del torneo: aún
+      queda el partido por el tercer puesto. «Eliminado» aquí significa sin
+      opción de ganar, no sin más partidos.
+    */
     result: teamId === campeon ? 'CHAMPION'
       : teamId === subcampeon ? 'RUNNER_UP'
         : (derrotas.get(teamId) ?? 0) >= 2 ? 'ELIMINATED' : 'ACTIVE'
@@ -216,5 +231,5 @@ function standings(series) {
 
 module.exports = {
   SLOTS, PLAN, INITIAL_SLOTS, planFor, dependents,
-  seedPairings, lossesByTeam, needsReset, standings
+  seedPairings, lossesByTeam, standings
 };

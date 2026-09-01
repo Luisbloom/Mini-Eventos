@@ -1792,23 +1792,12 @@ function createApp({
       const existe = database.valorantPlayoffs.exists(id);
       response.json({
         generated: existe,
-        grandFinalBestOf: database.valorantPlayoffs.grandFinalBestOf(id),
         // Mientras no exista, se dice si ya se puede y, si no, por qué no.
         readiness: existe ? null : database.valorantPlayoffs.seedsFromRegularSeason(id, teams),
         series: existe ? database.valorantPlayoffs.listSeries(id) : [],
         standings: existe ? database.valorantPlayoffs.standings(id) : null,
         teams
       });
-    } catch (error) { next(error); }
-  });
-
-  /** A cuántos mapas se juega la gran final. Antes de empezar. */
-  app.put('/api/admin/events/:id/playoffs/format', (request, response, next) => {
-    const id = parseId(request.params.id);
-    try {
-      const bestOf = database.valorantPlayoffs.setGrandFinalBestOf(id, request.body?.bestOf);
-      draftStream.publish(id, 'competition_updated');
-      response.json({ grandFinalBestOf: bestOf });
     } catch (error) { next(error); }
   });
 

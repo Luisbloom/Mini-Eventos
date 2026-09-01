@@ -37,7 +37,7 @@
       ['Jugadores', format.players], ['Equipos', format.teams], ['Capitanes', format.captains],
       ['Elecciones', format.draftPicks], ['Series RR', format.regularSeason.series],
       ['Fase regular', `BO${format.regularSeason.bestOf}`], ['Playoffs', `${format.playoffs.teams} · BO${format.playoffs.bestOf}`],
-      ['Gran Final', `BO${format.playoffs.grandFinalBestOf} por defecto`],
+      ['Gran Final', `diferencia de ${format.playoffs.grandFinalWinBy} mapas`],
       ['Eliminación', 'Doble + reset']
     ];
     id('valorant-official-summary').replaceChildren(...entries.map(([label, value]) => {

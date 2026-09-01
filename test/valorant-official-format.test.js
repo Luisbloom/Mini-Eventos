@@ -55,12 +55,12 @@ describe('formato oficial del torneo de Valorant', () => {
       bestOf: format.regularSeason.bestOf,
       playoffTeams: format.playoffs.teams,
       playoffBestOf: format.playoffs.bestOf,
-      grandFinalBestOf: format.playoffs.grandFinalBestOf,
+      grandFinalWinBy: format.playoffs.grandFinalWinBy,
       reset: format.playoffs.grandFinalReset
     }, {
       players: 20, teams: 4, teamSize: 5, captains: 4, picks: 16,
       rrSeries: 6, rrPerTeam: 3, matchdays: 3, bestOf: 1,
-      playoffTeams: 4, playoffBestOf: 3, grandFinalBestOf: 3, reset: true
+      playoffTeams: 4, playoffBestOf: 3, grandFinalWinBy: 2, reset: false
     });
     assert.equal(officialValorantFormatForSlug('otro-valorant'), null);
   });

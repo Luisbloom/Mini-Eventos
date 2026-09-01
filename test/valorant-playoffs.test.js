@@ -417,6 +417,8 @@ describe('eliminatorias de Valorant', () => {
       await anotar(SLOTS.LOWER_ROUND_1, [[13, 6], [13, 11]]);
       await anotar(SLOTS.UPPER_FINAL, [[13, 4], [13, 9]]);
       await anotar(SLOTS.LOWER_FINAL, [[13, 10], [13, 8]]);
+      // El tercer puesto también se anota: sin él no hay 3º ni 4º.
+      await anotar(SLOTS.THIRD_PLACE, [[13, 7], [13, 9]]);
       await anotar(SLOTS.GRAND_FINAL, [[13, 5], [13, 11]]);
 
       const tabla = database.valorantPlayoffs.standings(event.id);
@@ -471,7 +473,7 @@ describe('eliminatorias de Valorant', () => {
       assert.equal(otra.body.error.code, 'PLAYOFFS_ALREADY_EXIST');
 
       // Y no se han duplicado series.
-      assert.equal(contexto.database.valorantPlayoffs.listSeries(event.id).length, 6);
+      assert.equal(contexto.database.valorantPlayoffs.listSeries(event.id).length, 7);
     });
 
     it('un force en el cuerpo tampoco la rehace', async () => {
@@ -510,7 +512,7 @@ describe('eliminatorias de Valorant', () => {
 
         const generada = await admin(app, 'post',
           `/api/admin/events/${event.id}/playoffs/generate`, {}).expect(201);
-        assert.equal(generada.body.series.length, 6);
+        assert.equal(generada.body.series.length, 7);
 
         const series = database.valorantPlayoffs.listSeries(event.id);
         const cuatro = tabla.standings.slice(0, 4).map((f) => f.teamId);
@@ -567,8 +569,8 @@ describe('eliminatorias de Valorant', () => {
         assert.equal(serie.teamBId, null);
         assert.equal(serie.status, 'PENDING');
       }
-      // Y la reposición ni siquiera existe.
-      assert.equal(porSlot(series, SLOTS.GRAND_FINAL_RESET), undefined);
+      // Y el cuadro nace entero: ya no hay ninguna serie condicional.
+      assert.equal(series.length, 7);
     });
 
     it('en público salen como «por determinar»', async () => {
@@ -587,48 +589,6 @@ describe('eliminatorias de Valorant', () => {
 
   // ================================================ FORMATO DE LA FINAL
 
-  describe('a cuántos mapas se juega la gran final', () => {
-    it('por defecto al mejor de tres, y puede ponerse a cinco antes de empezar', async () => {
-      const contexto = ligaMontada(4);
-      jugarLiga(contexto);
-      const { database, app, event } = contexto;
-
-      await admin(app, 'put', `/api/admin/events/${event.id}/playoffs/format`, { bestOf: 5 }).expect(200);
-      await admin(app, 'post', `/api/admin/events/${event.id}/playoffs/generate`, {}).expect(201);
-
-      const series = database.valorantPlayoffs.listSeries(event.id);
-      assert.equal(porSlot(series, SLOTS.GRAND_FINAL).bestOf, 5);
-      assert.equal(porSlot(series, SLOTS.GRAND_FINAL).games.length, 5);
-      assert.equal(porSlot(series, SLOTS.UPPER_SEMI_1).bestOf, 3, 'las demás siguen a tres');
-    });
-
-    it('sólo admite tres o cinco', async () => {
-      const contexto = ligaMontada(4);
-      jugarLiga(contexto);
-      const { app, event } = contexto;
-      for (const bestOf of [1, 2, 4, 7, 0]) {
-        const respuesta = await admin(app, 'put',
-          `/api/admin/events/${event.id}/playoffs/format`, { bestOf });
-        assert.equal(respuesta.status, 400, String(bestOf));
-        assert.equal(respuesta.body.error.code, 'INVALID_BEST_OF');
-      }
-    });
-
-    it('no se cambia con el cuadro ya en marcha', async () => {
-      const contexto = ligaMontada(4);
-      jugarLiga(contexto);
-      const { database, app, event } = contexto;
-      await admin(app, 'post', `/api/admin/events/${event.id}/playoffs/generate`, {}).expect(201);
-
-      const semi = porSlot(database.valorantPlayoffs.listSeries(event.id), SLOTS.UPPER_SEMI_1);
-      ganarSerie(database, event, semi.id, semi.teamAId);
-
-      const respuesta = await admin(app, 'put',
-        `/api/admin/events/${event.id}/playoffs/format`, { bestOf: 5 });
-      assert.equal(respuesta.status, 409);
-      assert.equal(respuesta.body.error.code, 'PLAYOFFS_IN_PROGRESS');
-    });
-  });
 
   // ================================================ SERIES Y MAPAS
 
@@ -703,77 +663,6 @@ describe('eliminatorias de Valorant', () => {
     });
   });
 
-  describe('series al mejor de cinco', () => {
-    function hastaGranFinalBo5() {
-      const contexto = ligaMontada(4);
-      jugarLiga(contexto);
-      const { database, event, equipos } = contexto;
-      database.valorantPlayoffs.setGrandFinalBestOf(event.id, 5, { actor: 'prueba BO5' });
-      database.valorantPlayoffs.generate(event.id, equipos);
-      const dame = (slot) => porSlot(database.valorantPlayoffs.listSeries(event.id), slot);
-
-      const semi1 = dame(SLOTS.UPPER_SEMI_1);
-      const semi2 = dame(SLOTS.UPPER_SEMI_2);
-      ganarSerie(database, event, semi1.id, semi1.teamAId);
-      ganarSerie(database, event, semi2.id, semi2.teamAId);
-
-      const lowerRound = dame(SLOTS.LOWER_ROUND_1);
-      ganarSerie(database, event, lowerRound.id, lowerRound.teamAId);
-      const upperFinal = dame(SLOTS.UPPER_FINAL);
-      ganarSerie(database, event, upperFinal.id, upperFinal.teamAId);
-      const lowerFinal = dame(SLOTS.LOWER_FINAL);
-      ganarSerie(database, event, lowerFinal.id, lowerFinal.teamAId);
-
-      return { ...contexto, grandFinal: dame(SLOTS.GRAND_FINAL), dame };
-    }
-
-    function playSequence(database, event, series, winnerSides) {
-      const maps = ['ascent', 'bind', 'haven', 'lotus', 'split'];
-      winnerSides.forEach((side, index) => {
-        const gameNumber = index + 1;
-        database.valorantCompetition.assignMap(event.id, {
-          seriesId: series.id, gameNumber, mapKey: maps[index]
-        });
-        database.valorantCompetition.recordGameResult(event.id, {
-          seriesId: series.id, gameNumber,
-          teamARounds: side === 'a' ? 13 : 6,
-          teamBRounds: side === 'b' ? 13 : 6,
-          reason: 'secuencia BO5'
-        });
-      });
-      return database.valorantPlayoffs.getSeries(event.id, series.id);
-    }
-
-    for (const [score, sequence, statuses] of [
-      ['3-0', ['a', 'a', 'a'], ['COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED', 'NOT_NEEDED']],
-      ['3-1', ['a', 'b', 'a', 'a'], ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED']],
-      ['3-2', ['a', 'b', 'a', 'b', 'a'], ['COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED', 'COMPLETED']]
-    ]) {
-      it(`${score} exige tres victorias y marca sólo lo que no hace falta`, () => {
-        const { database, event, grandFinal } = hastaGranFinalBo5();
-        const completed = playSequence(database, event, grandFinal, sequence);
-        assert.equal(completed.bestOf, 5);
-        assert.equal(completed.winnerTeamId, grandFinal.teamAId);
-        assert.deepEqual(completed.games.map((game) => game.status), statuses);
-      });
-    }
-
-    it('la reposición de una Gran Final BO5 también es BO5 y termina al 3-0', () => {
-      const { database, event, grandFinal, dame } = hastaGranFinalBo5();
-      const firstFinal = playSequence(database, event, grandFinal, ['b', 'b', 'b']);
-      assert.equal(firstFinal.bestOf, 5);
-      assert.deepEqual(firstFinal.games.map((game) => game.status),
-        ['COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED', 'NOT_NEEDED']);
-
-      const reset = dame(SLOTS.GRAND_FINAL_RESET);
-      assert.ok(reset);
-      assert.equal(reset.bestOf, 5);
-      const completedReset = playSequence(database, event, reset, ['a', 'a', 'a']);
-      assert.equal(completedReset.winnerTeamId, reset.teamAId);
-      assert.deepEqual(completedReset.games.map((game) => game.status),
-        ['COMPLETED', 'COMPLETED', 'COMPLETED', 'NOT_NEEDED', 'NOT_NEEDED']);
-    });
-  });
 
   // ================================================ RECORRIDO COMPLETO
 
@@ -814,14 +703,14 @@ describe('eliminatorias de Valorant', () => {
       assert.equal(porSlot(series, SLOTS.LOWER_FINAL).status, 'PENDING');
     });
 
-    it('camino sin reposición: gana el del cuadro alto', () => {
+    it('gana el del cuadro alto y el torneo se cierra ahí', () => {
       const contexto = hastaLasSemis();
       const { database, event, equipos } = contexto;
       const dame = (slot) => porSlot(database.valorantPlayoffs.listSeries(event.id), slot);
 
       const rondaBaja = dame(SLOTS.LOWER_ROUND_1);
       ganarSerie(database, event, rondaBaja.id, rondaBaja.teamAId);
-      const cuarto = rondaBaja.teamBId;
+      const cayoAbajo = rondaBaja.teamBId;
 
       const finalAlta = dame(SLOTS.UPPER_FINAL);
       const deArriba = finalAlta.teamAId;
@@ -830,14 +719,19 @@ describe('eliminatorias de Valorant', () => {
       const finalBaja = dame(SLOTS.LOWER_FINAL);
       assert.equal(finalBaja.teamBId, finalAlta.teamBId, 'el que pierde arriba baja');
       ganarSerie(database, event, finalBaja.id, finalBaja.teamAId);
-      const tercero = finalBaja.teamBId;
+      const cayoEnLaFinalBaja = finalBaja.teamBId;
+
+      // El tercer puesto lo juegan los dos que cayeron, y se juega ANTES.
+      const tercerPuesto = dame(SLOTS.THIRD_PLACE);
+      assert.deepEqual(
+        [tercerPuesto.teamAId, tercerPuesto.teamBId].sort(),
+        [cayoAbajo, cayoEnLaFinalBaja].sort());
+      ganarSerie(database, event, tercerPuesto.id, cayoAbajo);
 
       const granFinal = dame(SLOTS.GRAND_FINAL);
       assert.equal(granFinal.teamAId, deArriba);
+      assert.equal(granFinal.winBy, 2, 'la final se gana por diferencia de dos mapas');
       ganarSerie(database, event, granFinal.id, deArriba);
-
-      // No hay reposición: el de arriba llegaba sin derrotas y ganó.
-      assert.equal(dame(SLOTS.GRAND_FINAL_RESET), undefined);
 
       const tabla = database.valorantPlayoffs.standings(event.id);
       assert.equal(tabla.status, 'COMPLETED');
@@ -846,8 +740,10 @@ describe('eliminatorias de Valorant', () => {
       const puesto = (teamId) => tabla.placements.find((f) => f.teamId === teamId).position;
       assert.equal(puesto(tabla.champion), 1);
       assert.equal(puesto(tabla.runnerUp), 2);
-      assert.equal(puesto(tercero), 3);
-      assert.equal(puesto(cuarto), 4);
+      // El tercero es quien GANÓ el partido por el tercer puesto, aunque
+      // hubiera caído del cuadro una ronda antes que el otro.
+      assert.equal(puesto(cayoAbajo), 3);
+      assert.equal(puesto(cayoEnLaFinalBaja), 4);
 
       // Y el quinto y el sexto de la liga nunca entraron.
       const liga = database.valorantCompetition.standings(event.id, { teams: equipos });
@@ -857,7 +753,7 @@ describe('eliminatorias de Valorant', () => {
       }
     });
 
-    it('camino con reposición: gana el del cuadro bajo', () => {
+    it('gana el del cuadro bajo y es campeón, sin repetir la final', () => {
       const contexto = hastaLasSemis();
       const { database, event } = contexto;
       const dame = (slot) => porSlot(database.valorantPlayoffs.listSeries(event.id), slot);
@@ -872,8 +768,10 @@ describe('eliminatorias de Valorant', () => {
       const finalBaja = dame(SLOTS.LOWER_FINAL);
       const deAbajo = finalBaja.teamAId;
       ganarSerie(database, event, finalBaja.id, deAbajo);
+      ganarSerie(database, event, dame(SLOTS.THIRD_PLACE).id,
+        dame(SLOTS.THIRD_PLACE).teamAId);
 
-      // --- antes de la gran final: uno sin derrotas y otro con una ---
+      // --- antes de la final: uno sin derrotas y otro con una ---
       let derrotas = database.valorantPlayoffs.losses(event.id);
       assert.equal(derrotas.get(deArriba) ?? 0, 0, 'el del cuadro alto llega intacto');
       assert.equal(derrotas.get(deAbajo), 1, 'el del bajo llega con una');
@@ -881,34 +779,21 @@ describe('eliminatorias de Valorant', () => {
       const granFinal = dame(SLOTS.GRAND_FINAL);
       ganarSerie(database, event, granFinal.id, deAbajo);
 
-      // --- ahora los dos tienen una: hay que repetir ---
-      derrotas = database.valorantPlayoffs.losses(event.id);
-      assert.equal(derrotas.get(deArriba), 1);
-      assert.equal(derrotas.get(deAbajo), 1);
+      /*
+        Aquí está la decisión del formato. En doble eliminación pura haría falta
+        una segunda final, porque el de arriba llegaba sin derrotas. La final va
+        aparte: se juega a cero y quien la gana es campeón.
+      */
+      assert.equal(dame('GRAND_FINAL_RESET'), undefined, 'ya no existe la reposición');
 
-      const reposicion = dame(SLOTS.GRAND_FINAL_RESET);
-      assert.ok(reposicion, 'tiene que aparecer la reposición');
-      assert.equal(reposicion.status, 'READY');
-      assert.equal(reposicion.bestOf, granFinal.bestOf, 'al mismo número de mapas');
-      assert.deepEqual([reposicion.teamAId, reposicion.teamBId].sort(), [deArriba, deAbajo].sort());
-
-      // Mientras no se juegue, no hay campeón y nadie está eliminado.
-      let tabla = database.valorantPlayoffs.standings(event.id);
-      assert.equal(tabla.status, 'PENDING');
-      assert.equal(tabla.champion, null);
-      for (const teamId of [deArriba, deAbajo]) {
-        assert.equal(tabla.placements.find((f) => f.teamId === teamId).result, 'ACTIVE',
-          'con una derrota nadie está fuera');
-      }
-
-      // --- se juega y decide ---
-      ganarSerie(database, event, reposicion.id, deArriba);
-      tabla = database.valorantPlayoffs.standings(event.id);
+      const tabla = database.valorantPlayoffs.standings(event.id);
       assert.equal(tabla.status, 'COMPLETED');
-      assert.equal(tabla.champion, deArriba);
-      assert.equal(tabla.runnerUp, deAbajo);
-      assert.equal(tabla.placements.find((f) => f.teamId === deAbajo).losses, 2,
-        'el subcampeón termina con dos derrotas');
+      assert.equal(tabla.champion, deAbajo);
+      assert.equal(tabla.runnerUp, deArriba);
+
+      derrotas = database.valorantPlayoffs.losses(event.id);
+      assert.equal(derrotas.get(deAbajo), 1, 'el campeón termina con una derrota, y vale');
+      assert.equal(derrotas.get(deArriba), 1, 'y el subcampeón, con la de la final');
     });
   });
 
@@ -1208,7 +1093,7 @@ describe('eliminatorias de Valorant', () => {
   });
 
   describe('recorrido pre-deploy de seis equipos', () => {
-    it('va de 30 inscritos a campeón con captura, reset y auditoría reconstruible', async () => {
+    it('va de 30 inscritos a campeón con captura, tercer puesto y auditoría reconstruible', async () => {
       const contexto = ligaMontada(6);
       const { database, event, equipos, gente, directorio } = contexto;
       const regular = jugarLiga(contexto);
@@ -1297,23 +1182,25 @@ describe('eliminatorias de Valorant', () => {
 
       const lowerRound = dame(SLOTS.LOWER_ROUND_1);
       ganarSerie(database, event, lowerRound.id, lowerRound.teamAId);
-      const fourth = lowerRound.teamBId;
       const upperFinal = dame(SLOTS.UPPER_FINAL);
       ganarSerie(database, event, upperFinal.id, upperFinal.teamAId);
       const lowerFinal = dame(SLOTS.LOWER_FINAL);
       ganarSerie(database, event, lowerFinal.id, lowerFinal.teamAId);
-      const third = lowerFinal.teamBId;
 
+      // El tercer puesto se juega: lo ganan los que cayeron, y decide el orden.
+      const thirdPlace = dame(SLOTS.THIRD_PLACE);
+      ganarSerie(database, event, thirdPlace.id, thirdPlace.teamAId);
+      const third = thirdPlace.teamAId;
+      const fourthByMatch = thirdPlace.teamBId;
+
+      // La final va aparte: quien la gana es campeón, sin repetirla.
       const grandFinal = dame(SLOTS.GRAND_FINAL);
       ganarSerie(database, event, grandFinal.id, grandFinal.teamBId);
-      const reset = dame(SLOTS.GRAND_FINAL_RESET);
-      assert.ok(reset);
-      ganarSerie(database, event, reset.id, reset.teamAId);
 
       const finalTable = database.valorantPlayoffs.standings(event.id);
       assert.equal(finalTable.status, 'COMPLETED');
       assert.equal(finalTable.placements.length, 4);
-      assert.equal(finalTable.placements.find((row) => row.teamId === fourth).position, 4);
+      assert.equal(finalTable.placements.find((row) => row.teamId === fourthByMatch).position, 4);
       assert.equal(finalTable.placements.find((row) => row.teamId === third).position, 3);
       assert.equal(finalTable.placements.find((row) => row.position === 1).teamId, finalTable.champion);
       assert.equal(finalTable.placements.find((row) => row.position === 2).teamId, finalTable.runnerUp);
@@ -1330,7 +1217,8 @@ describe('eliminatorias de Valorant', () => {
       assert.ok(audit.some((entry) => entry.action === 'RESULT_CORRECTED'
         && entry.reason === 'corrección auditada de rondas'));
       assert.ok(audit.some((entry) => entry.action === 'PLAYOFF_BRACKET_ADVANCED'));
-      assert.ok(audit.some((entry) => entry.action === 'PLAYOFF_RESET_CREATED'));
+      // Ya no hay reposición que crear: el cuadro nace entero.
+      assert.ok(!audit.some((entry) => entry.action === 'PLAYOFF_RESET_CREATED'));
     });
   });
 
@@ -1351,7 +1239,7 @@ describe('eliminatorias de Valorant', () => {
       const cuadro = publico.body.playoffs;
 
       assert.equal(cuadro.generated, true);
-      assert.equal(cuadro.series.length, 6);
+      assert.equal(cuadro.series.length, 7);
       const jugada = cuadro.series.find((s) => s.slot === SLOTS.UPPER_SEMI_1);
       assert.equal(jugada.label, 'Semifinal alta 1');
       assert.equal(jugada.bracket, 'UPPER');

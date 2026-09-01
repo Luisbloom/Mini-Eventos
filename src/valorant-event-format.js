@@ -77,10 +77,12 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
   playoffs: Object.freeze({
     teams: 4,
     bestOf: 3,
-    grandFinalBestOf: 3,
-    grandFinalAllowedBestOf: Object.freeze([3, 5]),
     doubleElimination: true,
-    grandFinalReset: true,
+    // La final va aparte del cuadro: nadie llega con ventaja y por eso no hay
+    // reposición. Se gana por diferencia de dos mapas, no al mejor de tres.
+    grandFinalReset: false,
+    grandFinalWinBy: 2,
+    thirdPlaceMatch: true,
     openingPairings: Object.freeze(['1º vs 4º', '2º vs 3º'])
   }),
   guaranteedSeriesPerTeam: 5,
@@ -161,14 +163,15 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     regularSeason: 'Cada equipo se enfrentará una vez a cada rival, en BO1. Con 20 jugadores son seis series en tres jornadas; con 30, quince en cinco; con 40, veintiocho en siete. Esta fase no elimina a nadie; sólo ordena del 1º al 4º.',
     standings: 'Las victorias son la prioridad. Con cuatro equipos todos clasifican a playoffs; con seis u ocho, sólo los cuatro primeros. La posición obtenida determina los cruces.',
     tiebreakers: 'En caso de empate mandan, por este orden: victorias, enfrentamiento directo —sólo si empatan dos equipos—, diferencia de rondas y, si nada de eso separa, las estadísticas: va delante el equipo con mejor ACS medio. La organización sólo interviene si tampoco eso los separa.',
-    playoffs: 'El 1º jugará contra el 4º y el 2º contra el 3º. La primera derrota envía al cuadro inferior; la segunda elimina. Todas las series de playoffs serán BO3.',
-    grandFinalReset: 'Si el equipo procedente del cuadro inferior gana la primera Gran Final al equipo que seguía invicto, se disputará una serie final de desempate, ya que ambos tendrán entonces una derrota.',
+    playoffs: 'El 1º jugará contra el 4º y el 2º contra el 3º. La primera derrota envía al cuadro inferior; la segunda deja fuera de la pelea por el título. Todas las series de playoffs serán BO3, salvo la Gran Final, que tiene su propia regla.',
+    grandFinal: 'La Gran Final va aparte del cuadro: los dos finalistas llegan a cero y no se arrastran las derrotas anteriores. No hay serie de reposición, así que quien gana la Gran Final es campeón, venga del cuadro que venga. Se juega por diferencia de dos mapas: gana quien saque dos de ventaja —2-0, 3-1, 4-2—, así que un 2-1 no cierra la final y se sigue jugando.',
+    thirdPlace: 'Los dos equipos que caen del cuadro no heredan el puesto: lo juegan. El que pierde la ronda baja 1 y el que pierde la final baja se enfrentan en el partido por el tercer y cuarto puesto, a BO3, antes de la Gran Final.',
     matches: 'Las series se jugarán en partidas personalizadas de VALORANT. La fecha, los horarios y el servidor de juego se anunciarán antes del torneo.',
     days: 'El torneo puede jugarse en un solo día o repartirse en dos. Lo decide el calendario de disponibilidad: si hay dos días que reúnen a la misma gente, se estudiará partirlo —normalmente draft y fase regular el primero, playoffs el segundo— para no encadenar una sesión demasiado larga. Se anunciará junto con la fecha.',
-    volume: 'Con 20 jugadores se disputan 6 series de liga y hasta 7 de playoffs: entre 18 y 27 mapas en total. Con 30, la liga sube a 15 series (27 a 36 mapas); con 40, a 28 series (40 a 49 mapas). Cada equipo juega 3, 5 o 7 partidos de liga según el tamaño, y entre 2 y 4 series de playoffs —5 si hay final de desempate—, lo que en el torneo de 20 son entre 7 y 18 mapas por equipo.',
+    volume: 'Con 20 jugadores se disputan 6 series de liga y 7 de playoffs. Cada equipo juega 3 partidos de liga —5 con 30 jugadores, 7 con 40— y entre 3 y 4 eliminatorias, porque todos los que caen del cuadro juegan además el tercer puesto. El campeón acaba jugando 6 partidos si gana la final viniendo del cuadro alto y 7 si llega por el bajo.',
     bans: 'Quedan vetadas las armas Odin y Ares, y la agente Neon. Usar cualquiera de ellas descalifica al equipo entero en ese mismo momento: no es un aviso ni se revisa después.',
     pauses: 'No hay pausas dentro de una partida: una vez empezada, se juega hasta el final. Entre las partidas de una misma serie sí hay un descanso antes de pasar al siguiente mapa.',
-    formats: 'BO1: un mapa. BO3: primero en ganar dos mapas. La Gran Final será BO3 por defecto y podrá anunciarse previamente como BO5 si el horario lo permite.',
+    formats: 'BO1: un mapa, y gana quien lo gane. BO3: primero en ganar dos mapas, así que dura dos o tres. La Gran Final no es al mejor de N: se juega hasta que un equipo saque dos mapas de ventaja.',
     maps: 'Los mapas los decide la organización y se anuncian antes de cada serie: no hay veto ni sorteo entre los equipos. En BO3 no se repite mapa dentro de la misma serie. El map pool se publica el mismo día del torneo.',
     results: 'Los resultados oficiales se registrarán en la plataforma y serán revisados por la organización.',
     stats: 'Los marcadores y estadísticas confirmados de las partidas personalizadas se publicarán en la plataforma.',
@@ -275,8 +278,6 @@ function officialFormatForEvent(event) {
 const { PLAN, SLOTS } = require('./services/playoffs/bracket');
 
 function recorrerCuadro() {
-  const rondas = PLAN.filter((serie) => serie.slot !== SLOTS.GRAND_FINAL_RESET);
-
   const equipoDe = (referencia, ganadores) => {
     if (referencia.seed) return referencia.seed;
     const [a, b] = participantes(referencia.from, ganadores);
@@ -290,72 +291,85 @@ function recorrerCuadro() {
 
   let minimo = Infinity;
   let maximo = 0;
-  let invicto = 0;
-  let porAbajo = 0;
+  const campeonSegunCamino = { undefeated: 0, throughLowerBracket: 0 };
 
-  for (let combinacion = 0; combinacion < (1 << rondas.length); combinacion += 1) {
+  for (let combinacion = 0; combinacion < (1 << PLAN.length); combinacion += 1) {
     const ganadores = {};
-    rondas.forEach((serie, i) => { ganadores[serie.slot] = (combinacion >> i) & 1 ? 'a' : 'b'; });
+    PLAN.forEach((serie, i) => { ganadores[serie.slot] = (combinacion >> i) & 1 ? 'a' : 'b'; });
 
     const jugadas = new Map();
-    for (const serie of rondas) {
+    for (const serie of PLAN) {
       for (const equipo of participantes(serie.slot, ganadores)) {
         jugadas.set(equipo, (jugadas.get(equipo) || 0) + 1);
       }
     }
-
-    const granFinal = PLAN.find((fila) => fila.slot === SLOTS.GRAND_FINAL);
-    const [arriba, abajo] = participantes(SLOTS.GRAND_FINAL, ganadores);
-    const ganaLaFinal = ganadores[granFinal.slot] === 'a' ? arriba : abajo;
-    const hayReset = ganaLaFinal !== arriba;
-    // Con reset, la juegan los dos finalistas: cuenta para el máximo de todos.
-    if (hayReset) for (const finalista of [arriba, abajo]) jugadas.set(finalista, jugadas.get(finalista) + 1);
-
     for (const total of jugadas.values()) {
       minimo = Math.min(minimo, total);
       maximo = Math.max(maximo, total);
     }
-    const campeon = jugadas.get(ganaLaFinal);
-    if (hayReset) porAbajo = Math.max(porAbajo, campeon);
-    else invicto = Math.max(invicto, campeon);
+
+    const [porArriba, porAbajo] = participantes(SLOTS.GRAND_FINAL, ganadores);
+    const campeon = ganadores[SLOTS.GRAND_FINAL] === 'a' ? porArriba : porAbajo;
+    const camino = campeon === porArriba ? 'undefeated' : 'throughLowerBracket';
+    campeonSegunCamino[camino] = Math.max(campeonSegunCamino[camino], jugadas.get(campeon));
   }
 
   return Object.freeze({
-    series: PLAN.length - 1,
-    seriesWithReset: PLAN.length,
+    series: PLAN.length,
     perTeam: Object.freeze({ min: minimo, max: maximo }),
-    champion: Object.freeze({ undefeated: invicto, throughLowerBracket: porAbajo })
+    champion: Object.freeze(campeonSegunCamino)
   });
 }
 
 const PLAYOFF_LOAD = recorrerCuadro();
 
-/** Los mapas de una serie, según a cuántos se juegue. */
+/** Los mapas que puede durar una serie al mejor de N. */
 const mapasDe = (bestOf, series) => ({
   min: series * Math.ceil((bestOf + 1) / 2),
   max: series * bestOf
 });
 
+/*
+  La gran final no es al mejor de N: se gana por diferencia de dos mapas.
+
+  Lo mínimo es un 2-0. A partir de ahí sólo puede acabar en diferencia par —3-1,
+  4-2—, así que el rango que se publica es el realista, no el teórico: una serie
+  a dos de ventaja no tiene tope duro y anunciar «hasta nueve mapas» asustaría
+  describiendo algo que no va a pasar.
+*/
+const GRAND_FINAL_MAPS = Object.freeze({ min: 2, typicalMax: 4 });
+
 /**
  * El resumen de partidos de un tamaño de torneo.
  *
- * `grandFinalBestOf` cambia la cuenta porque la final de desempate se juega al
- * mismo formato que la gran final.
+ * Un «partido» es una eliminatoria; los «mapas» son las partidas de dentro. En
+ * la liga coinciden porque son BO1; en playoffs no.
  */
-function matchSummary(players, { grandFinalBestOf = 3 } = {}) {
+function matchSummary(players) {
   const size = officialSizeForPlayers(players);
   if (!size) return null;
 
   const liga = size.regularSeason;
-  const finales = (cuantas) => {
-    // De las series del campeón, una es la gran final; con reset, dos.
-    const normales = mapasDe(3, cuantas.series - cuantas.finals);
-    const grandes = mapasDe(grandFinalBestOf, cuantas.finals);
-    return { min: normales.min + grandes.min, max: normales.max + grandes.max };
+
+  // De las series de playoffs de un equipo, una puede ser la gran final.
+  const conFinal = (cuantas, juegaLaFinal) => {
+    const normales = mapasDe(3, cuantas - (juegaLaFinal ? 1 : 0));
+    return {
+      min: normales.min + (juegaLaFinal ? GRAND_FINAL_MAPS.min : 0),
+      max: normales.max + (juegaLaFinal ? GRAND_FINAL_MAPS.typicalMax : 0)
+    };
   };
 
-  const campeonInvicto = finales({ series: PLAYOFF_LOAD.champion.undefeated, finals: 1 });
-  const campeonAbajo = finales({ series: PLAYOFF_LOAD.champion.throughLowerBracket, finals: 2 });
+  const campeon = (series) => {
+    const mapas = conFinal(series, true);
+    return Object.freeze({
+      matches: liga.seriesPerTeam + series,
+      maps: Object.freeze({
+        min: liga.seriesPerTeam + mapas.min,
+        max: liga.seriesPerTeam + mapas.max
+      })
+    });
+  };
 
   return Object.freeze({
     players: size.players,
@@ -363,29 +377,16 @@ function matchSummary(players, { grandFinalBestOf = 3 } = {}) {
     league: Object.freeze({
       series: liga.series,
       matchdays: liga.matchdays,
-      perTeam: liga.seriesPerTeam,       // BO1: un mapa por partido
+      perTeam: liga.seriesPerTeam,
       maps: liga.series
     }),
     playoffs: Object.freeze({
       series: PLAYOFF_LOAD.series,
-      seriesWithReset: PLAYOFF_LOAD.seriesWithReset,
       perTeam: PLAYOFF_LOAD.perTeam
     }),
     champion: Object.freeze({
-      undefeated: Object.freeze({
-        matches: liga.seriesPerTeam + PLAYOFF_LOAD.champion.undefeated,
-        maps: Object.freeze({
-          min: liga.seriesPerTeam + campeonInvicto.min,
-          max: liga.seriesPerTeam + campeonInvicto.max
-        })
-      }),
-      throughLowerBracket: Object.freeze({
-        matches: liga.seriesPerTeam + PLAYOFF_LOAD.champion.throughLowerBracket,
-        maps: Object.freeze({
-          min: liga.seriesPerTeam + campeonAbajo.min,
-          max: liga.seriesPerTeam + campeonAbajo.max
-        })
-      })
+      undefeated: campeon(PLAYOFF_LOAD.champion.undefeated),
+      throughLowerBracket: campeon(PLAYOFF_LOAD.champion.throughLowerBracket)
     })
   });
 }

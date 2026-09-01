@@ -56,7 +56,6 @@
       aviso(listo
         ? 'La fase regular está terminada: ya se puede montar el cuadro.'
         : (PORQUE_NO[estado.readiness?.code] ?? estado.readiness?.message ?? ''));
-      id('playoffs-gf-format').value = String(estado.grandFinalBestOf ?? 3);
       return;
     }
 
@@ -385,8 +384,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     id('generate-playoffs')?.addEventListener('click', generar);
-    id('playoffs-gf-format')?.addEventListener('change', (suceso) =>
-      guardarFormato(suceso.target.value));
   });
 
   window.addEventListener('jartiland:competition-updated', () => { refrescar(); });
