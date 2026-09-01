@@ -86,7 +86,10 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
   guaranteedSeriesPerTeam: 5,
   tiebreakers: Object.freeze({
     primary: 'wins',
-    twoTeam: Object.freeze(['head_to_head', 'round_diff']),
+    twoTeam: Object.freeze(['head_to_head', 'round_diff', 'team_stats']),
+    // Decidido el 2026-09-01: si nada de lo anterior separa, va delante el
+    // equipo con mejores estadísticas (ACS medio de sus jugadores).
+    stats: 'team_stats',
     final: 'ADMIN_REQUIRED'
   }),
   /*
@@ -140,7 +143,7 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     draft: 'El draft se realizará en directo, en un canal de voz y con elecciones públicas por turnos. Habrá cuatro rondas de elección. La organización anunciará el orden definitivo antes del draft y podrá utilizar orden serpiente.',
     regularSeason: 'Cada equipo se enfrentará una vez a cada rival, en BO1. Con 20 jugadores son seis series en tres jornadas; con 30, quince en cinco; con 40, veintiocho en siete. Esta fase no elimina a nadie; sólo ordena del 1º al 4º.',
     standings: 'Las victorias son la prioridad. Con cuatro equipos todos clasifican a playoffs; con seis u ocho, sólo los cuatro primeros. La posición obtenida determina los cruces.',
-    tiebreakers: 'En caso de empate se utilizarán criterios deportivos como enfrentamiento directo y diferencia de rondas. Si fuese necesario, la organización resolverá el desempate.',
+    tiebreakers: 'En caso de empate mandan, por este orden: victorias, enfrentamiento directo —sólo si empatan dos equipos—, diferencia de rondas y, si nada de eso separa, las estadísticas: va delante el equipo con mejor ACS medio. La organización sólo interviene si tampoco eso los separa.',
     playoffs: 'El 1º jugará contra el 4º y el 2º contra el 3º. La primera derrota envía al cuadro inferior; la segunda elimina. Todas las series de playoffs serán BO3.',
     grandFinalReset: 'Si el equipo procedente del cuadro inferior gana la primera Gran Final al equipo que seguía invicto, se disputará una serie final de desempate, ya que ambos tendrán entonces una derrota.',
     matches: 'Las series se jugarán en partidas personalizadas de VALORANT. La fecha, los horarios y el servidor de juego se anunciarán antes del torneo.',

@@ -647,7 +647,7 @@ describe('fase regular de Valorant', () => {
       database.valorantCompetition.generateRegularSeason(event.id, equipos.map((e) => e.id));
 
       const settings = database.valorantCompetition.getSettings(event.id);
-      assert.deepEqual(settings.tiebreakers, ['wins', 'head_to_head', 'round_diff', 'rounds_for']);
+      assert.deepEqual(settings.tiebreakers, ['wins', 'head_to_head', 'round_diff', 'team_stats', 'rounds_for']);
 
       // Con tres empatados, el criterio que decide es el siguiente configurado,
       // no un "le gané a uno" que no ordena nada.

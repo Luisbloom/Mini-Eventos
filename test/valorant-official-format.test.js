@@ -242,7 +242,7 @@ describe('formato oficial del torneo de Valorant', () => {
     const competition = database.valorantCompetition;
 
     assert.deepEqual(competition.getSettings(event.id).tiebreakers,
-      ['wins', 'head_to_head', 'round_diff']);
+      ['wins', 'head_to_head', 'round_diff', 'team_stats']);
     assert.throws(() => competition.setSettings(event.id, {
       tiebreakers: ['wins', 'head_to_head', 'round_diff', 'rounds_for']
     }), (error) => error.code === 'OFFICIAL_TIEBREAKER_NOT_CONFIGURED');

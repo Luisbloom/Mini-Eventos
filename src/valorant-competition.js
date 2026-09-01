@@ -51,7 +51,7 @@ const DEFAULT_MAP_POOL = Object.freeze([
  * victorias.
  */
 const PRIMARY_TIEBREAKER = 'wins';
-const SECONDARY_TIEBREAKERS = Object.freeze(['head_to_head', 'round_diff', 'rounds_for']);
+const SECONDARY_TIEBREAKERS = Object.freeze(['head_to_head', 'round_diff', 'team_stats', 'rounds_for']);
 
 /**
  * ¿Hay una cadena de resoluciones que ponga a `arriba` por delante de `abajo`?
@@ -1371,11 +1371,41 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
         ...fila, roundDiff: fila.roundsFor - fila.roundsAgainst
       }));
 
+      /*
+        Rendimiento del equipo, para cuando el marcador no separa.
+
+        Se usa el **ACS medio por jugador y partida**, que es la medida
+        estándar de quién jugó mejor en VALORANT. Los totales premiarían a
+        quien más partidas jugó, y aquí todos juegan las mismas.
+
+        ⚠️ Sólo existe si los resultados entraron por captura: un marcador
+        tecleado a mano no trae estadísticas. Sin datos de alguno de los dos,
+        el criterio no separa y se pasa al siguiente.
+      */
+      const rendimiento = new Map();
+      for (const fila of connection.prepare(`
+        SELECT st.team_id, AVG(st.acs) media, COUNT(st.acs) muestras
+        FROM valorant_player_game_stats st
+        JOIN valorant_games g ON g.id = st.game_id
+        JOIN valorant_series s ON s.id = g.series_id
+        WHERE s.event_id=? AND s.stage=? AND g.status='COMPLETED' AND st.acs IS NOT NULL
+        GROUP BY st.team_id`).all(eventId, stage)) {
+        if (fila.muestras > 0) rendimiento.set(fila.team_id, fila.media);
+      }
+
       const porCriterio = (criterio, uno, otro, empatados) => {
         switch (criterio) {
           case 'wins': return otro.wins - uno.wins;
           case 'round_diff': return otro.roundDiff - uno.roundDiff;
           case 'rounds_for': return otro.roundsFor - uno.roundsFor;
+          case 'team_stats': {
+            const mio = rendimiento.get(uno.teamId);
+            const suyo = rendimiento.get(otro.teamId);
+            // Sin estadísticas de alguno no se compara: mejor pasar al
+            // siguiente criterio que ordenar contra la nada.
+            if (mio === undefined || suyo === undefined || mio === suyo) return 0;
+            return suyo - mio;
+          }
           case 'head_to_head':
             // Sólo vale entre DOS. Con tres empatados, el «le gané a uno» no
             // ordena nada y aplicarlo daría un resultado arbitrario.
