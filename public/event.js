@@ -34,9 +34,9 @@ function renderMinimum(event) {
   byId('event-minimum-progress').style.width = `${Math.min(100, Math.round((event.participantCount / minimum) * 100))}%`;
 
   /*
-    En los torneos por decenas el mínimo no lo cuenta todo: con 25 confirmados
-    se ha pasado de 20 pero no se juega con 25. Se dice cuántos faltan para la
-    siguiente plantilla, que es la pregunta de quien mira el contador.
+    Lo que el contador de al lado NO dice: en cuántos equipos se traduce la
+    gente que hay. Repetir «faltan 19» dos veces con números distintos era
+    justo lo que se veía raro.
   */
   const decenas = event.rosterState;
   const nota = byId('event-roster-note');
@@ -44,19 +44,28 @@ function renderMinimum(event) {
   nota.hidden = !decenas;
   if (!decenas) return;
 
+  const equipos = (plantilla) => `${plantilla.players} jugadores · ${plantilla.teams} equipos`;
+
   if (decenas.exact) {
-    nota.textContent = `Plantilla completa: ${decenas.exact.players} jugadores, ${decenas.exact.teams} equipos.`;
+    nota.textContent = decenas.next
+      ? `Ya se puede jugar: ${equipos(decenas.exact)}. Con ${decenas.missingForNext} más serían ${decenas.next.teams}.`
+      : `Aforo completo: ${equipos(decenas.exact)}.`;
     nota.className = 'roster-note is-ready';
-  } else if (decenas.next) {
-    const sobran = decenas.leftOut > 0 && decenas.playable
-      ? ` Si se jugara ya, serían ${decenas.playable.players} y ${decenas.leftOut} se quedarían fuera.`
-      : '';
-    nota.textContent = `Faltan ${decenas.missingForNext} para completar ${decenas.next.players}.${sobran}`;
-    nota.className = 'roster-note';
-  } else {
-    nota.textContent = `Aforo completo: ${decenas.playable.players} jugadores, ${decenas.playable.teams} equipos.`;
-    nota.className = 'roster-note is-ready';
+    return;
   }
+
+  if (!decenas.playable) {
+    // Todavía por debajo del mínimo: el bloque de al lado ya dice cuántos
+    // faltan, así que aquí se explica para qué sirven.
+    nota.textContent = `Con ${decenas.next.players} se juega: ${equipos(decenas.next)}. Las plazas van de diez en diez.`;
+    nota.className = 'roster-note';
+    return;
+  }
+
+  nota.textContent = decenas.full
+    ? `Aforo completo: se juega con ${equipos(decenas.playable)}.`
+    : `Ahora mismo se jugaría con ${equipos(decenas.playable)}; ${decenas.leftOut} se quedarían fuera. Con ${decenas.missingForNext} más entran todos: ${equipos(decenas.next)}.`;
+  nota.className = decenas.full ? 'roster-note is-ready' : 'roster-note';
 }
 
 function configureModules(event) {
@@ -293,7 +302,7 @@ function pasoFormulario(event) {
       <div class="riot-field">
         <label for="riot-id">Riot ID</label>
         <input id="riot-id" name="riotId" autocomplete="off" spellcheck="false"
-               placeholder="Luisbloom#NANO" required>
+               placeholder="Jugador#EUW" required>
         <small>Lo tienes arriba a la derecha en el cliente de Riot. Lleva almohadilla.</small>
       </div>
       <div class="riot-field">

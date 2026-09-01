@@ -193,6 +193,34 @@ describe('formato oficial del torneo de Valorant', () => {
     assert.ok(html.includes('id="event-roster-note"'), 'y tiene donde pintarlo');
   });
 
+  it('la decena cuenta lo mismo que el aforo: un pendiente ya ocupa plaza', async () => {
+    const dbPath = databasePath();
+    const database = openDatabase(dbPath);
+    databases.push(database);
+    const event = createOfficialEvent(database);
+    database.updateEvent(event.id, {
+      ...database.getEventById(event.id), status: 'Inscripciones abiertas', registrationsOpen: true
+    });
+
+    // Una inscripción sin confirmar todavía.
+    const cuenta = database.valorant.upsertDiscordAccount({
+      discordUserId: 'pendiente-1', username: 'zoe', displayName: 'Zoe'
+    });
+    const creado = database.createParticipant(event.id, { discord_username: 'zoe', game_name: 'Zoe' });
+    database.valorant.linkParticipantToDiscord(creado.id, cuenta.id);
+
+    const app = createApp({ database, adminToken: 'admin-test' });
+    const cuerpo = (await request(app).get(`/api/events/${event.slug}`).expect(200)).body.event;
+
+    /*
+      La página decía «1 / 20 personas» y justo al lado «faltan 20 para
+      completar 20», porque una contaba inscritos y la otra confirmados.
+    */
+    assert.equal(cuerpo.participantCount, 1);
+    assert.equal(cuerpo.rosterState.confirmed, 1, 'la decena cuenta lo mismo que el aforo');
+    assert.equal(cuerpo.rosterState.missingForNext, 19);
+  });
+
   it('un evento que no es el oficial no habla de decenas', async () => {
     const dbPath = databasePath();
     const database = openDatabase(dbPath);

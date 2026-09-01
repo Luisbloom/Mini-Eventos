@@ -264,11 +264,16 @@ function createApp({
         event: {
           ...event,
           officialFormat: officialValorantFormatForSlug(event.slug),
-          // En qué punto está la inscripción respecto a las decenas. Se calcula
-          // con los confirmados, que es lo que decide si el torneo se puede
-          // jugar; los pendientes todavía no cuentan.
+          /*
+            En qué punto está la inscripción respecto a las decenas.
+
+            Cuenta lo mismo que el aforo —inscritos, confirmados o no—, porque
+            una inscripción pendiente ya ocupa plaza. Contar sólo confirmados
+            hacía que la página se contradijera: la barra decía «1 / 20» y
+            justo al lado «faltan 20».
+          */
           rosterState: officialValorantFormatForSlug(event.slug)
-            ? officialRosterState(database.countConfirmedParticipants(event.id))
+            ? officialRosterState(event.participantCount)
             : null,
           valorantPeakRanks: isValorant(event.game) ? VALORANT_PEAK_RANKS : []
         },
