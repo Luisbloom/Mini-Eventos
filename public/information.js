@@ -142,6 +142,61 @@ const VALORANT_TEXTOS = Object.freeze({
   stats: '#valorant-info-stats'
 });
 
+/**
+ * La tabla de «cuántos partidos». Los números llegan calculados del servidor.
+ *
+ * Un partido es una eliminatoria; los mapas son las partidas que se juegan
+ * dentro. En la liga coinciden —BO1, un mapa— y en playoffs no, y confundirlos
+ * es lo que hace que la gente crea que va a jugar tres veces y acabe jugando
+ * doce.
+ */
+function renderValorantLoad(resumenes) {
+  const cuerpo = document.querySelector('#valorant-load-body');
+  if (!cuerpo) return;
+  const bloque = cuerpo.closest('section');
+  if (!Array.isArray(resumenes) || !resumenes.length) {
+    if (bloque) bloque.hidden = true;
+    return;
+  }
+  if (bloque) bloque.hidden = false;
+
+  const celda = (texto, etiqueta) => {
+    const td = document.createElement('td');
+    td.textContent = texto;
+    if (etiqueta) {
+      const small = document.createElement('small');
+      small.textContent = etiqueta;
+      td.append(small);
+    }
+    return td;
+  };
+
+  cuerpo.replaceChildren(...resumenes.map((resumen) => {
+    const fila = document.createElement('tr');
+    const titulo = document.createElement('th');
+    titulo.scope = 'row';
+    titulo.textContent = `${resumen.players} jugadores`;
+    const equipos = document.createElement('small');
+    equipos.textContent = `${resumen.teams} equipos`;
+    titulo.append(equipos);
+    fila.append(
+      titulo,
+      celda(`${resumen.league.perTeam} partidos`, `${resumen.league.matchdays} jornadas · BO1`),
+      celda(`${resumen.playoffs.perTeam.min} a ${resumen.playoffs.perTeam.max}`, 'eliminatorias · BO3'),
+      celda(`${resumen.champion.undefeated.matches} u ${resumen.champion.throughLowerBracket.matches}`,
+        `${resumen.champion.undefeated.maps.min}–${resumen.champion.throughLowerBracket.maps.max} mapas`)
+    );
+    return fila;
+  }));
+
+  // El caso que de verdad interesa, dicho con palabras y no sólo en la tabla.
+  const veinte = resumenes[0];
+  const nota = document.querySelector('#valorant-load-note');
+  if (nota && veinte) {
+    nota.textContent = `Con ${veinte.players} jugadores, el campeón juega ${veinte.champion.undefeated.matches} partidos si gana todos (${veinte.champion.undefeated.maps.min} a ${veinte.champion.undefeated.maps.max} mapas) u ${veinte.champion.throughLowerBracket.matches} si pierde una vez por el camino (${veinte.champion.throughLowerBracket.maps.min} a ${veinte.champion.throughLowerBracket.maps.max} mapas). La horquilla sale de que cada BO3 puede acabar 2-0 o 2-1.`;
+  }
+}
+
 function renderValorantFormat(format) {
   const block = document.querySelector('#valorant-information');
   block.hidden = !format;
@@ -211,6 +266,7 @@ function render(data) {
   renderList(elements.tiebreakers, tiebreakers);
   renderFaqs(faqs);
   renderValorantFormat(data.event?.officialFormat);
+  renderValorantLoad(data.matchSummaries);
   loadSchedule(data.event);
   elements.dot.className = 'live-dot live';
   elements.status.textContent = 'INFORMACIÓN OFICIAL';

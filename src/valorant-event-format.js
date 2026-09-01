@@ -260,6 +260,136 @@ function officialFormatForEvent(event) {
   };
 }
 
+
+/*
+  Cuántos partidos juega cada equipo.
+
+  No está escrito a mano: se recorre el cuadro de eliminatorias de verdad con
+  todas las combinaciones posibles de resultados y se cuenta. Escribir «entre 2
+  y 4» en un texto sería declarar algo que el día que cambie el cuadro nadie
+  volvería a comprobar; así, si cambia el cuadro, cambian estos números solos.
+
+  Un BO3 son 2 o 3 mapas; un BO1, uno. La gran final puede anunciarse a BO5, y
+  la final de desempate se juega al mismo formato que ella.
+*/
+const { PLAN, SLOTS } = require('./services/playoffs/bracket');
+
+function recorrerCuadro() {
+  const rondas = PLAN.filter((serie) => serie.slot !== SLOTS.GRAND_FINAL_RESET);
+
+  const equipoDe = (referencia, ganadores) => {
+    if (referencia.seed) return referencia.seed;
+    const [a, b] = participantes(referencia.from, ganadores);
+    const gana = ganadores[referencia.from] === 'a' ? a : b;
+    return referencia.take === 'winner' ? gana : (gana === a ? b : a);
+  };
+  const participantes = (slot, ganadores) => {
+    const serie = PLAN.find((fila) => fila.slot === slot);
+    return [equipoDe(serie.a, ganadores), equipoDe(serie.b, ganadores)];
+  };
+
+  let minimo = Infinity;
+  let maximo = 0;
+  let invicto = 0;
+  let porAbajo = 0;
+
+  for (let combinacion = 0; combinacion < (1 << rondas.length); combinacion += 1) {
+    const ganadores = {};
+    rondas.forEach((serie, i) => { ganadores[serie.slot] = (combinacion >> i) & 1 ? 'a' : 'b'; });
+
+    const jugadas = new Map();
+    for (const serie of rondas) {
+      for (const equipo of participantes(serie.slot, ganadores)) {
+        jugadas.set(equipo, (jugadas.get(equipo) || 0) + 1);
+      }
+    }
+
+    const granFinal = PLAN.find((fila) => fila.slot === SLOTS.GRAND_FINAL);
+    const [arriba, abajo] = participantes(SLOTS.GRAND_FINAL, ganadores);
+    const ganaLaFinal = ganadores[granFinal.slot] === 'a' ? arriba : abajo;
+    const hayReset = ganaLaFinal !== arriba;
+    // Con reset, la juegan los dos finalistas: cuenta para el máximo de todos.
+    if (hayReset) for (const finalista of [arriba, abajo]) jugadas.set(finalista, jugadas.get(finalista) + 1);
+
+    for (const total of jugadas.values()) {
+      minimo = Math.min(minimo, total);
+      maximo = Math.max(maximo, total);
+    }
+    const campeon = jugadas.get(ganaLaFinal);
+    if (hayReset) porAbajo = Math.max(porAbajo, campeon);
+    else invicto = Math.max(invicto, campeon);
+  }
+
+  return Object.freeze({
+    series: PLAN.length - 1,
+    seriesWithReset: PLAN.length,
+    perTeam: Object.freeze({ min: minimo, max: maximo }),
+    champion: Object.freeze({ undefeated: invicto, throughLowerBracket: porAbajo })
+  });
+}
+
+const PLAYOFF_LOAD = recorrerCuadro();
+
+/** Los mapas de una serie, según a cuántos se juegue. */
+const mapasDe = (bestOf, series) => ({
+  min: series * Math.ceil((bestOf + 1) / 2),
+  max: series * bestOf
+});
+
+/**
+ * El resumen de partidos de un tamaño de torneo.
+ *
+ * `grandFinalBestOf` cambia la cuenta porque la final de desempate se juega al
+ * mismo formato que la gran final.
+ */
+function matchSummary(players, { grandFinalBestOf = 3 } = {}) {
+  const size = officialSizeForPlayers(players);
+  if (!size) return null;
+
+  const liga = size.regularSeason;
+  const finales = (cuantas) => {
+    // De las series del campeón, una es la gran final; con reset, dos.
+    const normales = mapasDe(3, cuantas.series - cuantas.finals);
+    const grandes = mapasDe(grandFinalBestOf, cuantas.finals);
+    return { min: normales.min + grandes.min, max: normales.max + grandes.max };
+  };
+
+  const campeonInvicto = finales({ series: PLAYOFF_LOAD.champion.undefeated, finals: 1 });
+  const campeonAbajo = finales({ series: PLAYOFF_LOAD.champion.throughLowerBracket, finals: 2 });
+
+  return Object.freeze({
+    players: size.players,
+    teams: size.teams,
+    league: Object.freeze({
+      series: liga.series,
+      matchdays: liga.matchdays,
+      perTeam: liga.seriesPerTeam,       // BO1: un mapa por partido
+      maps: liga.series
+    }),
+    playoffs: Object.freeze({
+      series: PLAYOFF_LOAD.series,
+      seriesWithReset: PLAYOFF_LOAD.seriesWithReset,
+      perTeam: PLAYOFF_LOAD.perTeam
+    }),
+    champion: Object.freeze({
+      undefeated: Object.freeze({
+        matches: liga.seriesPerTeam + PLAYOFF_LOAD.champion.undefeated,
+        maps: Object.freeze({
+          min: liga.seriesPerTeam + campeonInvicto.min,
+          max: liga.seriesPerTeam + campeonInvicto.max
+        })
+      }),
+      throughLowerBracket: Object.freeze({
+        matches: liga.seriesPerTeam + PLAYOFF_LOAD.champion.throughLowerBracket,
+        maps: Object.freeze({
+          min: liga.seriesPerTeam + campeonAbajo.min,
+          max: liga.seriesPerTeam + campeonAbajo.max
+        })
+      })
+    })
+  });
+}
+
 function officialValorantFormatForSlug(slug) {
   return String(slug || '').trim().toLowerCase() === OFFICIAL_VALORANT_SLUG
     ? OFFICIAL_VALORANT_FORMAT
@@ -275,5 +405,7 @@ module.exports = {
   officialRosterState,
   officialValorantFormatForSlug,
   officialFormatForEvent,
+  PLAYOFF_LOAD,
+  matchSummary,
   registrationSentence
 };

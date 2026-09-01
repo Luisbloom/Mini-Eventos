@@ -29,7 +29,9 @@ const { gameProfile, isAmongUs, isValorant } = require('./games');
 const {
   LEGAL_VERSION, ConsentError, requireConsent, requireRulesConsent, eventHasRules
 } = require('./legal-consent');
-const { officialRosterState, OFFICIAL_SIZES } = require('./valorant-event-format');
+const {
+  officialRosterState, OFFICIAL_SIZES, matchSummary
+} = require('./valorant-event-format');
 const { buildMetadata, injectMetadata } = require('./services/social-metadata');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
@@ -489,6 +491,14 @@ function createApp({
       if (!event.modules.information) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no publica información ampliada.');
       response.set('Cache-Control', 'no-store').json({
         event: { ...event, officialFormat: officialFormatForEvent(event) },
+        /*
+          Cuántos partidos salen de cada tamaño. Se calculan recorriendo el
+          cuadro de eliminatorias, no se escriben a mano: un número contado a
+          mano en un texto es el que nadie vuelve a comprobar.
+        */
+        matchSummaries: officialValorantFormatForSlug(event.slug)
+          ? OFFICIAL_SIZES.map((size) => matchSummary(size.players))
+          : null,
         ...database.getTournamentInformation(event.id),
         scoring: eventScoring(event)
       });
