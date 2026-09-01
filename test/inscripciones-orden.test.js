@@ -54,7 +54,7 @@ describe('inscripciones', () => {
   const inscribir = (app, database, slug, nombre) => request(app)
     .post(`/api/events/${slug}/registrations`)
     .set('Cookie', sesionDe(database, nombre, nombre).cookie)
-    .send({ values: { game_name: nombre }, acceptedTerms: true });
+    .send({ values: { game_name: nombre }, acceptedTerms: true, acceptedRules: true });
 
   describe('orden de llegada', () => {
     it('los inscritos salen por orden de inscripción, no alfabético', async () => {
@@ -108,7 +108,7 @@ describe('inscripciones', () => {
 
       await request(app).post(`/api/events/${evento.slug}/registrations`)
         .set('Cookie', cookie)
-        .send({ values: { discord_username: 'zoe', game_name: 'Zoe' }, acceptedTerms: true })
+        .send({ values: { discord_username: 'zoe', game_name: 'Zoe' }, acceptedTerms: true, acceptedRules: true })
         .expect(201);
 
       const perfil = await request(app).get('/api/me/profile').set('Cookie', cookie).expect(200);
@@ -120,7 +120,7 @@ describe('inscripciones', () => {
       const { app, evento } = montar();
       // La identidad no se teclea: para apuntarse hace falta Discord.
       const respuesta = await request(app).post(`/api/events/${evento.slug}/registrations`)
-        .send({ values: { game_name: 'Anónima' }, acceptedTerms: true });
+        .send({ values: { game_name: 'Anónima' }, acceptedTerms: true, acceptedRules: true });
       assert.equal(respuesta.status, 401);
       assert.equal(respuesta.body.error.code, 'AUTH_REQUIRED');
     });
@@ -132,7 +132,7 @@ describe('inscripciones', () => {
       // Manda el usuario de otra persona: es texto libre y se ignora.
       await request(app).post(`/api/events/${evento.slug}/registrations`)
         .set('Cookie', cookie)
-        .send({ values: { discord_username: 'otrapersona', game_name: 'Otra' }, acceptedTerms: true })
+        .send({ values: { discord_username: 'otrapersona', game_name: 'Otra' }, acceptedTerms: true, acceptedRules: true })
         .expect(201);
 
       const inscrito = database.listParticipants(evento.id)[0];

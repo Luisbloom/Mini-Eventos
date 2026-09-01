@@ -96,7 +96,7 @@ describe('Mini Eventos API', () => {
     const created = await request(app)
       .post('/api/events/among-us-agosto-2026/registrations')
       .set('Cookie', sesion('Luis'))
-      .send({ values: { game_name: '', friend_code: 'luis#1001', same_as_discord: true }, acceptedTerms: true });
+      .send({ values: { game_name: '', friend_code: 'luis#1001', same_as_discord: true }, acceptedTerms: true, acceptedRules: true });
     assert.equal(created.status, 201);
     assert.equal(created.body.participant.displayName, 'Luis');
     assert.equal(created.body.participant.discordUsername, undefined);
@@ -106,7 +106,7 @@ describe('Mini Eventos API', () => {
     const duplicate = await request(app)
       .post('/api/events/among-us-agosto-2026/registrations')
       .set('Cookie', sesion('Luis'))
-      .send({ values: { game_name: 'Pelusero', friend_code: 'luis#1002' }, acceptedTerms: true });
+      .send({ values: { game_name: 'Pelusero', friend_code: 'luis#1002' }, acceptedTerms: true, acceptedRules: true });
     assert.equal(duplicate.status, 409);
     assert.equal(duplicate.body.error.code, 'ALREADY_REGISTERED');
 
@@ -146,17 +146,17 @@ describe('Mini Eventos API', () => {
     database.updateEvent(among.id, { minParticipants: 1, maxParticipants: 1 });
     await request(app).post(`/api/events/${among.slug}/registrations`)
       .set('Cookie', sesion('uno'))
-      .send({ values: { game_name: 'Uno', friend_code: 'uno#1001' }, acceptedTerms: true }).expect(201);
+      .send({ values: { game_name: 'Uno', friend_code: 'uno#1001' }, acceptedTerms: true, acceptedRules: true }).expect(201);
     const full = await request(app).post(`/api/events/${among.slug}/registrations`)
       .set('Cookie', sesion('dos'))
-      .send({ values: { game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true });
+      .send({ values: { game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true, acceptedRules: true });
     assert.equal(full.status, 409);
     assert.equal(full.body.error.code, 'REGISTRATION_FULL');
 
     database.updateEvent(among.id, { maxParticipants: 2, registrationsOpen: false });
     const closed = await request(app).post(`/api/events/${among.slug}/registrations`)
       .set('Cookie', sesion('tres'))
-      .send({ values: { game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true });
+      .send({ values: { game_name: 'Dos', friend_code: 'dos#1002' }, acceptedTerms: true, acceptedRules: true });
     assert.equal(closed.status, 403);
     assert.equal(closed.body.error.code, 'REGISTRATION_CLOSED');
   });

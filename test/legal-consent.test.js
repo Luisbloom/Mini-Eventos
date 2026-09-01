@@ -111,7 +111,9 @@ describe('consentimiento legal', () => {
 
       const respuesta = await inscribir(app, evento.slug, {
         values: { game_name: 'Luis' },
-        acceptedTerms: true
+        acceptedTerms: true,
+        // Las normas del torneo son otra casilla: ver normas-torneo.test.js.
+        acceptedRules: true
       }, cookie);
       assert.equal(respuesta.status, 201);
 
@@ -123,7 +125,7 @@ describe('consentimiento legal', () => {
     it('el consentimiento no se publica con los participantes', async () => {
       const { app, database, evento, cookie } = montar();
       await inscribir(app, evento.slug, {
-        values: { game_name: 'Luis' }, acceptedTerms: true
+        values: { game_name: 'Luis' }, acceptedTerms: true, acceptedRules: true
       }, cookie).expect(201);
       database.listParticipants(evento.id)
         .forEach((p) => database.updateParticipant(p.id, { status: 'confirmed' }));

@@ -26,7 +26,9 @@ const { PlayoffError } = require('./valorant-playoffs');
 const { officialValorantFormatForSlug, officialFormatForEvent } = require('./valorant-event-format');
 const { AvailabilityError } = require('./availability');
 const { gameProfile, isAmongUs, isValorant } = require('./games');
-const { LEGAL_VERSION, ConsentError, requireConsent } = require('./legal-consent');
+const {
+  LEGAL_VERSION, ConsentError, requireConsent, requireRulesConsent, eventHasRules
+} = require('./legal-consent');
 const { officialRosterState, OFFICIAL_SIZES } = require('./valorant-event-format');
 const { buildMetadata, injectMetadata } = require('./services/social-metadata');
 const {
@@ -294,6 +296,7 @@ function createApp({
       // Se comprueba aquí, no sólo en el navegador: lo que enseña la página
       // es cortesía, lo que vale es lo que llega.
       const consent = requireConsent(request.body?.acceptedTerms);
+      if (eventHasRules(event)) requireRulesConsent(request.body?.acceptedRules);
 
       /*
         Para inscribirse hace falta Discord, sin excepciones.
@@ -1032,6 +1035,8 @@ function createApp({
       }
 
       const consent = requireConsent(request.body?.acceptedTerms);
+      // Las normas llevan una descalificación dentro: se aceptan aparte.
+      if (eventHasRules(event)) requireRulesConsent(request.body?.acceptedRules);
       const registro = database.valorant.registerWithDiscord(event.id, {
         discordAccountId: session.account.id,
         riotId: request.body?.riotId,

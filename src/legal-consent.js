@@ -56,4 +56,38 @@ function requireConsent(value, { now = new Date() } = {}) {
   return { acceptedAt: now.toISOString(), version: LEGAL_VERSION };
 }
 
-module.exports = { LEGAL_VERSION, ConsentError, hasAccepted, requireConsent };
+/**
+ * Las normas del torneo, que son otra cosa distinta.
+ *
+ * Los términos y la privacidad dicen qué se hace con tus datos. Las normas
+ * dicen cómo se juega, y llevan una sanción dentro: usar un arma vetada
+ * descalifica al equipo entero en ese mismo momento. Nadie puede quedarse fuera
+ * por una regla que no se le puso delante, así que se acepta aparte y se
+ * comprueba aparte: un único «acepto» para las dos cosas dejaría en duda cuál
+ * de las dos leyó.
+ *
+ * Sólo se exige donde hay normas publicadas que leer.
+ */
+function requireRulesConsent(value) {
+  if (!hasAccepted(value)) {
+    throw new ConsentError(
+      'Tienes que confirmar que has leído y aceptas las normas del torneo.',
+      'RULES_CONSENT_REQUIRED');
+  }
+  return true;
+}
+
+/**
+ * Si este evento tiene normas que aceptar.
+ *
+ * Son las que publica su página de información: donde no hay página, no hay
+ * nada que leer y exigir la casilla sería pedir un «acepto» a ciegas.
+ */
+function eventHasRules(event) {
+  return event?.modules?.information === true;
+}
+
+module.exports = {
+  LEGAL_VERSION, ConsentError, hasAccepted, requireConsent,
+  requireRulesConsent, eventHasRules
+};

@@ -150,6 +150,19 @@ function renderRegistration(event, fields, yo = { authenticated: false }) {
   const visibles = fields.filter((campo) => campo.key !== 'discord_username');
   byId('registration-fields').replaceChildren(...visibles.map(fieldControl));
 
+  /*
+      La casilla de las normas sólo aparece donde hay normas que leer, y el
+      enlace lleva a las de ESTE torneo: aceptar algo sin poder abrirlo no es
+      aceptar nada.
+    */
+  const normas = byId('registration-rules-check');
+  if (normas) {
+    normas.hidden = !event.modules.information;
+    byId('registration-rules').required = event.modules.information;
+    byId('registration-rules-link').href =
+      `/eventos/${encodeURIComponent(event.slug)}/informacion`;
+  }
+
   const quien = byId('registration-as');
   if (quien) {
     quien.hidden = false;
@@ -179,9 +192,10 @@ async function submitRegistration(event) {
   // El consentimiento va aparte de los datos del formulario: no es un campo
   // de inscripción, es la base legal para tratarlos.
   const acceptedTerms = byId('registration-consent')?.checked === true;
+  const acceptedRules = byId('registration-rules')?.checked === true;
   byId('registration-submit').disabled = true; feedback.textContent = 'Enviando inscripción…'; feedback.className = ''; feedback.setAttribute('role', 'status');
   try {
-    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values, acceptedTerms }) });
+    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values, acceptedTerms, acceptedRules }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || 'No se pudo completar la inscripción.');
     form.hidden = true; byId('registration-success').hidden = false;
@@ -324,6 +338,11 @@ function pasoFormulario(event) {
         <span>He leído y acepto los <a href="/terminos" target="_blank" rel="noopener">términos y condiciones</a>
         y la <a href="/privacidad" target="_blank" rel="noopener">política de privacidad</a>.</span>
       </label>
+      <label class="consent-check">
+        <input type="checkbox" id="riot-rules" required>
+        <span>He leído y acepto las <a href="/eventos/${encodeURIComponent(event.slug)}/informacion" target="_blank" rel="noopener">normas del torneo</a>.
+        Incluyen sanciones: usar un arma o un agente vetado descalifica al equipo entero en ese mismo momento.</span>
+      </label>
       <button type="submit">INSCRIBIRME <span aria-hidden="true">→</span></button>
       <p id="riot-feedback" role="status" tabindex="-1"></p>
     </form>`;
@@ -385,6 +404,17 @@ async function renderDiscordRegistration(event) {
       byId('riot-consent')?.focus();
       return;
     }
+    /*
+      Las normas se aceptan aparte de los términos. Van en dos casillas y no en
+      una porque llevan dentro una descalificación: nadie puede quedarse fuera
+      del torneo por una regla que no se le puso delante.
+    */
+    if (!byId('riot-rules')?.checked) {
+      aviso.textContent = 'Tienes que confirmar que has leído las normas del torneo.';
+      aviso.className = 'error';
+      byId('riot-rules')?.focus();
+      return;
+    }
     boton.disabled = true;
     aviso.textContent = '';
     try {
@@ -396,7 +426,8 @@ async function renderDiscordRegistration(event) {
           riotId: byId('riot-id').value,
           peakRank: byId('peak-rank').value,
           playerBio: byId('player-bio').value,
-          acceptedTerms: byId('riot-consent')?.checked === true
+          acceptedTerms: byId('riot-consent')?.checked === true,
+          acceptedRules: byId('riot-rules')?.checked === true
         })
       });
       const cuerpo = await respuesta.json().catch(() => ({}));
