@@ -128,6 +128,15 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
   mapPoolAnnouncement: 'TOURNAMENT_DAY',
 
   /*
+    Puede jugarse en uno o en dos días.
+
+    Depende de lo que salga del calendario de disponibilidad: si hay dos días
+    seguidos que reúnen a la misma gente, partirlo evita una sesión de ocho
+    horas. No se promete ninguna de las dos cosas hasta que haya fechas.
+  */
+  days: Object.freeze({ min: 1, max: 2, decidedBy: 'AVAILABILITY' }),
+
+  /*
     Lo que de verdad falta por anunciar.
 
     Sólo entra aquí lo que nadie puede leer todavía en esta misma página. El
@@ -155,6 +164,8 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     playoffs: 'El 1º jugará contra el 4º y el 2º contra el 3º. La primera derrota envía al cuadro inferior; la segunda elimina. Todas las series de playoffs serán BO3.',
     grandFinalReset: 'Si el equipo procedente del cuadro inferior gana la primera Gran Final al equipo que seguía invicto, se disputará una serie final de desempate, ya que ambos tendrán entonces una derrota.',
     matches: 'Las series se jugarán en partidas personalizadas de VALORANT. La fecha, los horarios y el servidor de juego se anunciarán antes del torneo.',
+    days: 'El torneo puede jugarse en un solo día o repartirse en dos. Lo decide el calendario de disponibilidad: si hay dos días que reúnen a la misma gente, se estudiará partirlo —normalmente draft y fase regular el primero, playoffs el segundo— para no encadenar una sesión demasiado larga. Se anunciará junto con la fecha.',
+    volume: 'Con 20 jugadores se disputan 6 series de liga y hasta 7 de playoffs: entre 18 y 27 mapas en total. Con 30, la liga sube a 15 series (27 a 36 mapas); con 40, a 28 series (40 a 49 mapas). Cada equipo juega 3, 5 o 7 partidos de liga según el tamaño, y entre 2 y 4 series de playoffs —5 si hay final de desempate—, lo que en el torneo de 20 son entre 7 y 18 mapas por equipo.',
     bans: 'Quedan vetadas las armas Odin y Ares, y la agente Neon. Usar cualquiera de ellas descalifica al equipo entero en ese mismo momento: no es un aviso ni se revisa después.',
     pauses: 'No hay pausas dentro de una partida: una vez empezada, se juega hasta el final. Entre las partidas de una misma serie sí hay un descanso antes de pasar al siguiente mapa.',
     formats: 'BO1: un mapa. BO3: primero en ganar dos mapas. La Gran Final será BO3 por defecto y podrá anunciarse previamente como BO5 si el horario lo permite.',

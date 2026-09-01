@@ -249,15 +249,28 @@
     const spotlight = node('section', 'hub-spotlight');
     const overview = node('article', 'hub-overview');
     const official = Boolean(format);
+    /*
+      Que el evento esté abierto no significa que la competición haya empezado.
+
+      Entre abrir inscripciones y hacer el draft no hay ni equipos ni calendario,
+      y aquí se anunciaba «La competición está en marcha» con la tabla vacía
+      debajo. Empezada es cuando hay equipos o series, no cuando hay evento.
+    */
+    const empezada = (context.state.teams?.length || 0) > 0
+      || (context.state.seriesTotal || 0) > 0;
     overview.append(
       node('p', 'section-label', 'ESTADO DEL TORNEO'),
       node('h2', '', upcoming
         ? 'Próximamente'
-        : context.state.complete
-          ? official ? 'Seeding confirmado' : 'La liga ya tiene Top 4'
-          : 'La competición está en marcha'),
+        : !empezada
+          ? 'Todavía no ha empezado'
+          : context.state.complete
+            ? official ? 'Seeding confirmado' : 'La liga ya tiene Top 4'
+            : 'La competición está en marcha'),
       node('p', 'section-copy', upcoming
         ? `${format?.players || 20} jugadores formarán ${format?.teams || 4} equipos. La liga ordenará el seeding y todos entrarán en el cuadro de doble eliminación.`
+        : !empezada
+        ? `Las inscripciones siguen abiertas. Cuando se cierren, ${format?.players || 20} jugadores formarán ${format?.teams || 4} equipos en el draft y aquí aparecerán el calendario y la clasificación.`
         : context.state.complete
         ? 'La fase regular está cerrada. El foco pasa al cuadro de doble eliminación.'
         : 'Sigue el calendario y mira cómo cambia la clasificación con cada resultado.'),

@@ -134,6 +134,8 @@ const VALORANT_TEXTOS = Object.freeze({
   formats: '#valorant-info-formats',
   maps: '#valorant-info-maps',
   matches: '#valorant-info-matches',
+  days: '#valorant-info-days',
+  volume: '#valorant-info-volume',
   pauses: '#valorant-info-pauses',
   bans: '#valorant-info-bans',
   results: '#valorant-info-results',

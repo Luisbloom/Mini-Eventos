@@ -245,13 +245,26 @@ async function pedirEstado() {
 
   if (!estado.ok) {
     const cuerpo = await estado.json().catch(() => ({}));
-    const code = cuerpo?.error?.code;
-    mostrarNoDisponible(
-      code === 'EVENT_NOT_PUBLISHED' ? 'Todavía no' : 'Sin draft',
-      code === 'EVENT_NOT_PUBLISHED'
-        ? 'Este torneo aún no está abierto. Cuando lo esté, el draft se verá aquí en directo.'
-        : 'Este evento no utiliza draft por equipos.',
-      code === 'EVENT_NOT_PUBLISHED');
+    /*
+      Tres motivos distintos, tres mensajes distintos.
+
+      Decía «este evento no utiliza draft por equipos» siempre que faltaba el
+      draft — y en el torneo de Valorant, que lo utiliza y lo tiene anunciado,
+      eso era simplemente falso. El servidor ya los separa: MODULE_DISABLED es
+      «aquí no hay draft», DRAFT_NOT_FOUND es «todavía no se ha hecho».
+    */
+    const AVISOS = {
+      EVENT_NOT_PUBLISHED: ['Todavía no',
+        'Este torneo aún no está abierto. Cuando lo esté, el draft se verá aquí en directo.'],
+      DRAFT_NOT_FOUND: ['Aún no hay draft',
+        'Los equipos se forman en directo cuando se cierren las inscripciones. Vuelve por aquí ese día: se ve turno a turno.'],
+      MODULE_DISABLED: ['Sin draft', 'Este evento no utiliza draft por equipos.']
+    };
+    const [titulo, copia] = AVISOS[cuerpo?.error?.code]
+      ?? ['No disponible', 'No se ha podido cargar el draft. Inténtalo en unos segundos.'];
+    // El icono de espera sólo cuando de verdad se espera algo.
+    mostrarNoDisponible(titulo, copia,
+      cuerpo?.error?.code === 'EVENT_NOT_PUBLISHED' || cuerpo?.error?.code === 'DRAFT_NOT_FOUND');
     return false;
   }
 

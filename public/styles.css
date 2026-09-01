@@ -342,3 +342,14 @@ h2 { font: clamp(2.8rem, 6vw, 5.8rem)/.9 var(--display); letter-spacing: -.025em
    /api/me/avatar: la URL del CDN de Discord lleva el id de la cuenta dentro. */
 .account-avatar { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 .profile-entry > span.has-avatar { background: none; padding: 0; overflow: hidden; }
+
+
+/* Pantalla de «aquí no hay nada»: 404, evento sin abrir, draft que aún no se ha
+   hecho. Vivía en event.css y la usan tres páginas, así que en dos de ellas
+   salía sin estilos: el texto pegado al borde y el enlace en azul del navegador.
+   Un aviso mal pintado parece la web rota, que es justo lo que no es. */
+.event-fatal { min-height: calc(100vh - 82px); padding: 4rem 1.5rem; display: grid; place-content: center; text-align: center; }
+.event-fatal > span { color: var(--line); font: clamp(8rem, 25vw, 18rem)/.7 var(--display); }
+.event-fatal h1 { font-size: clamp(3rem, 7vw, 6rem); }
+.event-fatal p { color: var(--muted); }
+.event-fatal a { margin: 1rem auto; padding: .9rem 1rem; color: var(--lime); border: 1px solid var(--lime); text-decoration: none; font: .57rem/1 var(--mono); }
