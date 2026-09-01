@@ -328,6 +328,32 @@ describe('formato oficial del torneo de Valorant', () => {
     assert.ok(html.includes('id="valorant-info-pending"'));
   });
 
+  it('declara lo vetado y que la sancion es del equipo entero', () => {
+    const { OFFICIAL_VALORANT_FORMAT: F } = require('../src/valorant-event-format');
+
+    assert.deepEqual(F.bans.weapons, ['Odin', 'Ares']);
+    assert.deepEqual(F.bans.agents, ['Neon']);
+    // Del EQUIPO y en el momento: no es un aviso ni se revisa despues.
+    assert.equal(F.bans.penalty, 'TEAM_DISQUALIFICATION');
+    assert.equal(F.bans.immediate, true);
+    assert.match(F.public.bans, /descalifica al equipo entero/i);
+    assert.match(F.public.bans, /Odin/);
+    assert.match(F.public.bans, /Neon/);
+  });
+
+  it('lo vetado se enseña aparte, no enterrado entre los quince apartados', () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'informacion.html'), 'utf8');
+    const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'information.js'), 'utf8');
+
+    assert.ok(html.includes('class="valorant-bans"'), 'tiene su propio bloque');
+    assert.ok(html.includes('id="valorant-ban-weapons"'));
+    assert.ok(html.includes('id="valorant-ban-agents"'));
+    // Las listas salen del formato, no escritas a mano en el HTML.
+    assert.ok(js.includes('format.bans?.weapons'));
+    assert.ok(js.includes('format.bans?.agents'));
+    assert.ok(!html.includes('Odin'), 'los nombres no se teclean en el HTML');
+  });
+
   it('el formato oficial ya no promete un veto que no existe', () => {
     const { OFFICIAL_VALORANT_FORMAT } = require('../src/valorant-event-format');
     assert.equal(OFFICIAL_VALORANT_FORMAT.maps.chosenBy, 'ORGANISATION');

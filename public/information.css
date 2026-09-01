@@ -337,3 +337,33 @@
   text-transform: uppercase;
   color: #cfd6d4;
 }
+
+/* Lo vetado. Va aparte y con aviso porque la sanción es del equipo entero y
+   es inmediata: enterrarlo como una tarjeta más entre quince sería esconderlo. */
+.valorant-bans {
+  margin-top: 3rem;
+  padding: 1.6rem 1.8rem;
+  border: 1px solid var(--coral, #ff4655);
+  background: rgba(255, 70, 85, .06);
+}
+.valorant-bans h3 {
+  margin: 0 0 1.2rem;
+  font: clamp(1.5rem, 3vw, 2.2rem)/1 var(--display);
+  text-transform: uppercase;
+  color: var(--coral, #ff4655);
+}
+.valorant-bans-lists { display: flex; flex-wrap: wrap; gap: 2.5rem; }
+.valorant-bans-lists > div { min-width: 0; }
+.valorant-bans-lists span {
+  display: block; margin-bottom: .6rem;
+  color: var(--muted); font: .55rem/1 var(--mono);
+  letter-spacing: .14em; text-transform: uppercase;
+}
+.valorant-bans-lists ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; }
+.valorant-bans-lists li {
+  padding: .5rem .9rem;
+  border: 1px solid var(--coral, #ff4655);
+  font: 1rem/1 var(--display);
+  text-transform: uppercase;
+}
+.valorant-bans > p { margin: 1.4rem 0 0; max-width: 62ch; line-height: 1.65; color: #cfd6d4; }

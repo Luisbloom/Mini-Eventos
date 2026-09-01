@@ -106,6 +106,21 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
   */
   pauses: Object.freeze({ duringGame: false, betweenGames: true }),
 
+  /*
+    Lo que no se puede usar, y qué pasa si se usa.
+
+    La sanción es del EQUIPO y es inmediata, no una advertencia ni una revisión
+    posterior: usar cualquiera de estas cosas descalifica al equipo entero en
+    ese mismo momento. Se declara aquí para que la web lo diga con las mismas
+    palabras en todas partes.
+  */
+  bans: Object.freeze({
+    weapons: Object.freeze(['Odin', 'Ares']),
+    agents: Object.freeze(['Neon']),
+    penalty: 'TEAM_DISQUALIFICATION',
+    immediate: true
+  }),
+
   // El map pool existe, pero se anuncia el mismo día del torneo.
   mapPoolAnnouncement: 'TOURNAMENT_DAY',
 
@@ -129,6 +144,7 @@ const OFFICIAL_VALORANT_FORMAT = Object.freeze({
     playoffs: 'El 1º jugará contra el 4º y el 2º contra el 3º. La primera derrota envía al cuadro inferior; la segunda elimina. Todas las series de playoffs serán BO3.',
     grandFinalReset: 'Si el equipo procedente del cuadro inferior gana la primera Gran Final al equipo que seguía invicto, se disputará una serie final de desempate, ya que ambos tendrán entonces una derrota.',
     matches: 'Las series se jugarán en partidas personalizadas de VALORANT. La fecha, los horarios y el servidor de juego se anunciarán antes del torneo.',
+    bans: 'Quedan vetadas las armas Odin y Ares, y la agente Neon. Usar cualquiera de ellas descalifica al equipo entero en ese mismo momento: no es un aviso ni se revisa después.',
     pauses: 'No hay pausas dentro de una partida: una vez empezada, se juega hasta el final. Entre las partidas de una misma serie sí hay un descanso antes de pasar al siguiente mapa.',
     formats: 'BO1: un mapa. BO3: primero en ganar dos mapas. La Gran Final será BO3 por defecto y podrá anunciarse previamente como BO5 si el horario lo permite.',
     maps: 'Los mapas los decide la organización y se anuncian antes de cada serie: no hay veto ni sorteo entre los equipos. En BO3 no se repite mapa dentro de la misma serie. El map pool se publica el mismo día del torneo.',

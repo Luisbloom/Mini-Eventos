@@ -327,9 +327,21 @@ p { text-wrap: pretty; }
 }
 
 @media (max-width: 720px) {
-  .competition-topbar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
-  .competition-topbar .competition-back { max-width: 7.5rem; text-align: center; }
-  .competition-topbar .broadcast { font-size: .48rem; }
+  /* La misma forma que el resto de cabeceras: marca y perfil arriba, el
+     enlace de vuelta debajo a lo ancho. En rejilla de tres columnas no cabe. */
+  .competition-topbar {
+    display: flex; flex-wrap: wrap; align-items: center;
+    row-gap: .5rem; min-height: 68px; padding-block: .6rem;
+  }
+  .competition-topbar .brand { flex: 1 1 auto; min-width: 0; }
+  .competition-topbar .topbar-utilities { flex: 0 0 auto; margin-left: auto; gap: .55rem; }
+  .competition-topbar .broadcast { gap: 0; }
+  .competition-topbar .broadcast > span:not(.live-dot) { display: none; }
+  .competition-topbar-links {
+    width: 100%; order: 3; justify-content: flex-start;
+    border-top: 1px solid var(--line); padding-top: .5rem;
+  }
+  .competition-topbar .competition-back { max-width: none; text-align: left; }
   .competition-nav { justify-content: flex-start; padding-inline: .6rem; }
   .competition-nav a { padding-inline: .7rem; }
   .competition-hero { padding-top: 3.3rem; }

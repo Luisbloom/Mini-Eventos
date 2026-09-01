@@ -135,6 +135,7 @@ const VALORANT_TEXTOS = Object.freeze({
   maps: '#valorant-info-maps',
   matches: '#valorant-info-matches',
   pauses: '#valorant-info-pauses',
+  bans: '#valorant-info-bans',
   results: '#valorant-info-results',
   stats: '#valorant-info-stats'
 });
@@ -147,6 +148,19 @@ function renderValorantFormat(format) {
   for (const [clave, selector] of Object.entries(VALORANT_TEXTOS)) {
     setText(selector, format.public[clave] ?? '');
   }
+
+  // Lo vetado, en listas: se busca de un vistazo antes de jugar, no se lee.
+  const lista = (selector, valores) => {
+    const caja = document.querySelector(selector);
+    if (!caja) return;
+    caja.replaceChildren(...(valores || []).map((valor) => {
+      const punto = document.createElement('li');
+      punto.textContent = valor;
+      return punto;
+    }));
+  };
+  lista('#valorant-ban-weapons', format.bans?.weapons);
+  lista('#valorant-ban-agents', format.bans?.agents);
 
   // El recorrido del participante, numerado: es lo que responde «¿y yo qué
   // tengo que hacer?» sin leerse el resto.
