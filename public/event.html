@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="/event.css">
     <script src="/draft-view.js" defer></script>
     <script src="/event-view.js" defer></script>
+    <script src="/availability.js" defer></script>
     <script src="/event.js" defer></script>
   </head>
   <body class="event-page">
@@ -60,6 +61,25 @@
       <section id="premios" class="prizes-section prizes-featured content-section" data-module="prizes" aria-labelledby="prizes-title">
         <header class="section-bar"><div><p class="section-index">PREMIOS</p><h2 id="prizes-title">Lo que está en juego</h2></div></header>
         <div id="event-prizes" class="event-prizes"></div>
+      </section>
+
+      <section id="disponibilidad" class="availability-section content-section" data-module="registration" aria-labelledby="availability-title" hidden>
+        <header class="section-bar">
+          <div>
+            <p class="section-index">CUÁNDO SE JUEGA</p>
+            <h2 id="availability-title">Marca los días que puedes</h2>
+          </div>
+        </header>
+        <p id="availability-intro" class="availability-intro">No hace falta el día que pueda todo el mundo: hace falta el primero en el que quepa un torneo entero. Marca todos los días que te vengan bien y verás cuántos pueden cada día.</p>
+        <p id="availability-gate" class="availability-gate" hidden></p>
+        <div id="availability-headline" class="availability-headline" hidden></div>
+        <div id="availability-calendar" class="availability-calendar" role="group" aria-labelledby="availability-title"></div>
+        <p id="availability-feedback" class="availability-feedback" role="status"></p>
+        <ul class="availability-legend">
+          <li><i class="is-mine" aria-hidden="true"></i> Tus días</li>
+          <li><i class="is-some" aria-hidden="true"></i> Alguien puede</li>
+          <li><i class="is-ready" aria-hidden="true"></i> Llega al torneo</li>
+        </ul>
       </section>
 
       <section id="inscripcion" class="registration-section content-section" data-module="registration" aria-labelledby="registration-title">

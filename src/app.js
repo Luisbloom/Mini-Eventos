@@ -24,9 +24,10 @@ const { CompetitionError: ValorantCompetitionError } = require('./valorant-compe
 const { CaptureError } = require('./valorant-captures');
 const { PlayoffError } = require('./valorant-playoffs');
 const { officialValorantFormatForSlug, officialFormatForEvent } = require('./valorant-event-format');
+const { AvailabilityError } = require('./availability');
 const { gameProfile, isAmongUs, isValorant } = require('./games');
 const { LEGAL_VERSION, ConsentError, requireConsent } = require('./legal-consent');
-const { officialRosterState } = require('./valorant-event-format');
+const { officialRosterState, OFFICIAL_SIZES } = require('./valorant-event-format');
 const { buildMetadata, injectMetadata } = require('./services/social-metadata');
 const {
   createCaptureStorage, inspectImage, UploadError, LIMITS: UPLOAD_LIMITS, ALLOWED_MIME
@@ -337,6 +338,85 @@ function createApp({
       const participants = database.listParticipants(event.id, { publicView: true });
       response.json({ participants, count: participants.length });
     } catch (error) { next(error); }
+  });
+
+  /* ------------------------------------------------------- días disponibles
+   *
+   * El calendario en el que cada inscrito marca cuándo puede y ve cuándo
+   * pueden los demás. Se enseña a todo el mundo —también a quien no está
+   * inscrito, que así ve el ambiente antes de apuntarse— pero marcar exige
+   * estar dentro: es una promesa de asistencia, no una encuesta.
+   */
+
+  /** Los umbrales del evento: las plantillas oficiales mandan si las hay. */
+  function availabilityTargetsFor(event) {
+    return officialValorantFormatForSlug(event.slug) ? OFFICIAL_SIZES : null;
+  }
+
+  /** La inscripción de quien pregunta, o null si no hay sesión o no está. */
+  function myRegistration(request, event) {
+    const session = currentSession(request);
+    if (!session) return null;
+    return database.valorant.publicRegistration(event.id, session.account.id);
+  }
+
+  app.get('/api/events/:slug/availability', (request, response, next) => {
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+      if (!event.modules.registration) {
+        return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no recoge disponibilidad.');
+      }
+      const mio = myRegistration(request, event);
+      response.set('Cache-Control', 'no-store').json({
+        ...database.availability.calendar(event.id, {
+          event, officialSizes: availabilityTargetsFor(event)
+        }),
+        // Lo que puede hacer quien mira, dicho por el servidor: la interfaz no
+        // tiene que deducir de tres datos sueltos si puede marcar o no.
+        me: mio
+          ? { registered: true, days: database.availability.daysFor(event.id, mio.participantId) }
+          : { registered: false, days: [] }
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.put('/api/events/:slug/availability', (request, response, next) => {
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+      if (!event.modules.registration) {
+        return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no recoge disponibilidad.');
+      }
+      if (!currentSession(request)) {
+        return sendError(response, 401, 'AUTH_REQUIRED', 'Entra con Discord para marcar tus días.');
+      }
+      const mio = myRegistration(request, event);
+      if (!mio) {
+        return sendError(response, 403, 'NOT_REGISTERED',
+          'Sólo quien está inscrito puede marcar los días en los que puede jugar.');
+      }
+      const days = database.availability.setDays(event.id, mio.participantId, request.body?.days);
+      /*
+        Se contesta con el calendario entero y con la misma forma que el GET.
+
+        Devolver además un `days` suelto con lo recién guardado parecía cómodo y
+        era una trampa: el calendario trae su propio `days` —los 56 huecos— y uno
+        aplastaba al otro según el orden en que se escribieran. Los días de quien
+        marca viven donde siempre, dentro de `me`.
+      */
+      response.set('Cache-Control', 'no-store').json({
+        ...database.availability.calendar(event.id, {
+          event, officialSizes: availabilityTargetsFor(event)
+        }),
+        me: { registered: true, days }
+      });
+    } catch (error) {
+      if (error instanceof AvailabilityError) {
+        return sendError(response, error.status, error.code, error.message);
+      }
+      next(error);
+    }
   });
 
   app.get('/api/events/:slug/leaderboard', (request, response, next) => {

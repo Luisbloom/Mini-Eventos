@@ -5,6 +5,7 @@ const path = require('node:path');
 const BetterSqlite3 = require('better-sqlite3');
 const { createCompetitionStore, migrateCompetition } = require('./competition-store');
 const { createValorantStore, migrateValorant } = require('./valorant-store');
+const { createAvailabilityStore, migrateAvailability } = require('./availability');
 const { createValorantCompetitionStore, migrateValorantCompetition } = require('./valorant-competition');
 const { createValorantCaptureStore } = require('./valorant-captures');
 const { createValorantPlayoffStore } = require('./valorant-playoffs');
@@ -428,6 +429,7 @@ function openDatabase(dbPath) {
     migrateCompetition(connection, competitionDefaultId);
     migrateValorant(connection);
     migrateValorantCompetition(connection);
+    migrateAvailability(connection);
   } catch (error) {
     if (connection.open) connection.close();
     throw error;
@@ -605,6 +607,7 @@ function openDatabase(dbPath) {
   });
 
   const competition = createCompetitionStore(connection);
+  const availability = createAvailabilityStore(connection);
   const valorant = createValorantStore(connection);
   // La competición comparte el registro de auditoría del draft.
   const valorantCompetition = createValorantCompetitionStore(connection, {
@@ -753,6 +756,7 @@ function openDatabase(dbPath) {
       return this.getTournamentInformation(id);
     },
     competition,
+    availability,
     valorant,
     valorantCompetition,
     valorantCaptures,

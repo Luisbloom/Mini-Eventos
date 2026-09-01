@@ -241,3 +241,81 @@
   color: var(--event-accent, var(--lime));
   font: .58rem/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase;
 }
+
+/* --------------------------------------------------- días que puede la gente
+   Un calendario donde se marca y, a la vez, se ve lo que han marcado los
+   demás. El color dice de un vistazo lo único que importa: si ese día cabe un
+   torneo entero. */
+.availability-intro { margin: 0 0 1.2rem; max-width: 62ch; color: var(--muted); line-height: 1.65; }
+.availability-gate {
+  margin: 0 0 1.2rem; padding: .8rem 1rem;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .02);
+  color: var(--muted); font: .58rem/1.5 var(--mono); letter-spacing: .06em;
+}
+.availability-headline {
+  margin: 0 0 1.4rem; padding: .9rem 1.1rem;
+  border-left: 3px solid var(--line);
+  font: .72rem/1.5 var(--mono); letter-spacing: .04em; color: var(--paper);
+}
+.availability-headline.is-ready { border-left-color: var(--lime); color: var(--lime); }
+
+.availability-calendar { display: flex; flex-wrap: wrap; gap: 1.6rem; }
+.availability-month { flex: 1 1 17rem; min-width: 0; }
+.availability-month h3 {
+  margin: 0 0 .7rem;
+  font: .6rem/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+}
+.availability-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .25rem; }
+.availability-weekday {
+  padding-bottom: .3rem; text-align: center;
+  font: .5rem/1 var(--mono); letter-spacing: .08em; color: var(--muted);
+}
+.availability-blank { aspect-ratio: 1; }
+
+.availability-day {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem;
+  aspect-ratio: 1; padding: 0;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .015);
+  color: var(--muted); font-family: var(--mono);
+  transition: border-color .12s, background .12s, color .12s;
+}
+.availability-day b { font-size: .74rem; font-weight: 400; line-height: 1; }
+/* El recuento, más pequeño que el número del día: es el dato secundario. */
+.availability-day span { min-height: .7em; font-size: .52rem; line-height: 1; letter-spacing: .04em; }
+button.availability-day { cursor: pointer; }
+button.availability-day:hover, button.availability-day:focus-visible {
+  border-color: var(--event-accent, var(--lime)); color: var(--paper);
+}
+.availability-day.is-some { color: var(--paper); background: rgba(255, 255, 255, .06); }
+.availability-day.is-ready {
+  border-color: var(--lime); color: var(--lime); background: rgba(215, 255, 63, .1);
+}
+/* Lo tuyo se distingue del resto por el relleno, no sólo por el color: sobre
+   un día que ya está verde, otro verde no se vería. */
+.availability-day.is-mine {
+  border-color: var(--event-accent, var(--lime));
+  color: var(--void); background: var(--event-accent, var(--lime));
+}
+.availability-day.is-mine.is-ready { box-shadow: inset 0 0 0 2px var(--void); }
+
+.availability-feedback {
+  margin: 1rem 0 0; min-height: 1.2em;
+  font: .56rem/1.5 var(--mono); letter-spacing: .08em; color: var(--muted);
+}
+.availability-feedback.error { color: var(--coral); }
+
+.availability-legend {
+  display: flex; flex-wrap: wrap; gap: 1.1rem;
+  margin: 1.2rem 0 0; padding: 0; list-style: none;
+  font: .52rem/1 var(--mono); letter-spacing: .08em; color: var(--muted);
+}
+.availability-legend li { display: flex; align-items: center; gap: .45rem; }
+.availability-legend i { width: 11px; height: 11px; border: 1px solid var(--line); }
+.availability-legend .is-mine { border-color: var(--event-accent, var(--lime)); background: var(--event-accent, var(--lime)); }
+.availability-legend .is-some { background: rgba(255, 255, 255, .18); }
+.availability-legend .is-ready { border-color: var(--lime); background: rgba(215, 255, 63, .25); }
+
+@media (max-width: 540px) {
+  .availability-calendar { gap: 1.2rem; }
+  .availability-month { flex-basis: 100%; }
+}

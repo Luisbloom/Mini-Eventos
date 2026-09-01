@@ -201,7 +201,7 @@ async function submitRegistration(event) {
   }
 }
 
-async function loadPrizes(event){if(!event.modules.prizes)return;try{const response=await fetch(`/api/events/${encodeURIComponent(event.slug)}/prizes`,{cache:'no-store'});const data=await response.json();byId('event-prizes').replaceChildren(...data.prizes.map((prize,index)=>{const card=document.createElement('article');card.innerHTML=`<span>PREMIO ${String(index+1).padStart(2,'0')}</span><h3></h3><p></p><b></b>`;card.querySelector('h3').textContent=prize.title;card.querySelector('p').textContent=prize.description;card.querySelector('b').textContent=prize.prizeValue||'';return card;}));}catch{byId('event-prizes').textContent='No se han podido cargar los premios.';}}
+async function loadPrizes(event){if(!event.modules.prizes)return;try{const response=await fetch(`/api/events/${encodeURIComponent(event.slug)}/prizes`,{cache:'no-store'});const data=await response.json();/* Un titular «Lo que está en juego» sin nada debajo promete premios que no hay: si la lista viene vacía, la sección no se enseña. */byId('premios').hidden=!data.prizes.length;byId('event-prizes').replaceChildren(...data.prizes.map((prize,index)=>{const card=document.createElement('article');card.innerHTML=`<span>PREMIO ${String(index+1).padStart(2,'0')}</span><h3></h3><p></p><b></b>`;card.querySelector('h3').textContent=prize.title;card.querySelector('p').textContent=prize.description;card.querySelector('b').textContent=prize.prizeValue||'';return card;}));}catch{byId('event-prizes').textContent='No se han podido cargar los premios.';}}
 
 async function loadEvent() {
   try {
@@ -216,6 +216,9 @@ async function loadEvent() {
     const mode = window.DraftView.publicEventMode(data.event);
     if (mode.upcoming) setConnection(false, 'PRÓXIMAMENTE');
     await loadPrizes(data.event);
+    // El calendario de disponibilidad va por su cuenta: si falla, no se lleva
+    // por delante el resto de la página.
+    window.Availability?.cargar(data.event);
     const section = location.pathname.split('/').filter(Boolean)[2]; if (section) document.querySelector(`#${section}`)?.scrollIntoView();
   } catch { byId('event-error').hidden = false; setConnection(false, 'NO DISPONIBLE'); }
 }
