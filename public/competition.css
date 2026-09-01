@@ -10,3 +10,12 @@
 .event-schedule{margin:0;padding:0;list-style:none;border-top:1px solid var(--line)}.event-schedule li{display:grid;grid-template-columns:95px minmax(160px,.7fr) 1fr;gap:1rem;padding:1.15rem 0;border-bottom:1px solid var(--line);align-items:baseline}.event-schedule time{color:var(--event-accent);font:1.35rem/1 var(--display)}.event-schedule strong{text-transform:uppercase;font:1.25rem/1 var(--display)}.event-schedule p{margin:0;color:var(--muted);line-height:1.5}
 .event-prizes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}.event-prizes article{min-height:190px;padding:1.3rem;background:var(--surface);display:flex;flex-direction:column}.event-prizes span{color:var(--event-accent);font:.52rem/1 var(--mono)}.event-prizes h3{margin:1.4rem 0 .7rem;font:1.8rem/1 var(--display);text-transform:uppercase}.event-prizes p{color:var(--muted);line-height:1.5}.event-prizes b{margin-top:auto;color:var(--paper);font:.62rem/1.4 var(--mono)}
 @media(max-width:650px){.competition-section,.schedule-section,.prizes-section{padding-left:1rem;padding-right:1rem}.competition-table thead{display:none}.competition-table tr{display:grid;grid-template-columns:42px 1fr auto;align-items:center}.competition-table td{padding:.85rem .55rem}.competition-table td.optional{display:none}.competition-table td.player{font-size:1.05rem}.competition-table td.status{grid-column:2/-1;padding-top:0}.event-schedule li{grid-template-columns:72px 1fr}.event-schedule p{grid-column:2}.stage-progress{grid-template-columns:1fr 1fr}.stage-progress li{min-height:105px}.group-tabs button{flex:1}}
+
+/* Un puesto compartido se dice. Estos tres deciden premios especiales, y
+   dar el primero a uno de dos empatados sería inventar un ganador. */
+.stat-leader.is-tied { border-color: var(--gold, #d7b23f); }
+.stat-leader .tie-note {
+  display: block; margin-top: .5rem;
+  color: var(--gold, #d7b23f);
+  font: .48rem/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+}

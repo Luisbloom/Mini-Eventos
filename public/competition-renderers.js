@@ -474,12 +474,23 @@
       const normalizedSearch = search.value.trim().toLocaleLowerCase('es');
       const metricField = metric.value === 'overall' ? 'globalScore' : metric.value;
       const rows = View.rankPlayers(stats.filter((row) => (!team.value || Number(team.value) === row.teamId) && (!normalizedSearch || (names.get(row.participantId) || '').toLocaleLowerCase('es').includes(normalizedSearch))), metricField, metric.value === 'deaths' ? 'asc' : 'desc');
-      podium.replaceChildren(...rows.slice(0, 3).map((row, index) => {
+      /*
+        Los puestos se comparten cuando hay empate en la métrica. Para pintar
+        una lista da igual, pero estos tres puestos deciden premios: dar el #1
+        a uno de dos empatados por su número interno sería inventar un ganador.
+      */
+      const conPuesto = View.withRanking(rows, metricField);
+      podium.replaceChildren(...conPuesto.slice(0, 3).map((row, index) => {
         const card = node('article', `stat-leader place-${index + 1}`);
+        if (row.rankTied) card.classList.add('is-tied');
         const displayedValue = row[metricField] === null || row[metricField] === undefined
           ? '—'
           : `${row[metricField]}${metric.value === 'overall' ? ' / 100' : ''}`;
-        card.append(node('span', '', `#${index + 1} · ${METRICS[metric.value][0]}`), node('strong', '', names.get(row.participantId) || `Jugador ${row.participantId}`), node('b', '', displayedValue));
+        card.append(
+          node('span', '', `#${row.rankPosition} · ${METRICS[metric.value][0]}`),
+          node('strong', '', names.get(row.participantId) || `Jugador ${row.participantId}`),
+          node('b', '', displayedValue));
+        if (row.rankTied) card.append(node('small', 'tie-note', 'Empatado: lo decide la organización'));
         return card;
       }));
       tableTarget.replaceChildren(renderStatsTable(context, rows, metric.value));

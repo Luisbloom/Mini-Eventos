@@ -100,6 +100,39 @@
   }
 
   /**
+   * Coloca a cada jugador en su puesto, compartiéndolo cuando empatan.
+   *
+   * El orden de la tabla ya se decide en `rankPlayers`, que ante un empate
+   * mira las bajas y, si tampoco separan, el identificador interno. Eso vale
+   * para pintar una lista, pero **no para repartir un premio**: quien queda
+   * primero por su número de inscripción no ha ganado nada.
+   *
+   * Así que el puesto se calcula sólo con la métrica que se está mirando: dos
+   * jugadores con el mismo valor comparten puesto y se marcan como empatados.
+   * Lo resuelve la organización, igual que en la clasificación.
+   */
+  function withRanking(rows = [], metric = 'acs') {
+    const valor = (fila) => {
+      const bruto = fila?.[metric];
+      return bruto === null || bruto === undefined || bruto === '' ? null : Number(bruto);
+    };
+    let puesto = 0;
+    let anterior;
+    const colocadas = rows.map((fila, indice) => {
+      const actual = valor(fila);
+      const mismoQueElAnterior = indice > 0 && actual !== null && actual === anterior;
+      if (!mismoQueElAnterior) puesto = indice + 1;
+      anterior = actual;
+      return { ...fila, rankPosition: puesto, rankValue: actual };
+    });
+    // Se marca después: el primero de un empate no sabe que lo es hasta que
+    // aparece el segundo.
+    const cuantos = new Map();
+    for (const fila of colocadas) cuantos.set(fila.rankPosition, (cuantos.get(fila.rankPosition) ?? 0) + 1);
+    return colocadas.map((fila) => ({ ...fila, rankTied: cuantos.get(fila.rankPosition) > 1 }));
+  }
+
+  /**
    * Índice global relativo (0–100). Normaliza cada métrica contra el resto del
    * torneo, usa promedios por partida para los acumulados y reduce el peso de
    * muestras pequeñas. No modifica las filas recibidas.
@@ -204,6 +237,7 @@
     findSeries,
     nextSeries,
     rankPlayers,
+    withRanking,
     scoreGlobalPlayers,
     confirmedPlacements,
     previewCompetitionState

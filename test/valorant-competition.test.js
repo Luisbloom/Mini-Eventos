@@ -103,6 +103,37 @@ describe('fase regular de Valorant', () => {
       return { calendario, partidos, parejas, juega };
     };
 
+    it('en el ranking de jugadores, un empate comparte puesto', () => {
+      /*
+        Estos puestos deciden premios especiales -mejores kills, ACS,
+        asistencias-. Dar el primero a uno de dos empatados por su número
+        interno de inscripción sería inventar un ganador.
+      */
+      global.window = global.window || {};
+      const View = require('../public/competition-view.js');
+      const filas = [
+        { participantId: 7, acs: 250 }, { participantId: 3, acs: 250 },
+        { participantId: 9, acs: 210 }, { participantId: 1, acs: 210 },
+        { participantId: 5, acs: 180 }
+      ];
+      const puestos = View.withRanking(filas, 'acs');
+
+      assert.deepEqual(puestos.map((f) => f.rankPosition), [1, 1, 3, 3, 5]);
+      assert.deepEqual(puestos.map((f) => f.rankTied), [true, true, true, true, false]);
+      // El que no empata con nadie no se marca.
+      assert.equal(puestos.at(-1).rankPosition, 5);
+    });
+
+    it('sin empates, los puestos son los de siempre', () => {
+      global.window = global.window || {};
+      const View = require('../public/competition-view.js');
+      const puestos = View.withRanking(
+        [{ participantId: 1, kills: 30 }, { participantId: 2, kills: 20 }, { participantId: 3, kills: 10 }],
+        'kills');
+      assert.deepEqual(puestos.map((f) => f.rankPosition), [1, 2, 3]);
+      assert.equal(puestos.some((f) => f.rankTied), false);
+    });
+
     it('el calendario de cuatro sale igual que en el documento del torneo', () => {
       /*
         La tabla del PDF que ha leído la gente:
