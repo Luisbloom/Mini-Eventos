@@ -250,6 +250,35 @@ describe('disponibilidad', () => {
       assert.ok(js.includes('window.Availability?.cargar'), 'la página lo arranca');
     });
 
+    it('marcar no guarda: hay que confirmar', () => {
+      const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.html'), 'utf8');
+      const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'availability.js'), 'utf8');
+
+      assert.ok(html.includes('id="availability-confirm"'), 'hay botón de confirmar');
+      assert.ok(html.includes('id="availability-discard"'), 'y se pueden descartar los cambios');
+
+      // El clic sólo toca el borrador; el PUT sale del botón, no de la casilla.
+      const clic = js.slice(js.indexOf("availability-calendar')?.addEventListener"),
+        js.indexOf("availability-confirm')?.addEventListener"));
+      assert.ok(!clic.includes('fetch('), 'pulsar un día no llama al servidor');
+      assert.ok(js.includes("byId('availability-confirm')?.addEventListener('click', confirmar)"),
+        'confirmar es lo que guarda');
+    });
+
+    it('lo marcado sin confirmar se distingue de lo confirmado', () => {
+      const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'availability.js'), 'utf8');
+      const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.css'), 'utf8');
+      // Si se vieran igual, el botón de confirmar no lo pulsaría nadie.
+      assert.ok(js.includes("'is-draft'"), 'el borrador se marca en el DOM');
+      assert.ok(css.includes('.availability-day.is-mine.is-draft'), 'y tiene su propio aspecto');
+    });
+
+    it('avisa antes de salir con días sin confirmar', () => {
+      const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'availability.js'), 'utf8');
+      assert.ok(js.includes("addEventListener('beforeunload'"),
+        'marcar y cerrar la pestaña no puede perderse en silencio');
+    });
+
     it('la sección de premios no se enseña vacía', () => {
       const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.js'), 'utf8');
       // «Lo que está en juego» con nada debajo promete premios que no existen.

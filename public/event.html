@@ -70,10 +70,15 @@
             <h2 id="availability-title">Marca los días que puedes</h2>
           </div>
         </header>
-        <p id="availability-intro" class="availability-intro">No hace falta el día que pueda todo el mundo: hace falta el primero en el que quepa un torneo entero. Marca todos los días que te vengan bien y verás cuántos pueden cada día.</p>
+        <p id="availability-intro" class="availability-intro">No hace falta el día que pueda todo el mundo: hace falta el primero en el que quepa un torneo entero. Marca todos los días que te vengan bien y dale a confirmar: hasta entonces no los ve nadie. Verás también cuántos pueden cada día.</p>
         <p id="availability-gate" class="availability-gate" hidden></p>
         <div id="availability-headline" class="availability-headline" hidden></div>
         <div id="availability-calendar" class="availability-calendar" role="group" aria-labelledby="availability-title"></div>
+        <div id="availability-actions" class="availability-actions" hidden>
+          <button id="availability-confirm" type="button" class="availability-confirm" disabled>CONFIRMAR DÍAS <span aria-hidden="true">&rarr;</span></button>
+          <button id="availability-discard" type="button" class="availability-discard" hidden>Descartar cambios</button>
+          <p id="availability-pending" class="availability-pending" aria-live="polite"></p>
+        </div>
         <p id="availability-feedback" class="availability-feedback" role="status"></p>
         <ul class="availability-legend">
           <li><i class="is-mine" aria-hidden="true"></i> Tus días</li>

@@ -22,6 +22,16 @@
   let guardando = false;
 
   /*
+    Lo marcado y lo confirmado son dos cosas distintas.
+
+    `seleccion` es lo que hay tocado en pantalla; `estado.me.days` es lo que el
+    servidor tiene guardado. Marcar un día es prometer que se juega, y una
+    promesa no se hace de un clic suelto: hasta que no se confirma, lo tocado no
+    sale de este navegador y nadie más lo ve.
+  */
+  let seleccion = new Set();
+
+  /*
     Las fechas se manejan como texto YYYY-MM-DD de principio a fin.
 
     Convertirlas a Date para pintarlas las mueve de día en cuanto el navegador
@@ -41,6 +51,11 @@
   const enLetra = (dia) => {
     const [y, m, d] = partes(dia);
     return `${DIAS[diaDeLaSemana(dia)].toLowerCase()} ${d} de ${MESES[m - 1]} de ${y}`;
+  };
+
+  const enCorto = (dia) => {
+    const [, m, d] = partes(dia);
+    return `${d} ${MESES[m - 1].slice(0, 3)}`;
   };
 
   const plural = (n, singular, plural_) => `${n} ${n === 1 ? singular : plural_}`;
@@ -109,7 +124,6 @@
     const seccion = byId('disponibilidad');
     seccion.hidden = false;
 
-    const mios = new Set(datos.me.days);
     const puedoMarcar = datos.me.registered === true;
 
     const puerta = byId('availability-gate');
@@ -160,15 +174,65 @@
         bloque.append(titulo, rejilla);
         bloques.push(bloque);
       }
-      rejilla.append(casilla(fecha, mios, puedoMarcar));
+      rejilla.append(casilla(fecha, seleccion, puedoMarcar));
     }
     calendario.replaceChildren(...bloques);
+    pintarBoton();
   }
 
-  async function guardar(dias) {
+  /** Qué hay tocado y todavía sin confirmar. */
+  function cambios() {
+    const guardados = new Set(estado?.me?.days || []);
+    const nuevos = [...seleccion].filter((dia) => !guardados.has(dia));
+    const quitados = [...guardados].filter((dia) => !seleccion.has(dia));
+    return { nuevos, quitados, hay: nuevos.length + quitados.length > 0 };
+  }
+
+  /**
+   * El botón de confirmar y lo que dice a su lado.
+   *
+   * Sin nada tocado no hay nada que confirmar, así que el botón se apaga: uno
+   * que se puede pulsar siempre no distingue lo guardado de lo pendiente, y
+   * quien lo pulsa por si acaso no sabe si antes había hecho algo.
+   */
+  function pintarBoton() {
+    const acciones = byId('availability-actions');
+    const boton = byId('availability-confirm');
+    const pendiente = byId('availability-pending');
+    if (!acciones || !boton || !pendiente) return;
+
+    acciones.hidden = estado?.me?.registered !== true;
+    const { nuevos, quitados, hay } = cambios();
+    boton.disabled = guardando || !hay;
+    byId('availability-discard').hidden = !hay;
+
+    if (guardando) {
+      pendiente.textContent = 'Guardando…';
+      pendiente.className = 'availability-pending';
+      return;
+    }
+    if (!hay) {
+      const total = estado?.me?.days.length || 0;
+      pendiente.textContent = total
+        ? `Tienes ${plural(total, 'día confirmado', 'días confirmados')}.`
+        : 'No has confirmado ningún día todavía.';
+      pendiente.className = 'availability-pending';
+      return;
+    }
+    const trozos = [];
+    if (nuevos.length) trozos.push(plural(nuevos.length, 'día nuevo', 'días nuevos'));
+    if (quitados.length) trozos.push(plural(quitados.length, 'quitado', 'quitados'));
+    pendiente.textContent = `Sin confirmar: ${trozos.join(' y ')}.`;
+    pendiente.className = 'availability-pending is-pending';
+  }
+
+  async function confirmar() {
+    if (guardando || !estado || !cambios().hay) return;
+    const dias = [...seleccion].sort();
     const aviso = byId('availability-feedback');
     guardando = true;
-    aviso.textContent = 'Guardando…';
+    pintarBoton();
+    aviso.textContent = '';
     aviso.className = 'availability-feedback';
     try {
       const respuesta = await fetch(
@@ -180,33 +244,63 @@
         });
       const cuerpo = await respuesta.json().catch(() => ({}));
       if (!respuesta.ok) throw new Error(cuerpo.error?.message || 'No se han podido guardar tus días.');
+      guardando = false;
+      seleccion = new Set(cuerpo.me.days);
       pintar(cuerpo);
       aviso.textContent = cuerpo.me.days.length
-        ? `Guardado: ${plural(cuerpo.me.days.length, 'día marcado', 'días marcados')}.`
-        : 'Guardado: no has marcado ningún día.';
+        ? `Confirmado. Puedes: ${cuerpo.me.days.map(enCorto).join(', ')}.`
+        : 'Confirmado: ya no puedes ningún día.';
     } catch (error) {
+      guardando = false;
       aviso.textContent = error.message;
       aviso.className = 'availability-feedback error';
-      // Lo guardado manda: se vuelve a pintar lo último que sí se guardó, para
-      // que nadie se quede creyendo que marcó un día que no está.
-      if (estado) pintar(estado);
-    } finally {
-      guardando = false;
+      /*
+        Lo confirmado manda. Si el guardado falla se vuelve a lo que el servidor
+        tiene: dejar en pantalla lo tocado haría creer que la promesa está hecha
+        cuando no ha llegado a ninguna parte.
+      */
+      if (estado) { seleccion = new Set(estado.me.days); pintar(estado); }
     }
   }
 
   byId('availability-calendar')?.addEventListener('click', (click) => {
     const celda = click.target.closest('.availability-day');
     if (!celda || celda.tagName !== 'BUTTON' || guardando || !estado) return;
-    const dias = new Set(estado.me.days);
-    if (dias.has(celda.dataset.day)) dias.delete(celda.dataset.day);
-    else dias.add(celda.dataset.day);
+    const dia = celda.dataset.day;
+    if (seleccion.has(dia)) seleccion.delete(dia);
+    else seleccion.add(dia);
 
-    // Se pinta el cambio antes de que conteste el servidor: pulsar y esperar a
-    // que responda para ver el efecto hace que se pulse dos veces.
-    celda.classList.toggle('is-mine');
-    celda.setAttribute('aria-pressed', String(dias.has(celda.dataset.day)));
-    guardar([...dias].sort());
+    /*
+      El día se pinta al pulsarlo, aunque todavía no esté confirmado, y se
+      distingue de los que ya lo están: si lo tocado y lo guardado se vieran
+      igual, el botón de confirmar sobraría y nadie lo pulsaría.
+    */
+    const marcado = seleccion.has(dia);
+    celda.classList.toggle('is-mine', marcado);
+    celda.classList.toggle('is-draft', marcado !== (estado.me.days || []).includes(dia));
+    celda.setAttribute('aria-pressed', String(marcado));
+    byId('availability-feedback').textContent = '';
+    pintarBoton();
+  });
+
+  byId('availability-confirm')?.addEventListener('click', confirmar);
+
+  // Descartar: se vuelve a lo confirmado, sin preguntarle nada al servidor.
+  byId('availability-discard')?.addEventListener('click', () => {
+    if (guardando || !estado) return;
+    seleccion = new Set(estado.me.days);
+    pintar(estado);
+    byId('availability-feedback').textContent = '';
+  });
+
+  /*
+    Salir con días sin confirmar es perderlos. El navegador enseña su propio
+    aviso; aquí sólo se declara que hay algo que perder.
+  */
+  window.addEventListener('beforeunload', (salida) => {
+    if (!estado || !cambios().hay) return;
+    salida.preventDefault();
+    salida.returnValue = '';
   });
 
   async function cargar(event) {
@@ -216,7 +310,9 @@
       const respuesta = await fetch(
         `/api/events/${encodeURIComponent(event.slug)}/availability`, { cache: 'no-store' });
       if (!respuesta.ok) return;
-      pintar(await respuesta.json());
+      const datos = await respuesta.json();
+      seleccion = new Set(datos.me.days);
+      pintar(datos);
     } catch {
       // Complementario: si falla, la sección se queda oculta y la página entera
       // se sigue leyendo igual.
