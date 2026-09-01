@@ -144,5 +144,17 @@
   window.addEventListener('beforeunload', () => stream?.close());
 
   if (!route.slug) showError('Ruta incorrecta', 'No se ha indicado qué evento quieres consultar.');
-  else refresh().then(connectStream);
+  else {
+    /*
+      Navegar no depende de que haya datos.
+
+      El menú y el enlace de vuelta salen del slug, que está en la URL. Si se
+      arman dentro de `draw()` —que sólo corre cuando todo va bien— cualquier
+      pantalla de error deja los enlaces en el `href="/"` del HTML y te manda a
+      la portada. Pasó en la página del draft.
+    */
+    byId('competition-event-link').href = `/eventos/${encodeURIComponent(route.slug)}`;
+    buildNavigation();
+    refresh().then(connectStream);
+  }
 })();

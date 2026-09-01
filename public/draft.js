@@ -33,6 +33,14 @@ function mostrarNoDisponible(titulo, copia, upcoming = false) {
   setConnection(upcoming ? 'loading' : 'error', upcoming ? 'PRÓXIMAMENTE' : 'NO DISPONIBLE');
 }
 
+/**
+ * Los enlaces a las demás fases.
+ *
+ * Sólo dependen del slug, que se saca de la propia URL: no hay ninguna razón
+ * para esperar a que cargue el draft. Se esperaba, y por eso el día que no
+ * había draft el menú entero seguía con el `href="/"` del HTML y cualquier fase
+ * te devolvía a la portada.
+ */
 function configurarNavegacion() {
   byId('back-to-event').href = `/eventos/${encodeURIComponent(slug)}`;
   const competition = `/eventos/${encodeURIComponent(slug)}/competicion`;
@@ -384,5 +392,7 @@ byId('team-name-form').addEventListener('submit', async (submit) => {
 window.addEventListener('pagehide', () => { if (stream) stream.close(); });
 
 (async () => {
+  // Lo primero, antes de preguntar nada: navegar no depende del estado.
+  configurarNavegacion();
   if (await pedirEstado()) conectar();
 })();
