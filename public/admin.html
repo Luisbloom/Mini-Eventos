@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
     <link rel="apple-touch-icon" href="/images/logo.png">
-    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><link rel="stylesheet" href="/admin-league.css"><link rel="stylesheet" href="/admin-captures.css"><link rel="stylesheet" href="/admin-playoffs.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script><script src="/admin-league.js" defer></script><script src="/admin-captures.js" defer></script><script src="/admin-playoffs.js" defer></script>
+    <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/admin-cover.css"><link rel="stylesheet" href="/admin-competition.css"><link rel="stylesheet" href="/admin-league.css"><link rel="stylesheet" href="/admin-captures.css"><link rel="stylesheet" href="/admin-playoffs.css"><link rel="stylesheet" href="/admin-stats.css"><script src="/admin.js" defer></script><script src="/draft-view.js" defer></script><script src="/admin-competition.js" defer></script><script src="/admin-draft.js" defer></script><script src="/admin-league.js" defer></script><script src="/admin-captures.js" defer></script><script src="/admin-playoffs.js" defer></script><script src="/admin-stats.js" defer></script>
   </head>
   <body class="admin-page">
     <div class="grain" aria-hidden="true"></div>
@@ -219,6 +219,23 @@
         <button id="captures-reprocess" type="button" class="secondary-button">VOLVER A PROCESAR</button>
         <button id="captures-confirm" type="button">CONFIRMAR E IMPORTAR</button>
         <button id="captures-close" type="button" class="secondary-button">CERRAR</button>
+      </footer>
+    </dialog>
+    <dialog id="stats-editor" class="stats-editor">
+      <header>
+        <h3 id="stats-editor-title">Estadísticas</h3>
+        <button id="stats-editor-close" type="button" aria-label="Cerrar">×</button>
+      </header>
+      <p class="stats-editor-hint">Lo que no se sepa se deja en blanco: vacío y cero no son lo mismo.</p>
+      <div class="stats-editor-scroll">
+        <table class="stats-editor-table">
+          <thead><tr><th>Jugador</th><th>Agente</th><th>ACS</th><th>K</th><th>D</th><th>A</th><th>ADR</th><th>HS%</th><th>KAST%</th><th>FK</th><th>FD</th></tr></thead>
+          <tbody id="stats-editor-body"></tbody>
+        </table>
+      </div>
+      <footer>
+        <p id="stats-editor-feedback" role="alert"></p>
+        <button id="stats-editor-save" type="button">GUARDAR ESTADÍSTICAS</button>
       </footer>
     </dialog>
   </body>

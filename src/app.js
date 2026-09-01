@@ -1087,6 +1087,51 @@ function createApp({
     } catch (error) { next(error); }
   });
 
+  /*
+    Las estadísticas de una partida, a mano. Quien organiza las ve en pantalla
+    y tiene que poder escribirlas o corregirlas sin depender de la captura.
+  */
+  app.get('/api/admin/events/:id/competition/stats', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const serie = database.valorantCompetition.getSeries(id, parseId(request.query.seriesId));
+      if (!serie) return sendError(response, 404, 'SERIES_NOT_FOUND', 'La serie no existe.');
+      const numero = Number(request.query.gameNumber || 1);
+      const juego = serie.games.find((g) => g.gameNumber === numero);
+      if (!juego) return sendError(response, 404, 'GAME_NOT_FOUND', 'Esa partida no existe.');
+
+      const equipos = database.valorant.listTeams(id);
+      response.json({
+        series: { id: serie.id, teamAId: serie.teamAId, teamBId: serie.teamBId },
+        game: { gameNumber: juego.gameNumber, status: juego.status, mapKey: juego.mapKey },
+        // Las plantillas, para poder rellenar una tabla vacía sin teclear nombres.
+        rosters: [serie.teamAId, serie.teamBId].filter(Boolean).map((teamId) => ({
+          teamId,
+          name: equipos.find((e) => e.id === teamId)?.name ?? null,
+          members: (equipos.find((e) => e.id === teamId)?.members ?? []).map((m) => ({
+            participantId: m.participantId, displayName: m.displayName
+          }))
+        })),
+        stats: database.valorantCompetition.listGameStats(juego.id)
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.put('/api/admin/events/:id/competition/stats', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const stats = database.valorantCompetition.setGameStats(id, {
+        seriesId: request.body?.seriesId,
+        gameNumber: request.body?.gameNumber ?? 1,
+        stats: request.body?.stats,
+        reason: request.body?.reason,
+        actor: 'admin'
+      });
+      draftStream.publish(id, 'competition_updated');
+      response.json({ stats });
+    } catch (error) { next(error); }
+  });
+
   app.put('/api/admin/events/:id/competition/settings', (request, response, next) => {
     const id = parseId(request.params.id);
     try {

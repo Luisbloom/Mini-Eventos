@@ -290,6 +290,16 @@
     });
 
     forma.append(rondasA, guion, rondasB, enviar);
+
+    if (juego.status === 'COMPLETED') {
+      const stats = document.createElement('button');
+      stats.type = 'button';
+      stats.className = 'playoff-manual';
+      stats.textContent = 'ESTADÍSTICAS';
+      stats.addEventListener('click', () =>
+        window.AdminStats?.abrir(evento.id, serie.id, juego.gameNumber));
+      forma.append(stats);
+    }
     return forma;
   }
 

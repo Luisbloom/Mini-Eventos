@@ -1015,6 +1015,47 @@ function createValorantCompetitionStore(connection, { audit } = {}) {
       ).all(gameId).map(toStats);
     },
 
+    /**
+     * Escribe a mano las estadísticas de una partida ya jugada.
+     *
+     * Camino aparte del resultado: aquí NO se toca el marcador. Sirve para
+     * cuando la captura no vale, no existe, o simplemente se prefiere teclear
+     * mirando la pantalla del juego. Quien organiza ve la tabla con sus ojos y
+     * tiene que poder corregir cualquier celda.
+     *
+     * Pide motivo, como toda escritura a mano, y queda en la auditoría.
+     */
+    setGameStats(eventId, { seriesId, gameNumber = 1, stats, reason, actor = 'admin' }) {
+      if (!reason || !String(reason).trim()) {
+        throw new CompetitionError('Hace falta un motivo.', 'REASON_REQUIRED');
+      }
+      if (!Array.isArray(stats)) {
+        throw new CompetitionError('Las estadísticas son una lista de jugadores.', 'STATS_REQUIRED');
+      }
+
+      const serie = connection.prepare('SELECT * FROM valorant_series WHERE id=? AND event_id=?')
+        .get(seriesId, eventId);
+      if (!serie) throw new CompetitionError('La serie no existe.', 'SERIES_NOT_FOUND', 404);
+
+      const juego = connection.prepare(
+        'SELECT * FROM valorant_games WHERE series_id=? AND game_number=?').get(seriesId, gameNumber);
+      if (!juego) throw new CompetitionError('Esa partida no existe.', 'GAME_NOT_FOUND', 404);
+      if (juego.status !== 'COMPLETED') {
+        throw new CompetitionError(
+          'La partida todavía no tiene resultado: primero el marcador.', 'RESULT_NOT_RECORDED', 409);
+      }
+
+      const antes = this.listGameStats(juego.id);
+      connection.transaction(() => {
+        this._replaceGameStats(juego.id, serie, stats, null);
+      })();
+
+      registrar(eventId, actor, 'GAME_STATS_EDITED', `series:${seriesId}`, reason, {
+        gameNumber, players: stats.length, previousPlayers: antes.length
+      });
+      return this.listGameStats(juego.id);
+    },
+
     getSeries(eventId, seriesId) {
       const serie = toSeries(connection.prepare('SELECT * FROM valorant_series WHERE id=? AND event_id=?')
         .get(seriesId, eventId));

@@ -168,6 +168,18 @@
     });
 
     forma.append(rondasA, guion, rondasB, enviar);
+
+    // Con marcador ya guardado se pueden escribir las estadísticas a mano,
+    // haya captura o no.
+    if (juego.status === 'COMPLETED') {
+      const stats = document.createElement('button');
+      stats.type = 'button';
+      stats.className = 'secondary-button';
+      stats.textContent = 'ESTADÍSTICAS';
+      stats.addEventListener('click', () =>
+        window.AdminStats?.abrir(evento.id, serie.id, juego.gameNumber));
+      forma.append(stats);
+    }
     return forma;
   }
 

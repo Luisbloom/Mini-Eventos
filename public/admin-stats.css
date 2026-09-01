@@ -1,0 +1,59 @@
+/*
+  Editor de estadísticas. Quince columnas y diez filas: manda que se pueda
+  copiar de la pantalla del juego sin perder el sitio, así que la tabla se
+  desplaza dentro del diálogo en vez de encoger las celdas.
+*/
+.stats-editor {
+  width: min(1100px, 94vw);
+  max-height: 88vh;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--paper);
+}
+.stats-editor::backdrop { background: rgba(0, 0, 0, .72); }
+.stats-editor > header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.2rem; border-bottom: 1px solid var(--line);
+}
+.stats-editor > header h3 { margin: 0; font: 1.3rem/1 var(--display); text-transform: uppercase; }
+.stats-editor > header button {
+  min-width: 36px; min-height: 36px; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); cursor: pointer; font-size: 1.1rem;
+}
+.stats-editor-hint {
+  margin: 0; padding: .7rem 1.2rem; border-bottom: 1px solid var(--line);
+  color: var(--muted); font: .55rem/1.5 var(--mono); letter-spacing: .06em;
+}
+.stats-editor-scroll { overflow: auto; max-height: 58vh; }
+.stats-editor-table { width: 100%; border-collapse: collapse; }
+.stats-editor-table th, .stats-editor-table td { padding: .35rem .45rem; text-align: left; }
+.stats-editor-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-raised, #151b1f);
+  border-bottom: 1px solid var(--line);
+  font: .5rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.stats-editor-table tbody th { font-size: .8rem; white-space: nowrap; }
+.stats-editor-table .stats-team {
+  padding-top: .9rem;
+  color: var(--lime); font: .55rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+}
+.stats-editor-table input {
+  width: 100%; min-width: 58px; min-height: 34px; padding: .3rem .4rem;
+  border: 1px solid var(--line); background: var(--void); color: var(--paper);
+}
+.stats-editor-table input:focus-visible { outline: 2px solid var(--lime); outline-offset: -2px; }
+.stats-editor > footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1rem 1.2rem; border-top: 1px solid var(--line);
+}
+.stats-editor > footer p { margin: 0; color: var(--coral); font-size: .8rem; }
+#stats-editor-save {
+  padding: .8rem 1.2rem; border: 1px solid var(--lime); background: transparent;
+  color: var(--lime); font: .55rem/1 var(--mono); letter-spacing: .12em; cursor: pointer;
+}
+#stats-editor-save:hover { background: var(--lime); color: var(--void); }
+#stats-editor-save:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 700px) { .stats-editor-scroll { max-height: 50vh; } }
