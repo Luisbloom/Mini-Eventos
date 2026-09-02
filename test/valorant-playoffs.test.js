@@ -1248,7 +1248,14 @@ describe('eliminatorias de Valorant', () => {
       assert.equal(jugada.games[0].mapKey, 'ascent');
 
       const texto = JSON.stringify(publico.body).toLowerCase();
-      for (const prohibido of ['discord', 'reason', 'audit', 'storagekey', 'sha256', 'ocr']) {
+      /*
+        «discord» a secas ya no vale como prohibido: el formato publicado
+        explica que el draft se hace por Discord, y eso es texto para leer, no
+        una identidad filtrada. Se comprueba lo que de verdad no puede salir:
+        el usuario, el id de cuenta y la URL del CDN, que lleva el id dentro.
+      */
+      for (const prohibido of ['discord_username', 'discordUserId', 'discord_account_id', 'cdn.discordapp.com',
+        'reason', 'audit', 'storagekey', 'sha256', 'ocr']) {
         assert.equal(texto.includes(prohibido), false, `no debe salir ${prohibido}`);
       }
     });

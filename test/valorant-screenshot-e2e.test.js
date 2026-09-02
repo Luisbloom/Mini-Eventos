@@ -468,7 +468,13 @@ describe('resultados por captura, de punta a punta', () => {
 
       // --- 8. y nada privado se ha escapado ---
       const texto = JSON.stringify(publico.body).toLowerCase();
-      for (const prohibido of ['storagekey', 'ocr', 'confidence', 'discord', 'reason',
+      /*
+        La palabra «discord» aparece ahora en el formato publicado —el draft se
+        hace por Discord— y eso es texto para leer. Lo que no puede salir es la
+        identidad: usuario, id de cuenta y la URL del CDN, que lleva el id.
+      */
+      for (const prohibido of ['storagekey', 'ocr', 'confidence', 'reason',
+        'discord_username', 'discordUserId', 'discord_account_id', 'cdn.discordapp.com',
         'audit', 'sha256', 'uploads', '.png']) {
         assert.equal(texto.includes(prohibido), false, `no debe salir ${prohibido}`);
       }
@@ -756,7 +762,13 @@ describe('resultados por captura, de punta a punta', () => {
       assert.deepEqual(Object.keys(miembro).sort(), ['displayName', 'participantId']);
 
       const texto = JSON.stringify(publico.body).toLowerCase();
-      for (const prohibido of ['discord', 'riot', 'session', 'storagekey', 'sha256',
+      /*
+        La palabra «discord» aparece ahora en el formato publicado —el draft se
+        hace por Discord— y eso es texto para leer. Lo que no puede salir es la
+        identidad: usuario, id de cuenta y la URL del CDN, que lleva el id.
+      */
+      for (const prohibido of ['discord_username', 'discordUserId', 'discord_account_id',
+        'cdn.discordapp.com', 'riot', 'session', 'storagekey', 'sha256',
         'ocr', 'confidence', 'reason', 'audit', 'batch']) {
         assert.equal(texto.includes(prohibido), false, `no debe salir ${prohibido}`);
       }
