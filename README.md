@@ -618,6 +618,11 @@ sudo chown -R root:jartiland /opt/jartiland-amongus
 sudo chmod 0750 /opt/jartiland-amongus
 sudo chown -R jartiland:jartiland /opt/jartiland-amongus/data
 sudo chmod 0750 /opt/jartiland-amongus/data
+# backups/ también: el chown -R de arriba la deja en root:jartiland 0750, y el
+# servicio de copia corre como jartiland, que entonces puede leerla pero no
+# escribir en ella. La copia nocturna fallaría en silencio tras cada despliegue.
+sudo install -d -o jartiland -g jartiland -m 0750 /opt/jartiland-amongus/backups
+sudo chown -R jartiland:jartiland /opt/jartiland-amongus/backups
 sudo chown root:jartiland /opt/jartiland-amongus/.env
 sudo chmod 0640 /opt/jartiland-amongus/.env
 sudo -u jartiland /usr/bin/node src/init-db.js
