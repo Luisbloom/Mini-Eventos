@@ -52,7 +52,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 [[ -f "$SRC/package.json" ]] || { echo "Falta $SRC/package.json" >&2; exit 1; }
 
-git_luis() { sudo -u luis git -C "$SRC" "$@"; }
+git_luis() { sudo -u luis -Hgit -C "$SRC" "$@"; }
 COMMIT="$(git_luis rev-parse --short HEAD)"
 RAMA="$(git_luis rev-parse --abbrev-ref HEAD)"
 if [[ -n "$(git_luis status --porcelain --untracked-files=no)" ]]; then
@@ -123,7 +123,7 @@ echo "== Despliegue de $COMMIT (rama $RAMA)"
 # ── 1. pruebas, con producción todavía intacta ────────────────────────────────
 if [[ "$PRUEBAS" == "si" ]]; then
   echo "== 1. pruebas en este servidor"
-  sudo -u luis bash -o pipefail -c "
+  sudo -u luis -Hbash -o pipefail -c "
     cd '$SRC'
     npm ci --no-audit --no-fund --loglevel=error
     npm test 2>&1 | grep -E '^ℹ (tests|pass|fail)'

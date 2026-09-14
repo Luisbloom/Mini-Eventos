@@ -1,0 +1,11 @@
+# Los guiones y unidades que corren en el servidor Linux van SIEMPRE con finales
+# de línea LF. Git en Windows avisaba de que los convertiría a CRLF en la copia
+# de trabajo, y un guion de bash con CRLF falla en Linux con errores que no
+# señalan la causa («$'\r': command not found»). La CI también lo comprueba.
+*.sh            text eol=lf
+deploy/sbin/*   text eol=lf
+deploy/systemd/* text eol=lf
+.github/workflows/*.yml text eol=lf
+
+# Los guiones de PowerShell, en cambio, se quedan con los finales de Windows.
+*.ps1           text eol=crlf

@@ -24,8 +24,8 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-sudo -u luis git -C "$SRC" fetch --prune --quiet origin
-sudo -u luis git -C "$SRC" checkout --quiet -B "$RAMA" "origin/$RAMA"
-sudo -u luis git -C "$SRC" reset --quiet --hard "origin/$RAMA"
+sudo -u luis -H git -C "$SRC" fetch --prune --quiet origin
+sudo -u luis -H git -C "$SRC" checkout --quiet -B "$RAMA" "origin/$RAMA"
+sudo -u luis -H git -C "$SRC" reset --quiet --hard "origin/$RAMA"
 
 exec bash "$SRC/deploy/desplegar.sh" "${argumentos[@]}"
