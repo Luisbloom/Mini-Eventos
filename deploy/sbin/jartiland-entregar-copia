@@ -1,0 +1,56 @@
+#!/bin/bash
+# La ÚNICA orden que puede ejecutar la clave de copias externas.
+#
+# En authorized_keys del usuario jartiland-copias la clave va con
+# `restrict,from="<IP del PC>",command="/usr/local/sbin/jartiland-entregar-copia"`:
+# aunque alguien la robara, desde otra máquina no entra, y desde esa máquina sólo
+# puede hacer lo de aquí abajo. Nada de shell, reenvío de puertos ni terminal.
+#
+# El PC habla con tres verbos, que llegan en SSH_ORIGINAL_COMMAND:
+#   sha256            huella y nombre de la última copia
+#   descargar         el contenido de la última copia
+#   confirmar <sha>   «la he guardado y la huella coincide»
+#
+# La marca que vigila el servidor sólo se actualiza con `confirmar`, y sólo si la
+# huella coincide con la copia actual: descargar no basta. Así el vigilante sabe
+# que hay una copia VERIFICADA fuera, no que alguien empezó a bajarla.
+set -Eeuo pipefail
+
+BACKUP_DIR=/opt/jartiland-amongus/backups
+MARCA=/var/lib/jartiland-copias/ultima-entrega
+
+copia="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'tournament-*.db' -printf '%T@ %p\n' \
+  | sort -n | tail -1 | cut -d' ' -f2-)"
+if [[ -z "$copia" ]]; then
+  echo "no hay copias" >&2
+  exit 1
+fi
+
+orden="${SSH_ORIGINAL_COMMAND:-}"
+case "$orden" in
+  sha256)
+    printf '%s %s\n' "$(sha256sum "$copia" | cut -d' ' -f1)" "$(basename "$copia")"
+    ;;
+  descargar)
+    cat "$copia"
+    ;;
+  confirmar\ *)
+    sha="${orden#confirmar }"
+    if [[ ! "$sha" =~ ^[0-9a-f]{64}$ ]]; then
+      echo "huella no válida" >&2
+      exit 2
+    fi
+    if [[ "$sha" != "$(sha256sum "$copia" | cut -d' ' -f1)" ]]; then
+      echo "la huella no coincide con la última copia" >&2
+      exit 3
+    fi
+    date +%s > "$MARCA"
+    logger -t jartiland-copias -- "Copia externa confirmada: $(basename "$copia") $sha"
+    echo "confirmada"
+    ;;
+  *)
+    logger -t jartiland-copias -p user.warning -- "Orden rechazada: ${orden:0:80}"
+    echo "orden no permitida" >&2
+    exit 64
+    ;;
+esac

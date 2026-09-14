@@ -1,0 +1,13 @@
+[Unit]
+Description=Aviso por Discord de que ha fallado %i
+
+[Service]
+Type=oneshot
+User=jartiland
+Group=jartiland
+ExecStart=/usr/local/sbin/jartiland-alertar "Ha fallado %i. Revisa: journalctl -u %i -n 50"
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true

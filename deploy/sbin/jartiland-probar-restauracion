@@ -1,0 +1,110 @@
+#!/bin/bash
+# Prueba de restauración: coge la última copia, levanta la web con ella en un
+# puerto aparte y comprueba que funciona.
+#
+# Una copia que nunca se ha restaurado es una hipótesis. Esto la convierte en un
+# hecho cada semana, y comprueba además lo que más daño hizo en este proyecto:
+# que ARRANCAR la aplicación sobre una base existente no pierda filas. Una
+# migración con borrado en cascada ya se llevó resultados por delante una vez, y
+# en una base vacía no se notaba nada.
+#
+# No toca la base de producción ni el servicio: trabaja sobre una copia en un
+# directorio temporal y la borra al terminar.
+set -Eeuo pipefail
+
+APP_DIR=/opt/jartiland-amongus
+BACKUP_DIR="$APP_DIR/backups"
+RESULTADO=/var/lib/jartiland-vigilante/restauracion
+PUERTO=3199
+# Estas tablas las vacía a propósito la limpieza al arrancar: no cuentan.
+TABLAS_QUE_SE_LIMPIAN="'oauth_states','discord_sessions'"
+
+trabajo="$(mktemp -d /tmp/restauracion.XXXXXX)"
+pid=""
+
+limpiar() {
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  rm -rf "$trabajo"
+}
+trap limpiar EXIT
+
+fallar() {
+  echo "FALLO $(date +%s) $*" > "$RESULTADO"
+  echo "Prueba de restauración FALLIDA: $*" >&2
+  exit 1
+}
+
+# ── 1. la copia ───────────────────────────────────────────────────────────────
+copia="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'tournament-*.db' -printf '%T@ %p\n' \
+  | sort -n | tail -1 | cut -d' ' -f2-)"
+[[ -n "$copia" ]] || fallar "no hay ninguna copia que restaurar"
+
+db="$trabajo/tournament.db"
+cp "$copia" "$db"
+[[ "$(sqlite3 "$db" 'PRAGMA integrity_check;')" == "ok" ]] \
+  || fallar "la copia $(basename "$copia") no pasa la comprobación de integridad"
+
+contar() {
+  sqlite3 "$1" "SELECT name FROM sqlite_master WHERE type='table'
+                AND name NOT LIKE 'sqlite_%' AND name NOT IN ($TABLAS_QUE_SE_LIMPIAN)
+                ORDER BY name;" \
+  | while read -r tabla; do
+      printf '%s %s\n' "$tabla" "$(sqlite3 "$1" "SELECT count(*) FROM \"$tabla\";")"
+    done
+}
+antes="$(contar "$db")"
+eventos="$(sqlite3 "$db" 'SELECT count(*) FROM events;')"
+
+# ── 2. levantar la web sobre la copia ─────────────────────────────────────────
+# Desde el directorio de trabajo, para que no lea el .env de producción, y con
+# un entorno vacío: sin Discord, sin Reporter, con un token de un solo uso.
+token="$(openssl rand -hex 32)"
+(
+  cd "$trabajo"
+  exec env -i PATH=/usr/bin:/bin HOME="$trabajo" NODE_ENV=production \
+    HOST=127.0.0.1 PORT="$PUERTO" DATA_DIR="$trabajo" DB_PATH="$db" ADMIN_TOKEN="$token" \
+    /usr/bin/node "$APP_DIR/src/server.js"
+) > "$trabajo/servidor.log" 2>&1 &
+pid=$!
+
+arranco=no
+for _ in $(seq 1 45); do
+  if curl -s -m 2 "http://127.0.0.1:$PUERTO/api/health" 2>/dev/null | grep -q '"database":"ok"'; then
+    arranco=si
+    break
+  fi
+  kill -0 "$pid" 2>/dev/null || break
+  sleep 1
+done
+[[ "$arranco" == "si" ]] \
+  || fallar "la web no arranca con la copia: $(tail -3 "$trabajo/servidor.log" | tr '\n' ' ')"
+
+# ── 3. la web ve lo que hay en la copia ───────────────────────────────────────
+vistos="$(curl -s -m 10 -H "Authorization: Bearer $token" "http://127.0.0.1:$PUERTO/api/admin/events" \
+  | python3 -c 'import sys, json; print(len(json.load(sys.stdin)["events"]))' 2>/dev/null || echo "?")"
+[[ "$vistos" == "$eventos" ]] \
+  || fallar "la copia tiene $eventos eventos y la web restaurada ve $vistos"
+
+# ── 4. arrancar no ha perdido ni una fila ─────────────────────────────────────
+kill "$pid" 2>/dev/null || true
+wait "$pid" 2>/dev/null || true
+pid=""
+despues="$(contar "$db")"
+
+perdidas=""
+while read -r tabla n_antes; do
+  n_despues="$(awk -v t="$tabla" '$1 == t { print $2 }' <<< "$despues")"
+  if [[ -z "$n_despues" ]]; then
+    perdidas+=" $tabla(desaparecida)"
+  elif (( n_despues < n_antes )); then
+    perdidas+=" $tabla($n_antes→$n_despues)"
+  fi
+done <<< "$antes"
+[[ -z "$perdidas" ]] || fallar "arrancar la web sobre la copia ha perdido filas:$perdidas"
+
+tablas="$(wc -l <<< "$antes")"
+echo "OK $(date +%s) $(basename "$copia") · $eventos eventos · $tablas tablas sin pérdidas" > "$RESULTADO"
+echo "Prueba de restauración correcta: $(basename "$copia"), $eventos eventos, $tablas tablas sin perder filas."

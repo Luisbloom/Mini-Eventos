@@ -1,0 +1,69 @@
+name: Web
+
+# Las pruebas de la web y de la operación del servidor, en cada cambio.
+#
+# Hasta el 2026-09-14 no había CI para la web: las 695 pruebas sólo corrían si
+# alguien se acordaba de lanzarlas. El despliegue se niega a publicar un commit
+# que no tenga este flujo en verde (deploy/desplegar.sh).
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Pruebas de la web
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # La misma versión mayor que corre en el servidor.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Instalar dependencias exactas del lockfile
+        run: npm ci
+
+      - name: Pruebas rápidas
+        run: npm test
+
+      - name: Pruebas de OCR con capturas reales
+        run: npm run test:ocr-real
+
+      - name: Sin vulnerabilidades altas en producción
+        run: npm audit --omit=dev --audit-level=high
+
+  operacion:
+    name: Guiones de operación del servidor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sintaxis de los guiones
+        run: |
+          for f in deploy/sbin/* deploy/*.sh; do
+            bash -n "$f"
+          done
+
+      # Sólo errores: los avisos de estilo no deben bloquear un despliegue.
+      - name: ShellCheck
+        run: shellcheck -S error deploy/sbin/* deploy/*.sh
+
+      - name: Los guiones no llevan finales de línea de Windows
+        run: |
+          if grep -rlI $'\r' deploy/sbin deploy/systemd deploy/*.sh; then
+            echo "Hay ficheros con CRLF: en Linux fallarían." >&2
+            exit 1
+          fi

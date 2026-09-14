@@ -1,0 +1,18 @@
+[Unit]
+Description=Vigilante de Mini Eventos Jartiland (servicio, copias, disco, certificado)
+Documentation=file:/opt/jartiland-amongus/README.md
+OnFailure=jartiland-alerta@%n.service
+
+[Service]
+Type=oneshot
+User=jartiland
+Group=jartiland
+StateDirectory=jartiland-vigilante
+StateDirectoryMode=0750
+ExecStart=/usr/local/sbin/jartiland-vigilante
+TimeoutStartSec=2min
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true

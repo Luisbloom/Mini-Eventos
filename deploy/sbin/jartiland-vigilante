@@ -1,0 +1,162 @@
+#!/bin/bash
+# Vigilante de Mini Eventos Jartiland. Lo lanza un temporizador cada 30 minutos.
+#
+# Existe porque las copias de seguridad estuvieron tres semanas fallando cada
+# noche sin que nadie lo supiera. Cada comprobación avisa sólo cuando CAMBIA de
+# estado (bien → mal, y mal → bien), y mientras siga mal recuerda cada 12 horas.
+# Un vigilante que avisa cada media hora acaba silenciado, que es lo mismo que
+# no tenerlo.
+set -uo pipefail
+
+# Las rutas se pueden sustituir por variables de entorno SÓLO para las pruebas
+# (test/vigilante.test.js). En producción no se define ninguna. Un vigilante sin
+# pruebas mintió dos veces en su primer día; ver más abajo.
+APP_DIR="${VIGILANTE_APP_DIR:-/opt/jartiland-amongus}"
+BACKUP_DIR="${VIGILANTE_BACKUP_DIR:-$APP_DIR/backups}"
+ESTADO="${VIGILANTE_ESTADO:-/var/lib/jartiland-vigilante}"
+ENTREGA="${VIGILANTE_ENTREGA:-/var/lib/jartiland-copias/ultima-entrega}"
+URL_SALUD="${VIGILANTE_URL_SALUD:-http://127.0.0.1:3100/api/health}"
+ALERTAR="${VIGILANTE_ALERTAR:-/usr/local/sbin/jartiland-alertar}"
+HOST_PUBLICO=mini-eventos-jartiland.tail9d0334.ts.net
+
+MAX_EDAD_COPIA_H=28          # copia diaria a las 03:15 con hasta 30 min de retraso
+MAX_EDAD_ENTREGA_H=72        # el PC puede estar apagado un fin de semana
+MAX_EDAD_RESTAURACION_D=8    # la prueba de restauración es semanal
+MAX_DISCO_PCT=85
+MIN_DIAS_CERT=14
+RECORDATORIO_H=12
+
+# ⚠️ El estado de cada comprobación va en SU PROPIA carpeta. Al principio iba
+# suelto en $ESTADO, y la comprobación «restauracion» escribía «ok» en el mismo
+# fichero donde la prueba de restauración deja su resultado («OK <fecha> ...»).
+# Lo pisaba, y en la vuelta siguiente el vigilante leía su propio «ok», no veía
+# «OK» y anunciaba que la restauración había fallado. Segunda mentira del
+# vigilante en su primer día; la prueba de regresión está en test/vigilante.test.js.
+COMPROBACIONES="$ESTADO/comprobaciones"
+mkdir -p "$COMPROBACIONES"
+resumen=()
+
+comprobar() {
+  local nombre="$1" resultado="$2"
+  local fichero="$COMPROBACIONES/$nombre"
+  local antes="ok"
+  [[ -f "$fichero" ]] && antes="$(head -1 "$fichero")"
+
+  if [[ "$resultado" == "ok" ]]; then
+    if [[ "$antes" != "ok" ]]; then
+      "$ALERTAR" --ok "Recuperado: $nombre"
+    fi
+    echo ok > "$fichero"
+    rm -f "$fichero.aviso"
+    resumen+=("ok     $nombre")
+    return
+  fi
+
+  resumen+=("FALLO  $nombre: $resultado")
+  local ahora ultimo=0
+  ahora="$(date +%s)"
+  [[ -f "$fichero.aviso" ]] && ultimo="$(cat "$fichero.aviso")"
+  if [[ "$antes" == "ok" ]] || (( ahora - ultimo > RECORDATORIO_H * 3600 )); then
+    "$ALERTAR" "$nombre: $resultado"
+    echo "$ahora" > "$fichero.aviso"
+  fi
+  echo fallo > "$fichero"
+}
+
+edad_horas() { echo $(( ( $(date +%s) - $1 ) / 3600 )); }
+
+# ── 1. el servicio ────────────────────────────────────────────────────────────
+if systemctl is-active --quiet jartiland-amongus; then
+  comprobar servicio ok
+else
+  comprobar servicio "el servicio jartiland-amongus no está activo"
+fi
+
+# ── 2. la web responde y su base también ──────────────────────────────────────
+salud="$(curl -s -m 10 "$URL_SALUD" 2>/dev/null || true)"
+if [[ "$salud" == *'"database":"ok"'* ]]; then
+  comprobar salud ok
+else
+  comprobar salud "/api/health no responde bien: ${salud:0:120}"
+fi
+
+# ── 3. hay copia reciente, y no está rota ─────────────────────────────────────
+copia="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'tournament-*.db' -printf '%T@ %p\n' 2>/dev/null \
+  | sort -n | tail -1 | cut -d' ' -f2-)"
+if [[ -z "$copia" ]]; then
+  comprobar copia "no hay ninguna copia en $BACKUP_DIR"
+else
+  horas="$(edad_horas "$(stat -c %Y "$copia")")"
+  if (( horas > MAX_EDAD_COPIA_H )); then
+    comprobar copia "la copia más reciente tiene ${horas} h ($(basename "$copia"))"
+  else
+    # ⚠️ immutable=1 no es opcional. Las copias conservan la cabecera WAL de la
+    # base original, y abrir una base WAL exige crear ficheros -wal y -shm a su
+    # lado. Esta carpeta es de sólo lectura para el vigilante: sin immutable=1,
+    # SQLite no puede ni abrirla («unable to open database file», código 14).
+    # La primera vez que corrió este vigilante contó eso como «copia dañada»
+    # sobre una copia perfecta: el propio vigilante mintió. Por eso además se
+    # informa del mensaje real de SQLite, no de una interpretación.
+    verificacion="$(sqlite3 -readonly "file:${copia}?immutable=1" 'PRAGMA quick_check;' 2>&1)"
+    if [[ "$verificacion" == "ok" ]]; then
+      comprobar copia ok
+    else
+      comprobar copia "la copia más reciente no pasa quick_check ($(basename "$copia")): ${verificacion:0:160}"
+    fi
+  fi
+fi
+
+# ── 4. el temporizador de copias sigue programado ─────────────────────────────
+if systemctl is-enabled --quiet jartiland-amongus-backup.timer \
+   && systemctl is-active --quiet jartiland-amongus-backup.timer; then
+  comprobar temporizador-copias ok
+else
+  comprobar temporizador-copias "el temporizador de copias no está activo"
+fi
+
+# ── 5. espacio en disco ───────────────────────────────────────────────────────
+uso="$(df --output=pcent / | tail -1 | tr -dc '0-9')"
+if (( uso > MAX_DISCO_PCT )); then
+  comprobar disco "el disco está al ${uso} %"
+else
+  comprobar disco ok
+fi
+
+# ── 6. el certificado HTTPS no está a punto de caducar ────────────────────────
+ip="$(tailscale ip -4 2>/dev/null | head -1)"
+ip="${ip:-100.116.88.49}"
+if echo | timeout 20 openssl s_client -servername "$HOST_PUBLICO" -connect "$ip:443" 2>/dev/null \
+   | openssl x509 -noout -checkend $(( MIN_DIAS_CERT * 86400 )) >/dev/null 2>&1; then
+  comprobar certificado ok
+else
+  comprobar certificado "el certificado HTTPS caduca en menos de ${MIN_DIAS_CERT} días o no se pudo leer"
+fi
+
+# ── 7. la copia externa se recoge ─────────────────────────────────────────────
+if [[ ! -f "$ENTREGA" ]]; then
+  comprobar copia-externa "ningún equipo externo ha confirmado todavía una copia"
+else
+  horas="$(edad_horas "$(cat "$ENTREGA")")"
+  if (( horas > MAX_EDAD_ENTREGA_H )); then
+    comprobar copia-externa "la última copia externa confirmada tiene ${horas} h"
+  else
+    comprobar copia-externa ok
+  fi
+fi
+
+# ── 8. la prueba de restauración sale bien ────────────────────────────────────
+if [[ ! -f "$ESTADO/restauracion" ]]; then
+  comprobar restauracion "la prueba de restauración no se ha ejecutado nunca"
+else
+  read -r veredicto cuando _ < "$ESTADO/restauracion"
+  dias=$(( ( $(date +%s) - cuando ) / 86400 ))
+  if [[ "$veredicto" != "OK" ]]; then
+    comprobar restauracion "la última prueba de restauración falló: $(cut -d' ' -f3- "$ESTADO/restauracion")"
+  elif (( dias > MAX_EDAD_RESTAURACION_D )); then
+    comprobar restauracion "la última restauración correcta fue hace ${dias} días"
+  else
+    comprobar restauracion ok
+  fi
+fi
+
+printf '%s\n' "${resumen[@]}"

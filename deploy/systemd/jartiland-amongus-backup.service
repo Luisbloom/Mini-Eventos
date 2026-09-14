@@ -1,0 +1,20 @@
+[Unit]
+Description=Backup consistente de SQLite para Mini Eventos Jartiland
+Documentation=file:/opt/jartiland-amongus/README.md
+RequiresMountsFor=/opt/jartiland-amongus/data /opt/jartiland-amongus/backups
+# Si falla, avisa. Tres semanas de copias fallidas sin que nadie lo supiera no
+# pueden repetirse.
+OnFailure=jartiland-alerta@%n.service
+
+[Service]
+Type=oneshot
+User=jartiland
+Group=jartiland
+ExecStart=/usr/local/sbin/jartiland-sqlite-backup
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/jartiland-amongus/data /opt/jartiland-amongus/backups

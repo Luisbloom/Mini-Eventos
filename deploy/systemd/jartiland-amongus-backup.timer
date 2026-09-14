@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup diario de SQLite para Mini Eventos Jartiland
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=jartiland-amongus-backup.service
+
+[Install]
+WantedBy=timers.target

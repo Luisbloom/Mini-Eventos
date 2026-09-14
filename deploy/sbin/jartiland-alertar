@@ -1,0 +1,62 @@
+#!/bin/bash
+# Envía un aviso al canal de Discord de la organización.
+#
+#   jartiland-alertar "texto"          aviso de fallo
+#   jartiland-alertar --ok "texto"     aviso de recuperación
+#
+# El webhook vive en /etc/jartiland/alertas.env (ALERTA_DISCORD_WEBHOOK=...),
+# fuera del .env de la aplicación y fuera del repositorio. Si no está
+# configurado, el aviso queda en el journal y el guion termina bien: que falten
+# las alertas no puede romper a quien las llama.
+#
+# El fichero se lee con grep, no con `source`: nada de lo que haya dentro se
+# ejecuta. Y `allowed_mentions` vacío impide que un texto con @everyone
+# despierte a todo el servidor.
+set -uo pipefail
+
+CONF=/etc/jartiland/alertas.env
+icono="🚨"
+if [[ "${1:-}" == "--ok" ]]; then
+  icono="✅"
+  shift
+fi
+mensaje="${*:-Aviso sin texto}"
+equipo="$(hostname)"
+
+logger -t jartiland-alerta -p user.err -- "$icono $mensaje"
+
+webhook=""
+if [[ -r "$CONF" ]]; then
+  webhook="$(grep -m1 -E '^ALERTA_DISCORD_WEBHOOK=' "$CONF" | cut -d= -f2- | tr -d "\"' \r")"
+fi
+
+if [[ -z "$webhook" ]]; then
+  logger -t jartiland-alerta -p user.warning -- \
+    "Alertas de Discord sin configurar: el aviso sólo queda en el journal."
+  exit 0
+fi
+
+case "$webhook" in
+  https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
+  *)
+    logger -t jartiland-alerta -p user.err -- "ALERTA_DISCORD_WEBHOOK no es un webhook de Discord."
+    exit 1
+    ;;
+esac
+
+cuerpo="$(/usr/bin/node -e '
+  const [icono, equipo, mensaje] = process.argv.slice(1);
+  process.stdout.write(JSON.stringify({
+    username: "Vigilante Jartiland",
+    content: `${icono} **${equipo}** · ${mensaje}`.slice(0, 1900),
+    allowed_mentions: { parse: [] }
+  }));
+' "$icono" "$equipo" "$mensaje")"
+
+codigo="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' \
+  -H 'Content-Type: application/json' -d "$cuerpo" "$webhook" 2>/dev/null)" || codigo="000"
+
+if [[ "$codigo" != 2* ]]; then
+  logger -t jartiland-alerta -p user.err -- "No se pudo enviar el aviso a Discord (HTTP $codigo)."
+  exit 1
+fi

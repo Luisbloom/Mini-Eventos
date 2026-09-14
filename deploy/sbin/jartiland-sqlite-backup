@@ -1,0 +1,51 @@
+#!/bin/bash
+# Copia consistente de SQLite. La lanza jartiland-amongus-backup.timer cada noche.
+#
+# Hasta el 2026-09-14 este guion vivía sólo en el servidor, y la copia estuvo
+# tres semanas fallando sin que nadie lo supiera. Ahora está en el repositorio,
+# lo instala deploy/instalar-operacion.sh y, si falla, avisa (OnFailure=).
+set -Eeuo pipefail
+
+DB=/opt/jartiland-amongus/data/tournament.db
+BACKUP_DIR=/opt/jartiland-amongus/backups
+RETENTION_DAYS=30
+
+if [[ "$(id -un)" != "jartiland" ]]; then
+  echo "Este backup debe ejecutarse como jartiland" >&2
+  exit 1
+fi
+
+if [[ ! -f "$DB" ]]; then
+  echo "No existe la base esperada: $DB" >&2
+  exit 1
+fi
+
+if [[ "$BACKUP_DIR" != "/opt/jartiland-amongus/backups" ]]; then
+  echo "Ruta de backups inesperada" >&2
+  exit 1
+fi
+
+mkdir -p "$BACKUP_DIR"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+partial="$BACKUP_DIR/.tournament-$stamp.db.partial"
+final="$BACKUP_DIR/tournament-$stamp.db"
+
+cleanup() {
+  [[ ! -e "$partial" ]] || unlink "$partial"
+}
+trap cleanup EXIT
+
+sqlite3 "$DB" ".timeout 5000" ".backup '$partial'"
+result="$(sqlite3 "$partial" 'PRAGMA integrity_check;')"
+if [[ "$result" != "ok" ]]; then
+  echo "Fallo de integridad en el backup" >&2
+  exit 1
+fi
+
+mv "$partial" "$final"
+chmod 0640 "$final"
+trap - EXIT
+
+# Sólo elimina copias generadas por este script dentro de la ruta validada.
+find "$BACKUP_DIR" -maxdepth 1 -type f -name 'tournament-*.db' -mtime "+$RETENTION_DAYS" -delete
+echo "Backup SQLite correcto: $final (retención: $RETENTION_DAYS días)"

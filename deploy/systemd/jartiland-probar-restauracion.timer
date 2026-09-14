@@ -1,0 +1,11 @@
+[Unit]
+Description=Prueba de restauración semanal de Mini Eventos Jartiland
+
+[Timer]
+OnCalendar=Sun *-*-* 05:30:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=jartiland-probar-restauracion.service
+
+[Install]
+WantedBy=timers.target

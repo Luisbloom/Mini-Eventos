@@ -1,0 +1,10 @@
+[Unit]
+Description=Vigilante de Mini Eventos Jartiland cada 30 minutos
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+Unit=jartiland-vigilante.service
+
+[Install]
+WantedBy=timers.target

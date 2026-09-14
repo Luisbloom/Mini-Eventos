@@ -3,6 +3,8 @@ Description=Portal Mini Eventos de Jartiland
 Documentation=file:/opt/jartiland-amongus/README.md
 Wants=network-online.target
 After=network-online.target
+# Si agota los reintentos y queda caído, avisa por Discord.
+OnFailure=jartiland-alerta@%n.service
 
 [Service]
 Type=simple
