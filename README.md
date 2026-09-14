@@ -70,6 +70,7 @@ sudo mkdir -p /opt/jartiland-amongus
 sudo rsync -a --delete \
   --exclude='.env' \
   --exclude='data/' \
+  --exclude='backups/' \
   --exclude='node_modules/' \
   ./ /opt/jartiland-amongus/
 sudo chown -R root:jartiland /opt/jartiland-amongus
@@ -606,6 +607,7 @@ sudo systemctl stop jartiland-amongus
 sudo rsync -a --delete \
   --exclude='.env' \
   --exclude='data/' \
+  --exclude='backups/' \
   --exclude='node_modules/' \
   ./ /opt/jartiland-amongus/
 cd /opt/jartiland-amongus
@@ -629,7 +631,9 @@ sudo systemctl status jartiland-amongus --no-pager
 curl http://127.0.0.1:3100/api/health
 ```
 
-Los dos `--exclude` importantes son `.env` y `data/`: impiden que `rsync --delete` borre la configuración o SQLite. `init-db.js` sólo crea objetos que falten; no reinicia la base.
+Los tres `--exclude` importantes son `.env`, `data/` y `backups/`: impiden que `rsync --delete` borre la configuración, SQLite o las copias nocturnas. `init-db.js` sólo crea objetos que falten; no reinicia la base.
+
+> ⚠️ **`backups/` no es opcional.** Faltó durante semanas, y cada despliegue borraba `/opt/jartiland-amongus/backups`. El servicio de copia corre con `ProtectSystem=strict` y `ReadWritePaths` sobre esa carpeta, así que al no existir systemd no llega ni a lanzar el guion (`status=226/NAMESPACE`) y la copia nocturna falla sin que nada avise. Resultado: cero copias automáticas desde finales de agosto hasta el 14 de septiembre de 2026. Si alguna vez desaparece la carpeta, se recrea con `sudo install -d -o jartiland -g jartiland -m 0750 /opt/jartiland-amongus/backups`.
 
 ## 13. Publicación HTTPS vigente
 
