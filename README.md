@@ -651,6 +651,49 @@ No hace falta comprar un dominio ni abrir puertos en el router. El despliegue ac
 
 La configuración y el rollback están documentados en [deploy/tailscale/private-reporter-access.md](deploy/tailscale/private-reporter-access.md). No ejecutes `tailscale serve reset`, porque podría retirar también publicaciones que no pertenecen a este cambio.
 
+## 14. Seguridad y límites de peticiones
+
+La web está publicada en Internet. Todo esto está **activo por defecto**: no hay que encender nada.
+
+| Nivel | Límite | Se cuenta por | Por qué |
+|---|---|---|---|
+| Global | 600 / min | IP | inundaciones y rastreos agresivos; `/api/health` no cuenta |
+| Login con Discord | 20 / 10 min | IP | cada intento crea un estado OAuth en la base |
+| Tokens de admin **fallidos** | 10 / 15 min | IP | fuerza bruta; bloquea también a quien acierta después de probar. Los aciertos y los errores de formulario no cuentan |
+| Escrituras de jugadores y Reporters | 30 / min | **cuenta de Discord** (IP si no hay sesión) | no castigar a quien comparte conexión |
+| Subidas de capturas | 30 / 10 min | IP | cada una despierta al OCR |
+| Avatar | 30 / min | IP | cada uno se trae de Discord |
+
+Al superarlo se responde `429` con código `RATE_LIMITED` (o `ADMIN_LOCKED_OUT`), cabecera `Retry-After` y las cabeceras estándar `RateLimit` / `RateLimit-Policy`. Los números y su justificación viven en `src/security/rate-limits.js`.
+
+> ⚠️ **`TRUST_PROXY=1` es obligatorio detrás de Tailscale.** Los límites se cuentan por la IP que calcula Express.
+> - Con `1`, Express usa sólo el salto que añade el proxy e **ignora lo que el cliente escriba en `X-Forwarded-For`**. Comprobado en producción el 2026-09-14 mandando una IP falsa: se registró la real.
+> - Con `true`, confiaría en toda la cadena y **cualquiera se saltaría todos los límites** mandando una IP distinta en cada petición.
+> - Con `false`, todas las peticiones parecerían venir del proxy y **un solo abusador bloquearía a todo el mundo**.
+>
+> Hay una prueba que fija el comportamiento correcto.
+
+Los recuentos viven en la memoria del proceso: se ponen a cero al reiniciar el servicio. Es lo adecuado con un solo proceso y SQLite; si algún día corren varios, hay que pasar a un almacén compartido con la opción `storeFactory`.
+
+Otras protecciones:
+
+- **Escrituras desde otra web**: cualquier `POST`/`PUT`/`PATCH`/`DELETE` que el navegador marque con `Sec-Fetch-Site: cross-site` o `same-site` recibe `403 CROSS_SITE_REQUEST`. Es la segunda capa sobre la cookie `SameSite=Lax`. Los clientes sin navegador (Reporter, curl) no mandan esa cabecera y se autentican con token.
+- **`Permissions-Policy`**: sin cámara, micrófono, ubicación, pagos ni USB, además de las cabeceras de helmet (CSP, HSTS…).
+- **Tiempos máximos**: 20 s para las cabeceras, 120 s por petición, 5 s de keep-alive.
+- **Limpieza** de estados OAuth y sesiones caducados al arrancar y cada hora. Deja el evento `expired_purged` en el journal.
+
+**Si alguien legítimo queda bloqueado**, basta con esperar lo que indica `Retry-After`, o reiniciar el servicio, que pone los recuentos a cero:
+
+```bash
+sudo systemctl restart jartiland-amongus
+```
+
+**Para ver quién choca con los límites** (se registra una vez por ventana, no cada rechazo, para que el propio registro no sirva para llenar el disco):
+
+```bash
+sudo journalctl -u jartiland-amongus --since today | grep rate_limited
+```
+
 ## Desarrollo y pruebas
 
 En una copia de desarrollo, nunca sobre la base de producción:
