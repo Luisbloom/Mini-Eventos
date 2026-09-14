@@ -9,6 +9,8 @@ const request = require('supertest');
 const http = require('node:http');
 const { openDatabase } = require('../src/database');
 const { createApp } = require('../src/app');
+const { RATE_LIMIT_DEFAULTS } = require('../src/security/rate-limits');
+const BARRIDO_SIN_BLOQUEO = { ...RATE_LIMIT_DEFAULTS, adminFailures: { windowMs: 15 * 60 * 1000, limit: 1000 } };
 const { roundRobinSchedule, scheduleSummary } = require('../src/services/round-robin');
 const V = require('../public/draft-view');
 
@@ -29,12 +31,12 @@ describe('fase regular de Valorant', () => {
     directories.splice(0).forEach((d) => fs.rmSync(d, { recursive: true, force: true }));
   });
 
-  function montar({ slug = 'torneo-valorant' } = {}) {
+  function montar({ slug = 'torneo-valorant', rateLimits = null } = {}) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-liga-'));
     directories.push(directory);
     const database = openDatabase(path.join(directory, 'tournament.db'));
     bases.push(database);
-    const app = createApp({ database, adminToken: ADMIN });
+    const app = createApp({ database, adminToken: ADMIN, ...(rateLimits ? { rateLimits } : {}) });
     const event = database.createEvent({
       slug, name: 'Torneo Valorant', game: 'Valorant',
       description: 'x', status: 'Inscripciones abiertas', registrationsOpen: true,
@@ -45,8 +47,8 @@ describe('fase regular de Valorant', () => {
   }
 
   /** Un draft completo de N equipos, listo para generar la liga. */
-  function draftTerminado(teamCount, { slug } = {}) {
-    const contexto = montar({ slug: slug ?? (teamCount === 4 ? 'torneo-valorant' : `valorant-generico-${teamCount}`) });
+  function draftTerminado(teamCount, { slug, rateLimits = null } = {}) {
+    const contexto = montar({ slug: slug ?? (teamCount === 4 ? 'torneo-valorant' : `valorant-generico-${teamCount}`), rateLimits });
     const { database, event } = contexto;
     const necesarios = teamCount * 5;
 
@@ -568,7 +570,16 @@ describe('fase regular de Valorant', () => {
     });
 
     it('todas las rutas de administración exigen el token', async () => {
-      const { app, event } = draftTerminado(4);
+      /*
+        Este barrido comprueba que CADA ruta está detrás del guardián, y para eso
+        manda decenas de tokens fallidos seguidos desde la misma IP. Con el
+        bloqueo por fallos a su valor real, a partir del décimo contestaría 429
+        en vez de 401 y la prueba dejaría de ver al guardián. El bloqueo se prueba
+        aparte, en limites-y-seguridad.test.js. Aquí se sube el umbral para seguir
+        exigiendo exactamente 401: eso dice que la ruta está protegida, y un 429
+        sólo diría que está frenada.
+      */
+      const { app, event } = draftTerminado(4, { rateLimits: BARRIDO_SIN_BLOQUEO });
       const rutas = [
         ['get', `/api/admin/events/${event.id}/draft`],
         ['put', `/api/admin/events/${event.id}/draft`],

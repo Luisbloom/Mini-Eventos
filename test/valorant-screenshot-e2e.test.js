@@ -9,6 +9,8 @@ const http = require('node:http');
 const request = require('supertest');
 const { openDatabase } = require('../src/database');
 const { createApp } = require('../src/app');
+const { RATE_LIMIT_DEFAULTS } = require('../src/security/rate-limits');
+const BARRIDO_SIN_BLOQUEO = { ...RATE_LIMIT_DEFAULTS, adminFailures: { windowMs: 15 * 60 * 1000, limit: 1000 } };
 const { createFakeProvider } = require('../src/services/ocr/fake-provider');
 const { renderScreenshot, postMatchLines, PARTIDA_DE_MUESTRA } = require('./helpers/fake-screenshot');
 
@@ -31,7 +33,7 @@ describe('resultados por captura, de punta a punta', () => {
    * Un torneo con el draft hecho, la liga generada, los mapas puestos y los
    * Riot ID de la captura de muestra repartidos entre los dos equipos.
    */
-  function torneoListo({ ocrTexto, teamCount = 4, slug = 'torneo-valorant', database: reutilizar = null, directorio: dirDado = null } = {}) {
+  function torneoListo({ ocrTexto, teamCount = 4, slug = 'torneo-valorant', database: reutilizar = null, directorio: dirDado = null, rateLimits = null } = {}) {
     let directorio = dirDado;
     if (!directorio) {
       directorio = fs.mkdtempSync(path.join(os.tmpdir(), 'jartiland-capturas-'));
@@ -43,7 +45,8 @@ describe('resultados por captura, de punta a punta', () => {
     const ocrProvider = createFakeProvider(ocrTexto ?? postMatchLines().join(SALTO));
     const app = createApp({
       database, adminToken: ADMIN, ocrProvider,
-      captureStorageRoot: path.join(directorio, 'uploads')
+      captureStorageRoot: path.join(directorio, 'uploads'),
+      ...(rateLimits ? { rateLimits } : {})
     });
 
     const event = database.createEvent({
@@ -173,7 +176,16 @@ describe('resultados por captura, de punta a punta', () => {
     });
 
     it('todas las rutas de capturas exigen el token', async () => {
-      const { app, event } = torneoListo();
+      /*
+        Este barrido comprueba que CADA ruta está detrás del guardián, y para eso
+        manda decenas de tokens fallidos seguidos desde la misma IP. Con el
+        bloqueo por fallos a su valor real, a partir del décimo contestaría 429
+        en vez de 401 y la prueba dejaría de ver al guardián. El bloqueo se prueba
+        aparte, en limites-y-seguridad.test.js. Aquí se sube el umbral para seguir
+        exigiendo exactamente 401: eso dice que la ruta está protegida, y un 429
+        sólo diría que está frenada.
+      */
+      const { app, event } = torneoListo({ rateLimits: BARRIDO_SIN_BLOQUEO });
       const rutas = [
         ['get', `/api/admin/events/${event.id}/competition/captures`],
         ['get', `/api/admin/events/${event.id}/competition/captures/1`],

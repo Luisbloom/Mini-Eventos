@@ -357,9 +357,18 @@ function createValorantStore(connection) {
      */
     createSession(discordAccountId, { ttlSeconds = 60 * 60 * 24 * 7 } = {}) {
       const token = crypto.randomBytes(32).toString('base64url');
+      /*
+        El signo se pone a mano, igual que en createOAuthState. Antes aquí se
+        anteponía siempre «+», y con un TTL negativo salía «+-60 seconds»: SQLite
+        no entiende ese modificador, datetime() devuelve NULL y la inserción
+        revienta contra el NOT NULL. Producción nunca pasa un TTL negativo, pero
+        dos funciones hermanas que hacen lo mismo de forma distinta es justo
+        como se esconden los fallos.
+      */
+      const segundos = Math.floor(ttlSeconds);
       connection.prepare(
         `INSERT INTO discord_sessions (id,discord_account_id,expires_at) VALUES (?,?,datetime('now',?))`
-      ).run(hash(token), discordAccountId, `+${Math.floor(ttlSeconds)} seconds`);
+      ).run(hash(token), discordAccountId, `${segundos >= 0 ? '+' : ''}${segundos} seconds`);
       return token;
     },
 
@@ -385,6 +394,35 @@ function createValorantStore(connection) {
       if (!sessionToken) return false;
       return connection.prepare('DELETE FROM discord_sessions WHERE id=?')
         .run(hash(sessionToken)).changes > 0;
+    },
+
+    /**
+     * Borra lo caducado: estados OAuth y sesiones.
+     *
+     * Sin esto las dos tablas crecían para siempre, y una de ellas la llena
+     * cualquiera sin autenticarse —cada visita a /auth/discord crea un estado—.
+     * El límite de peticiones frena el ritmo; esto acota el total.
+     *
+     * ⚠️ Las dos columnas de fecha NO tienen el mismo formato: `expires_at` se
+     * escribe con datetime() («2026-09-14 14:28:40») y `used_at` con el ISO de
+     * NOW («2026-09-14T14:28:40.000Z»). Compararlas como texto con el formato
+     * equivocado da resultados falsos —la «T» ordena después del espacio—, así
+     * que cada una se compara con el suyo.
+     *
+     * Un estado ya usado se conserva un día: mientras exista, repetirlo sigue
+     * devolviendo «usado». Borrado también se rechazaría (no existe), pero así
+     * el registro de lo ocurrido dura lo bastante para investigarlo.
+     */
+    purgeExpired() {
+      const estados = connection.prepare(`
+        DELETE FROM oauth_states
+        WHERE datetime('now') > expires_at
+           OR (used_at IS NOT NULL AND strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') > used_at)
+      `).run().changes;
+      const sesiones = connection.prepare(
+        "DELETE FROM discord_sessions WHERE datetime('now') > expires_at"
+      ).run().changes;
+      return { oauthStates: estados, sessions: sesiones };
     },
 
     /** La inscripción de esa cuenta en ese evento, o null. */

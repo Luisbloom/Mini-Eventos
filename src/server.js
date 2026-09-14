@@ -74,6 +74,35 @@ try {
     });
   });
 
+  /*
+    Tiempos máximos por conexión.
+
+    Los valores por defecto de Node dejan hasta 5 minutos a una petición y un
+    minuto para mandar las cabeceras: un cliente que las envía gota a gota puede
+    tener conexiones abiertas mucho tiempo. requestTimeout deja margen para
+    subir capturas; headersTimeout ha de ser mayor que keepAliveTimeout.
+  */
+  server.headersTimeout = 20 * 1000;
+  server.requestTimeout = 120 * 1000;
+  server.keepAliveTimeout = 5 * 1000;
+
+  /*
+    Limpieza de sesiones y estados OAuth caducados: al arrancar y cada hora.
+    El temporizador no retiene el proceso, así que no retrasa un apagado.
+  */
+  const limpiar = () => {
+    try {
+      const borrado = database.valorant.purgeExpired();
+      if (borrado.oauthStates || borrado.sessions) {
+        logger.info({ event: 'expired_purged', ...borrado });
+      }
+    } catch (error) {
+      logger.error({ event: 'purge_failed', message: error.message });
+    }
+  };
+  limpiar();
+  setInterval(limpiar, 60 * 60 * 1000).unref();
+
   server.on('error', (error) => {
     logger.error({ event: 'server_error', code: error.code, message: error.message });
     shutdown('server_error', 1);

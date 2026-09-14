@@ -24,6 +24,8 @@ const { CompetitionError: ValorantCompetitionError } = require('./valorant-compe
 const { CaptureError } = require('./valorant-captures');
 const { PlayoffError } = require('./valorant-playoffs');
 const { officialValorantFormatForSlug, officialFormatForEvent } = require('./valorant-event-format');
+const { createRateLimits, RATE_LIMIT_DEFAULTS } = require('./security/rate-limits');
+const { crossSiteWriteGuard, permissionsPolicy } = require('./security/request-guards');
 const { AvailabilityError } = require('./availability');
 const { gameProfile, isAmongUs, isValorant } = require('./games');
 const {
@@ -150,7 +152,11 @@ function createApp({
   captureStorageRoot = null,
   // Origen público con el que se construyen los enlaces de las tarjetas
   // sociales. Si no se configura se deduce de la petición.
-  publicBaseUrl = null
+  publicBaseUrl = null,
+  // Límites de peticiones. Activos por defecto: la web está en Internet y
+  // nadie tendría que acordarse de encenderlos. `false` los apaga, y sólo
+  // tiene sentido en pruebas que necesitan mucho volumen a propósito.
+  rateLimits = RATE_LIMIT_DEFAULTS
 }) {
   if (!database) throw new TypeError('createApp necesita una base de datos');
 
@@ -199,6 +205,33 @@ function createApp({
     }));
     next();
   });
+  /*
+    Seguridad antes de leer el cuerpo: una inundación se corta sin gastar CPU
+    en parsear un JSON que se va a tirar. Los niveles y el porqué de cada
+    número están en src/security/rate-limits.js.
+  */
+  const limites = createRateLimits({
+    limits: rateLimits,
+    logger,
+    // Las escrituras de jugadores se cuentan por cuenta de Discord, no por IP:
+    // así no se castiga a quien comparte conexión. currentSession está
+    // declarada más abajo en esta misma función, y se llama al atender.
+    accountKey: (request) => currentSession(request)?.account?.id ?? null
+  });
+  app.use(permissionsPolicy());
+  app.use(limites.global);
+  app.use(crossSiteWriteGuard());
+  // /auth/discord abarca también el callback.
+  app.use('/auth/discord', limites.auth);
+  app.use('/api/me/avatar', limites.avatar);
+  // Antes que el guardián de /api/admin: el bloqueo se aplica también a quien
+  // acierta el token después de haber probado otros.
+  app.use('/api/admin', limites.adminFailures);
+  app.use('/api/admin', limites.uploads);
+  app.use('/api/events', limites.writes);
+  app.use('/api/matches', limites.writes);
+  app.use('/api/auth/logout', limites.writes);
+
   app.use(express.json({ limit: '1mb', strict: true }));
 
   function eventFromSlug(request, response) {
