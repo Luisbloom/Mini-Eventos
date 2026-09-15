@@ -252,7 +252,14 @@ const ERRORES_INSCRIPCION = {
   ALREADY_REGISTERED: 'Ya estás inscrito en este torneo.',
   RIOT_ID_ALREADY_REGISTERED: 'Ese Riot ID ya está inscrito en este torneo.',
   MODULE_DISABLED: 'Este torneo no admite inscripción por equipos.',
-  REGISTRATION_CLOSED: 'Las inscripciones todavía no están abiertas.'
+  /*
+    Un código por motivo. REGISTRATION_CLOSED decía «todavía no están abiertas»
+    también cuando la organización ya las había cerrado: a quien llegaba tarde
+    le prometía que se abrirían.
+  */
+  REGISTRATION_CLOSED: 'Las inscripciones están cerradas.',
+  REGISTRATION_NOT_OPEN_YET: 'Las inscripciones todavía no están abiertas.',
+  REGISTRATION_FULL: 'Se ha alcanzado el máximo de inscritos.'
 };
 
 function mensajeDeError(cuerpo, porDefecto) {

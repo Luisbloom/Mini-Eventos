@@ -590,6 +590,34 @@ El `mv` conserva la base anterior para poder deshacer la restauración. Sustituy
 
 ## 12. Actualizar sin perder la base de datos
 
+### Flujo normal: un solo comando
+
+Producción sale de la rama **`main`**. `preproduccion` es donde se trabaja; cuando algo está listo se lleva a `main` y se despliega:
+
+```bash
+# en el PC: llevar lo probado a main
+git push origin preproduccion:main
+
+# en el servidor
+sudo bash /home/luis/desplegar.sh                        # despliega main
+sudo bash /home/luis/desplegar.sh --rama preproduccion   # probar otra rama
+sudo bash /home/luis/desplegar.sh --simular-fallo        # ensayar la reversión
+```
+
+`/home/luis/desplegar.sh` es una copia de [deploy/desplegar-envoltorio.sh](deploy/desplegar-envoltorio.sh): pone la copia de trabajo exactamente en la rama pedida y lanza [deploy/desplegar.sh](deploy/desplegar.sh), que vive en el repositorio. Ese guion:
+
+1. **pasa todas las pruebas en el propio servidor** (`npm test` y `npm run test:ocr-real`). Si falla una, no se toca producción. No depende de GitHub Actions: la CI está en [.github/workflows/web.yml](.github/workflows/web.yml), pero sólo corre si la cuenta de GitHub está al día de pagos;
+2. para el servicio y **fotografía** datos (`/home/luis/backups-jartiland/data-*`) y código (`opt-*.tar.gz`);
+3. copia el código, instala dependencias, reaplica permisos (incluida `backups/`), aplica el esquema y reinstala copias, vigilante y alertas desde `deploy/`;
+4. arranca y exige `/api/health` con `"database":"ok"` y la portada en 200. **Si no, vuelve solo a la versión anterior** y avisa por Discord;
+5. deja la versión desplegada en `/opt/jartiland-amongus/VERSION` y borra fotos de más de 30 días (siempre quedan 10).
+
+`--sin-pruebas` existe sólo para emergencias y deja aviso. La reversión devuelve el **código**, no la base: las migraciones deben limitarse a añadir tablas y columnas.
+
+Si hay que actualizar `/home/luis/desplegar.sh` (casi nunca): `git -C /home/luis/jartiland-amongus show origin/main:deploy/desplegar-envoltorio.sh > /home/luis/desplegar.sh`.
+
+### A mano (sólo si el guion no sirve)
+
 Prepara la nueva versión en otro directorio de Debian, por ejemplo `/tmp/jartiland-release`, y comprueba que contiene `package.json`. Después:
 
 ```bash

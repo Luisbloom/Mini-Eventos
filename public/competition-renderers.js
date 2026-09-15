@@ -52,6 +52,21 @@
     return 'PUBLICADO';
   }
 
+  /** El nombre del campeón sólo cuando la gran final lo ha decidido. */
+  function championName(state) {
+    const playoffs = state.playoffs;
+    if (playoffs?.status !== 'COMPLETED' || !playoffs.champion) return null;
+    return playoffs.placements?.find((fila) => fila.teamId === playoffs.champion)?.name
+      || state.teams?.find((team) => team.id === playoffs.champion)?.name
+      || 'Por confirmar';
+  }
+
+  /** Cuántos pasan a playoffs: con 4 equipos todos; con 6 u 8, los cuatro primeros. */
+  function playoffSpots(format, teamCount) {
+    const plazas = format?.playoffs?.teams || 4;
+    return teamCount > plazas ? `TOP ${plazas}` : 'TODOS CLASIFICAN';
+  }
+
   function mapName(context, key) {
     return context.state.maps?.find((map) => map.key === key)?.name || key || 'Mapa por confirmar';
   }
@@ -219,7 +234,7 @@
     const descriptions = {
       hub: ['CENTRO DE COMPETICIÓN', event.name, 'Todo el torneo, bien separado. Entra directamente en la fase, jornada o ranking que buscas.'],
       regular: ['FASE REGULAR', 'Todos contra todos', 'Una lectura rápida de la liga antes de entrar en la tabla completa o en cada jornada.'],
-      standings: ['FASE REGULAR · CLASIFICACIÓN', 'La tabla', 'Victorias, desempates y seeding del 1º al 4º. Todos entran en playoffs.'],
+      standings: ['FASE REGULAR · CLASIFICACIÓN', 'La tabla', `Victorias, desempates y seeding del 1º al 4º. ${playoffSpots(format, state.teams?.length || draft?.teams?.length || format?.teams || 0) === 'TODOS CLASIFICAN' ? 'Todos entran en playoffs.' : 'Sólo los cuatro primeros entran en playoffs.'}`],
       matchdays: ['FASE REGULAR · JORNADAS', 'El calendario', 'Cada bloque cuenta una jornada. Abre cualquiera para ver sus cruces y mapas.'],
       matchday: [`FASE REGULAR · JORNADA ${route.parameter || '—'}`, `Jornada ${route.parameter || '—'}`, 'Todos los cruces de esta jornada en una única vista.'],
       playoffs: ['ELIMINATORIAS', 'El cuadro final', 'Doble eliminación. El recorrido hacia la gran final, ronda a ronda.'],
@@ -235,7 +250,7 @@
       : route.name === 'playoffs'
         ? [['ESTADO', playoffStatus(state)], ['EQUIPOS', format?.playoffs?.teams || teamCount], ['FORMATO', 'DOBLE ELIM.']]
         : route.name === 'hub'
-          ? [['ESTADO', event.status], ['FORMATO', `${teamCount} × ${format?.teamSize || 5}`], ['LIGA', `${state.seriesPlayed || 0}/${state.seriesTotal || format?.regularSeason?.series || 0}`], ['PLAYOFFS', 'TODOS CLASIFICAN']]
+          ? [['ESTADO', event.status], ['FORMATO', `${teamCount} × ${format?.teamSize || 5}`], ['LIGA', `${state.seriesPlayed || 0}/${state.seriesTotal || format?.regularSeason?.series || 0}`], ['PLAYOFFS', playoffSpots(format, teamCount)]]
           : [['ESTADO', event.status], ['EQUIPOS', teamCount], ['PARTIDOS', `${state.seriesPlayed || 0}/${state.seriesTotal || format?.regularSeason?.series || 0}`]];
     return { eyebrow, title, subtitle, kpis };
   }
@@ -258,19 +273,37 @@
     */
     const empezada = (context.state.teams?.length || 0) > 0
       || (context.state.seriesTotal || 0) > 0;
+    /*
+      Con la gran final jugada, esto seguía diciendo «Seeding confirmado»: el
+      torneo acababa y la portada no nombraba al campeón. Y antes de empezar
+      afirmaba «las inscripciones siguen abiertas» también con ellas cerradas.
+      Cada frase sale ahora del dato que la hace verdad.
+    */
+    const campeon = championName(context.state);
+    const abiertas = context.event.registration?.available === true;
     overview.append(
       node('p', 'section-label', 'ESTADO DEL TORNEO'),
       node('h2', '', upcoming
         ? 'Próximamente'
-        : !empezada
-          ? 'Todavía no ha empezado'
-          : context.state.complete
-            ? official ? 'Seeding confirmado' : 'La liga ya tiene Top 4'
-            : 'La competición está en marcha'),
+        : campeon
+          ? `🏆 ${campeon}, campeón`
+          : !empezada
+            ? 'Todavía no ha empezado'
+            : context.state.playoffs?.generated
+              ? 'Playoffs en juego'
+              : context.state.complete
+                ? official ? 'Seeding confirmado' : 'La liga ya tiene Top 4'
+                : 'La competición está en marcha'),
       node('p', 'section-copy', upcoming
-        ? `${format?.players || 20} jugadores formarán ${format?.teams || 4} equipos. La liga ordenará el seeding y todos entrarán en el cuadro de doble eliminación.`
+        ? `${format?.players || 20} jugadores formarán ${format?.teams || 4} equipos. La liga ordenará el seeding y los cuatro primeros entrarán en el cuadro de doble eliminación.`
+        : campeon
+        ? 'El torneo ha terminado. La clasificación final y todos los resultados siguen disponibles.'
         : !empezada
-        ? `Las inscripciones siguen abiertas. Cuando se cierren, ${format?.players || 20} jugadores formarán ${format?.teams || 4} equipos en el draft y aquí aparecerán el calendario y la clasificación.`
+        ? abiertas
+          ? `Las inscripciones siguen abiertas. Cuando se cierren, el draft formará los equipos y aquí aparecerán el calendario y la clasificación.`
+          : 'Las inscripciones están cerradas. Cuando se haga el draft, aquí aparecerán el calendario y la clasificación.'
+        : context.state.playoffs?.generated
+        ? 'La fase regular está cerrada. Sigue el cuadro de doble eliminación hasta la gran final.'
         : context.state.complete
         ? 'La fase regular está cerrada. El foco pasa al cuadro de doble eliminación.'
         : 'Sigue el calendario y mira cómo cambia la clasificación con cada resultado.'),
@@ -308,7 +341,9 @@
       const format = context.state.format || context.event.officialFormat;
       const section = node('section', 'content-section');
       section.append(sectionHeader(1, 'FORMATO OFICIAL', 'Todos contra todos', `${format.regularSeason.matchdays} jornadas · ${format.regularSeason.series} series · BO${format.regularSeason.bestOf}`));
-      section.append(node('p', 'competition-notice', 'Cada equipo jugará una vez contra sus tres rivales. Nadie queda eliminado: los cuatro equipos avanzan y la tabla sólo decide el seeding.'));
+      section.append(node('p', 'competition-notice', format.teams > (format.playoffs?.teams || 4)
+        ? `Cada equipo jugará una vez contra sus ${format.teams - 1} rivales. Los cuatro primeros pasan a playoffs.`
+        : `Cada equipo jugará una vez contra sus ${format.teams - 1} rivales. Nadie queda eliminado: los ${format.teams} equipos avanzan y la tabla sólo decide el seeding.`));
       const days = node('div', 'matchday-grid');
       for (let day = 1; day <= format.regularSeason.matchdays; day += 1) {
         const card = node('article', 'matchday-card is-preview');

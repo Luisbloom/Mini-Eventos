@@ -83,6 +83,12 @@ function mostrarPrevia(event) {
     const state = document.createElement('small'); state.textContent = 'ORDEN POR ANUNCIAR';
     card.append(number, copy, state); return card;
   }));
+  // Salen del formato: con 30 o 40 jugadores «4 equipos de 5» y «los 20
+  // participantes», que estaban escritos en el HTML, eran falsos.
+  const elegidos = format.teamSize - 1;
+  byId('draft-preview-rounds-title').textContent = `${format.draftRounds} rondas`;
+  byId('draft-preview-final-title').textContent = `${format.teams} equipos de ${format.teamSize}`;
+  byId('draft-preview-final-copy').textContent = `Un capitán y ${elegidos} jugadores elegidos en cada plantilla. El draft sólo se considerará finalizado cuando los ${format.players} participantes estén distribuidos correctamente.`;
   setConnection('loading', 'PRÓXIMAMENTE');
 }
 
