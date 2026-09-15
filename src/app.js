@@ -480,13 +480,37 @@ function createApp({
     } catch (error) { next(error); }
   });
   app.get('/api/events/:slug/stages/:stageId/leaderboard', (request, response, next) => {
-    try { const event=eventFromSlug(request,response);if(!event)return;if(!event.modules.competition)return sendError(response,404,'MODULE_DISABLED','Este evento no utiliza fases competitivas.');const stageId=parseId(request.params.stageId);if(!stageId)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');const groupId=request.query.groupId===undefined?null:parseId(request.query.groupId);if(request.query.groupId!==undefined&&!groupId)return sendError(response,400,'INVALID_GROUP_ID','El id de grupo no es válido.');const stage=database.competition.getStage(stageId);if(stage.eventId!==event.id)return sendError(response,404,'STAGE_NOT_FOUND','La fase no existe.');if(stage.type==='group_stage'&&!groupId)return sendError(response,400,'GROUP_REQUIRED','Selecciona un grupo para esta clasificación.');response.json(database.competition.getStageLeaderboard(stageId,groupId)); } catch(error){next(error);}
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+      if (!event.modules.competition) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no utiliza fases competitivas.');
+      const stageId = parseId(request.params.stageId);
+      if (!stageId) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+      const groupId = request.query.groupId === undefined ? null : parseId(request.query.groupId);
+      if (request.query.groupId !== undefined && !groupId) return sendError(response, 400, 'INVALID_GROUP_ID', 'El id de grupo no es válido.');
+      const stage = database.competition.getStage(stageId);
+      if (stage.eventId !== event.id) return sendError(response, 404, 'STAGE_NOT_FOUND', 'La fase no existe.');
+      if (stage.type === 'group_stage' && !groupId) {
+        return sendError(response, 400, 'GROUP_REQUIRED', 'Selecciona un grupo para esta clasificación.');
+      }
+      response.json(database.competition.getStageLeaderboard(stageId, groupId));
+    } catch (error) { next(error); }
   });
   app.get('/api/events/:slug/schedule', (request, response, next) => {
-    try { const event=eventFromSlug(request,response);if(!event)return;if(!event.modules.schedule)return sendError(response,404,'MODULE_DISABLED','Este evento no publica agenda.');response.json({schedule:database.competition.listSchedule(event.id)}); } catch(error){next(error);}
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+      if (!event.modules.schedule) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no publica agenda.');
+      response.json({ schedule: database.competition.listSchedule(event.id) });
+    } catch (error) { next(error); }
   });
   app.get('/api/events/:slug/prizes', (request, response, next) => {
-    try { const event=eventFromSlug(request,response);if(!event)return;if(!event.modules.prizes)return sendError(response,404,'MODULE_DISABLED','Este evento no publica premios.');response.json({prizes:database.competition.listPrizes(event.id,{publicOnly:true})}); } catch(error){next(error);}
+    try {
+      const event = eventFromSlug(request, response);
+      if (!event) return;
+      if (!event.modules.prizes) return sendError(response, 404, 'MODULE_DISABLED', 'Este evento no publica premios.');
+      response.json({ prizes: database.competition.listPrizes(event.id, { publicOnly: true }) });
+    } catch (error) { next(error); }
   });
 
   function sendMatches(event, request, response, { publicView = true } = {}) {
@@ -622,48 +646,87 @@ function createApp({
     catch (error) { next(error); }
   });
   app.get('/api/admin/events/:id/stages', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_EVENT_ID','El id de evento no es válido.');
-    try { if(!database.getEventById(id))return sendError(response,404,'EVENT_NOT_FOUND','El evento no existe.');response.json({stages:database.competition.listStages(id)}); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
+    try {
+      if (!database.getEventById(id)) return sendError(response, 404, 'EVENT_NOT_FOUND', 'El evento no existe.');
+      response.json({ stages: database.competition.listStages(id) });
+    } catch (error) { next(error); }
   });
   app.post('/api/admin/events/:id/stages', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_EVENT_ID','El id de evento no es válido.');
-    try { response.status(201).json({stage:database.competition.createStage(id,request.body)}); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
+    try {
+      response.status(201).json({ stage: database.competition.createStage(id, request.body) });
+    } catch (error) { next(error); }
   });
   app.put('/api/admin/stages/:id', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.json({stage:database.competition.updateStage(id,request.body)}); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      response.json({ stage: database.competition.updateStage(id, request.body) });
+    } catch (error) { next(error); }
   });
   app.put('/api/admin/stages/:id/groups', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.json({groups:database.competition.replaceGroups(id,request.body?.groups||[])}); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      response.json({ groups: database.competition.replaceGroups(id, request.body?.groups || []) });
+    } catch (error) { next(error); }
   });
   app.post('/api/admin/stages/:id/groups/distribute', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.json({participants:database.competition.distributeGroups(id)}); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      response.json({ participants: database.competition.distributeGroups(id) });
+    } catch (error) { next(error); }
   });
   app.patch('/api/admin/stages/:id/groups/lock', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.json({stage:database.competition.setGroupsLocked(id,Boolean(request.body?.locked))}); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      response.json({ stage: database.competition.setGroupsLocked(id, Boolean(request.body?.locked)) });
+    } catch (error) { next(error); }
   });
   app.put('/api/admin/stages/:stageId/participants/:participantId', (request, response, next) => {
-    const stageId=parseId(request.params.stageId),participantId=parseId(request.params.participantId);if(!stageId||!participantId)return sendError(response,400,'INVALID_PARTICIPANT_ID','Los identificadores no son válidos.');
-    try { const groupId=request.body?.groupId===null?null:parseId(request.body?.groupId);response.json({participants:database.competition.assignParticipant(stageId,participantId,groupId)}); } catch(error){next(error);}
+    const stageId = parseId(request.params.stageId);
+    const participantId = parseId(request.params.participantId);
+    if (!stageId || !participantId) {
+      return sendError(response, 400, 'INVALID_PARTICIPANT_ID', 'Los identificadores no son válidos.');
+    }
+    try {
+      const groupId = request.body?.groupId === null ? null : parseId(request.body?.groupId);
+      response.json({ participants: database.competition.assignParticipant(stageId, participantId, groupId) });
+    } catch (error) { next(error); }
   });
   app.get('/api/admin/stages/:id/leaderboard', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.json(database.competition.getStageLeaderboard(id,request.query.groupId?parseId(request.query.groupId):null)); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      const groupId = request.query.groupId ? parseId(request.query.groupId) : null;
+      response.json(database.competition.getStageLeaderboard(id, groupId));
+    } catch (error) { next(error); }
   });
   app.get('/api/admin/stages/:id/close-preview', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.json(database.competition.previewStageCompletion(id)); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      response.json(database.competition.previewStageCompletion(id));
+    } catch (error) { next(error); }
   });
   app.post('/api/admin/stages/:id/complete', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.json(database.competition.completeStage(id,{force:Boolean(request.body?.force)})); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      response.json(database.competition.completeStage(id, { force: Boolean(request.body?.force) }));
+    } catch (error) { next(error); }
   });
   app.post('/api/admin/stages/:id/tie-resolutions', (request, response, next) => {
-    const id=parseId(request.params.id);if(!id)return sendError(response,400,'INVALID_STAGE_ID','El id de fase no es válido.');
-    try { response.status(201).json({resolutions:database.competition.resolveTie(id,request.body||{})}); } catch(error){next(error);}
+    const id = parseId(request.params.id);
+    if (!id) return sendError(response, 400, 'INVALID_STAGE_ID', 'El id de fase no es válido.');
+    try {
+      response.status(201).json({ resolutions: database.competition.resolveTie(id, request.body || {}) });
+    } catch (error) { next(error); }
   });
   app.get('/api/admin/events/:id/hosts', (request, response, next) => {
     const id = parseId(request.params.id);
@@ -678,7 +741,12 @@ function createApp({
       response.json({ hosts });
     } catch (error) { next(error); }
   });
-  app.put('/api/admin/events/:id/hosts', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({hosts:database.competition.replaceHosts(id,request.body?.hosts||[])});}catch(error){next(error);}});
+  app.put('/api/admin/events/:id/hosts', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({ hosts: database.competition.replaceHosts(id, request.body?.hosts || []) });
+    } catch (error) { next(error); }
+  });
   app.post('/api/admin/events/:eventId/hosts/:hostId/token', (request, response, next) => {
     const eventId = parseId(request.params.eventId);
     if (!eventId) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
@@ -717,12 +785,56 @@ function createApp({
       response.json({ host: updated, context: reporterContextResolver.resolve({ event, host: updated, includeRoster: false }) });
     } catch (error) { next(error); }
   });
-  app.get('/api/admin/events/:id/schedule', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({schedule:database.competition.listSchedule(id)});}catch(error){next(error);}});
-  app.put('/api/admin/events/:id/schedule', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({schedule:database.competition.replaceSchedule(id,request.body?.schedule||[])});}catch(error){next(error);}});
-  app.get('/api/admin/events/:id/prizes', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({prizes:database.competition.listPrizes(id)});}catch(error){next(error);}});
-  app.put('/api/admin/events/:id/prizes', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({prizes:database.competition.replacePrizes(id,request.body?.prizes||[])});}catch(error){next(error);}});
-  app.post('/api/admin/events/:id/simulator', (request,response,next)=>{const id=parseId(request.params.id);try{const match=matchIngestor.ingest({eventId:id,report:request.body?.report||request.body,context:request.body?.context||{},sourceIp:request.ip,origin:'SIMULATOR',submittedBy:'ADMIN'});response.status(match.duplicate?200:201).json({match});}catch(error){next(error);}});
-  app.post('/api/admin/events/:id/recalculate', (request,response,next)=>{const id=parseId(request.params.id);try{response.json({stages:database.competition.listStages(id).map((stage)=>({stage,leaderboards:stage.type==='group_stage'?stage.groups.map((group)=>database.competition.getStageLeaderboard(stage.id,group.id)):[database.competition.getStageLeaderboard(stage.id)]}))});}catch(error){next(error);}});
+  app.get('/api/admin/events/:id/schedule', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({ schedule: database.competition.listSchedule(id) });
+    } catch (error) { next(error); }
+  });
+  app.put('/api/admin/events/:id/schedule', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({ schedule: database.competition.replaceSchedule(id, request.body?.schedule || []) });
+    } catch (error) { next(error); }
+  });
+  app.get('/api/admin/events/:id/prizes', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({ prizes: database.competition.listPrizes(id) });
+    } catch (error) { next(error); }
+  });
+  app.put('/api/admin/events/:id/prizes', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      response.json({ prizes: database.competition.replacePrizes(id, request.body?.prizes || []) });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/admin/events/:id/simulator', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const match = matchIngestor.ingest({
+        eventId: id,
+        report: request.body?.report || request.body,
+        context: request.body?.context || {},
+        sourceIp: request.ip,
+        origin: 'SIMULATOR',
+        submittedBy: 'ADMIN'
+      });
+      response.status(match.duplicate ? 200 : 201).json({ match });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/admin/events/:id/recalculate', (request, response, next) => {
+    const id = parseId(request.params.id);
+    try {
+      const stages = database.competition.listStages(id).map((stage) => ({
+        stage,
+        leaderboards: stage.type === 'group_stage'
+          ? stage.groups.map((group) => database.competition.getStageLeaderboard(stage.id, group.id))
+          : [database.competition.getStageLeaderboard(stage.id)]
+      }));
+      response.json({ stages });
+    } catch (error) { next(error); }
+  });
   app.get('/api/admin/events/:id/fields', (request, response, next) => {
     const id = parseId(request.params.id);
     if (!id) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
@@ -793,8 +905,14 @@ function createApp({
     const id = parseId(request.params.id);
     if (!id) return sendError(response, 400, 'INVALID_EVENT_ID', 'El id de evento no es válido.');
     if (!isReport(request.body?.report)) return sendError(response, 400, 'INVALID_REPORT', 'Falta report.');
-    try { const report=request.body.report,context=request.body.context||{};const match=hasCompetitiveContext({...report,...context})?matchIngestor.ingest({eventId:id,report,context,sourceIp:request.ip,origin:'MANUAL',submittedBy:'ADMIN'}):database.insertMatch(report,request.ip,id,{origin:'MANUAL',submittedBy:'ADMIN'});response.status(match.duplicate?200:201).json(match); }
-    catch (error) { next(error); }
+    try {
+      const report = request.body.report;
+      const context = request.body.context || {};
+      const match = hasCompetitiveContext({ ...report, ...context })
+        ? matchIngestor.ingest({ eventId: id, report, context, sourceIp: request.ip, origin: 'MANUAL', submittedBy: 'ADMIN' })
+        : database.insertMatch(report, request.ip, id, { origin: 'MANUAL', submittedBy: 'ADMIN' });
+      response.status(match.duplicate ? 200 : 201).json(match);
+    } catch (error) { next(error); }
   });
   app.delete('/api/admin/events/:eventId/matches/:matchId', (request, response, next) => {
     const eventId = parseId(request.params.eventId);
@@ -806,9 +924,15 @@ function createApp({
     } catch (error) { next(error); }
   });
   app.patch('/api/admin/events/:eventId/matches/:matchId/void', (request, response, next) => {
-    const eventId=parseId(request.params.eventId),matchId=parseId(request.params.matchId);
-    if(!eventId||!matchId)return sendError(response,400,'INVALID_MATCH_ID','El id no es válido.');
-    try { if(!database.voidMatch(matchId,eventId,request.body?.reason))return sendError(response,404,'MATCH_NOT_FOUND','No existe esa partida en el evento.');response.json({match:database.getMatch(matchId)}); } catch(error){next(error);}
+    const eventId = parseId(request.params.eventId);
+    const matchId = parseId(request.params.matchId);
+    if (!eventId || !matchId) return sendError(response, 400, 'INVALID_MATCH_ID', 'El id no es válido.');
+    try {
+      if (!database.voidMatch(matchId, eventId, request.body?.reason)) {
+        return sendError(response, 404, 'MATCH_NOT_FOUND', 'No existe esa partida en el evento.');
+      }
+      response.json({ match: database.getMatch(matchId) });
+    } catch (error) { next(error); }
   });
   app.put('/api/admin/tournament-information', (request, response, next) => {
     try {

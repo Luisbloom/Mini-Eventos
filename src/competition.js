@@ -92,12 +92,33 @@ function buildCompetitionLeaderboard(matches, options = {}) {
     || first.name.localeCompare(second.name, 'es')
   ));
   const qualifiers = Number(options.qualifiers || 0);
-  const clusters=[];
-  for(const row of standings){const cluster=clusters.at(-1);if(cluster&&automaticCompare(cluster.rows[0],row)===0)cluster.rows.push(row);else clusters.push({rows:[row]});}
-  let cursor=0;let decisiveCluster=null;
-  for(const cluster of clusters){cluster.fullyResolved=cluster.rows.length<2||cluster.rows.every((first,index)=>cluster.rows.slice(index+1).every((second)=>resolutionCompare(first,second,resolutions)!==0));cluster.rows.sort((first,second)=>resolutionCompare(first,second,resolutions)||first.name.localeCompare(second.name,'es'));if(qualifiers>cursor&&qualifiers<cursor+cluster.rows.length&&!cluster.fullyResolved)decisiveCluster=cluster;cluster.rows.forEach((row,index)=>{row.rank=cluster.fullyResolved?cursor+index+1:cursor+1;row.winRate=row.games?Math.round((row.wins/row.games)*100):0;});cursor+=cluster.rows.length;}
-  standings.splice(0,standings.length,...clusters.flatMap((cluster)=>cluster.rows));
-  const cutoffTie=Boolean(decisiveCluster);
+  // Grupos de empatados según los criterios automáticos.
+  const clusters = [];
+  for (const row of standings) {
+    const cluster = clusters.at(-1);
+    if (cluster && automaticCompare(cluster.rows[0], row) === 0) cluster.rows.push(row);
+    else clusters.push({ rows: [row] });
+  }
+  let cursor = 0;
+  let decisiveCluster = null;
+  for (const cluster of clusters) {
+    // Resuelto del todo si cada pareja del grupo tiene una resolución que la separa.
+    cluster.fullyResolved = cluster.rows.length < 2 || cluster.rows.every((first, index) =>
+      cluster.rows.slice(index + 1).every((second) => resolutionCompare(first, second, resolutions) !== 0));
+    cluster.rows.sort((first, second) =>
+      resolutionCompare(first, second, resolutions) || first.name.localeCompare(second.name, 'es'));
+    // Un empate sin resolver que cruza la línea de clasificación bloquea el corte.
+    if (qualifiers > cursor && qualifiers < cursor + cluster.rows.length && !cluster.fullyResolved) {
+      decisiveCluster = cluster;
+    }
+    cluster.rows.forEach((row, index) => {
+      row.rank = cluster.fullyResolved ? cursor + index + 1 : cursor + 1;
+      row.winRate = row.games ? Math.round((row.wins / row.games) * 100) : 0;
+    });
+    cursor += cluster.rows.length;
+  }
+  standings.splice(0, standings.length, ...clusters.flatMap((cluster) => cluster.rows));
+  const cutoffTie = Boolean(decisiveCluster);
   return {
     standings,
     matchCount: validMatches.length,

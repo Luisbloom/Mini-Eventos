@@ -447,8 +447,10 @@ function openDatabase(dbPath) {
         WHEN 'Inscripciones cerradas' THEN 3 WHEN 'Finalizado' THEN 4 WHEN 'Cancelado' THEN 5 ELSE 6 END,
       CASE WHEN e.starts_at IS NULL THEN 1 ELSE 0 END, e.starts_at ASC, e.id DESC`);
   const insertEventStatement = connection.prepare(`INSERT INTO events
-    (slug,name,game,description,status,starts_at,registration_opens_at,registration_closes_at,min_participants,max_participants,registrations_open,archived,modules_json,accent_color,icon,cover_image,banner_image)
-    VALUES (@slug,@name,@game,@description,@status,@startsAt,@registrationOpensAt,@registrationClosesAt,@minParticipants,@maxParticipants,@registrationsOpen,@archived,@modulesJson,@accentColor,@icon,@coverImage,@bannerImage)`);
+    (slug,name,game,description,status,starts_at,registration_opens_at,registration_closes_at,
+     min_participants,max_participants,registrations_open,archived,modules_json,accent_color,icon,cover_image,banner_image)
+    VALUES (@slug,@name,@game,@description,@status,@startsAt,@registrationOpensAt,@registrationClosesAt,
+     @minParticipants,@maxParticipants,@registrationsOpen,@archived,@modulesJson,@accentColor,@icon,@coverImage,@bannerImage)`);
   const updateEventStatement = connection.prepare(`UPDATE events SET
     slug=@slug,name=@name,game=@game,description=@description,status=@status,starts_at=@startsAt,
     registration_opens_at=@registrationOpensAt,registration_closes_at=@registrationClosesAt,
@@ -717,7 +719,19 @@ function openDatabase(dbPath) {
         }
       }
       if (friendCode && friendCode.length > 120) throw new EventValidationError('El Friend Code es demasiado largo.', 'INVALID_PARTICIPANT');
-      connection.transaction(()=>{updateParticipantStatement.run(status,friendCode,id);if(status==='disqualified')connection.prepare("UPDATE stage_participants SET competitive_status='disqualified' WHERE participant_id=? AND stage_id IN (SELECT id FROM event_stages WHERE status!='completed')").run(id);else if(status==='confirmed'&&row.status==='disqualified')connection.prepare("UPDATE stage_participants SET competitive_status=CASE WHEN advanced_from_stage_id IS NULL THEN 'competing' ELSE 'finalist' END WHERE participant_id=? AND competitive_status='disqualified' AND stage_id IN (SELECT id FROM event_stages WHERE status!='completed')").run(id);})();
+      connection.transaction(() => {
+        updateParticipantStatement.run(status, friendCode, id);
+        // Descalificar o readmitir también cambia su estado en las fases que siguen abiertas.
+        if (status === 'disqualified') {
+          connection.prepare(`UPDATE stage_participants SET competitive_status='disqualified'
+            WHERE participant_id=? AND stage_id IN (SELECT id FROM event_stages WHERE status!='completed')`).run(id);
+        } else if (status === 'confirmed' && row.status === 'disqualified') {
+          connection.prepare(`UPDATE stage_participants
+            SET competitive_status=CASE WHEN advanced_from_stage_id IS NULL THEN 'competing' ELSE 'finalist' END
+            WHERE participant_id=? AND competitive_status='disqualified'
+              AND stage_id IN (SELECT id FROM event_stages WHERE status!='completed')`).run(id);
+        }
+      })();
       return toParticipant(getParticipantStatement.get(id));
     },
     deleteParticipant(id) { return deleteParticipantStatement.run(id).changes > 0; },
