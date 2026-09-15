@@ -1,5 +1,12 @@
 # Torneo de Valorant — estado
 
+> ⚠️ **Histórico: no describe el formato actual.** Se escribió el 25 de agosto
+> y el formato cambió después: ya no hay reset en la Gran Final (se gana por dos
+> mapas de diferencia y hay partido por el tercer puesto), se juega con 20, 30 o
+> 40 jugadores y el último desempate son las estadísticas del equipo. La fuente
+> de verdad es [src/valorant-event-format.js](../src/valorant-event-format.js),
+> y para el día del torneo, [DIA-DEL-TORNEO.md](DIA-DEL-TORNEO.md).
+
 > 25 de agosto de 2026. Rama `feature/valorant-tournament`.
 > Among Us queda congelado en `among-us-software-ready` y no se toca.
 
