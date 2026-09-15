@@ -282,7 +282,7 @@ describe('disponibilidad', () => {
     it('la sección de premios no se enseña vacía', () => {
       const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'event.js'), 'utf8');
       // «Lo que está en juego» con nada debajo promete premios que no existen.
-      assert.ok(js.includes("byId('premios').hidden=!data.prizes.length"),
+      assert.match(js, /byId\('premios'\)\.hidden\s*=\s*!data\.prizes\.length/,
         'sin premios, la sección se oculta');
     });
 

@@ -8,26 +8,83 @@ let stages = [];
 let hosts = [];
 
 const panelMap = {
-  general: ['.event-editor','#fields-section'],
+  general: ['.event-editor', '#fields-section'],
   participants: ['#participants-section'],
   competition: ['#competition-admin-section'],
-  matches: ['#results-section','#reporter-simulator-section'],
+  matches: ['#results-section', '#reporter-simulator-section'],
   schedule: ['#schedule-admin-section'],
   information: ['#information-form']
 };
 
 function selectTab(name) {
-  Object.values(panelMap).flat().forEach((selector)=>q(selector)?.classList.add('admin-panel-hidden'));
-  (panelMap[name]||[]).forEach((selector)=>q(selector)?.classList.remove('admin-panel-hidden'));
-  document.querySelectorAll('[data-admin-tab]').forEach((button)=>button.classList.toggle('active',button.dataset.adminTab===name));
+  Object.values(panelMap)
+    .flat()
+    .forEach((selector) => q(selector)?.classList.add('admin-panel-hidden'));
+  (panelMap[name] || []).forEach((selector) => q(selector)?.classList.remove('admin-panel-hidden'));
+  document
+    .querySelectorAll('[data-admin-tab]')
+    .forEach((button) => button.classList.toggle('active', button.dataset.adminTab === name));
 }
-document.querySelectorAll('[data-admin-tab]').forEach((button)=>button.addEventListener('click',()=>selectTab(button.dataset.adminTab)));
+document
+  .querySelectorAll('[data-admin-tab]')
+  .forEach((button) => button.addEventListener('click', () => selectTab(button.dataset.adminTab)));
 
-function input(value,type='text'){const element=document.createElement('input');element.type=type;element.value=value??'';return element;}
-function select(options,value){const element=document.createElement('select');options.forEach(([key,label])=>{const option=document.createElement('option');option.value=key;option.textContent=label;element.append(option);});element.value=String(value??'');return element;}
-function label(caption,control){const wrapper=document.createElement('label');const span=document.createElement('span');span.textContent=caption;wrapper.append(span,control);return wrapper;}
+function input(value, type = 'text') {
+  const element = document.createElement('input');
+  element.type = type;
+  element.value = value ?? '';
+  return element;
+}
+function select(options, value) {
+  const element = document.createElement('select');
+  options.forEach(([key, label]) => {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = label;
+    element.append(option);
+  });
+  element.value = String(value ?? '');
+  return element;
+}
+function label(caption, control) {
+  const wrapper = document.createElement('label');
+  const span = document.createElement('span');
+  span.textContent = caption;
+  wrapper.append(span, control);
+  return wrapper;
+}
 
-function renderGroup(stage,group){const card=document.createElement('article');card.className='group-admin';const title=document.createElement('h4');title.textContent=`${group.name} · ${group.participantCount}`;card.append(title);const members=stage.participants.filter((member)=>member.groupId===group.id);members.forEach((member)=>{const row=document.createElement('div');row.className='group-member';const name=document.createElement('span');name.textContent=member.displayName;const move=select([['','SIN GRUPO'],...stage.groups.map((item)=>[item.id,item.name])],member.groupId);move.disabled=stage.groupsLocked;move.addEventListener('change',async()=>{try{await admin.api(`/api/admin/stages/${stage.id}/participants/${member.participantId}`,{method:'PUT',body:JSON.stringify({groupId:move.value?Number(move.value):null})});await loadCompetition();admin.feedback('Jugador movido.');}catch(error){admin.feedback(error.message,true);}});row.append(name,move);card.append(row);});return card;}
+function renderGroup(stage, group) {
+  const card = document.createElement('article');
+  card.className = 'group-admin';
+  const title = document.createElement('h4');
+  title.textContent = `${group.name} · ${group.participantCount}`;
+  card.append(title);
+  const members = stage.participants.filter((member) => member.groupId === group.id);
+  members.forEach((member) => {
+    const row = document.createElement('div');
+    row.className = 'group-member';
+    const name = document.createElement('span');
+    name.textContent = member.displayName;
+    const move = select([['', 'SIN GRUPO'], ...stage.groups.map((item) => [item.id, item.name])], member.groupId);
+    move.disabled = stage.groupsLocked;
+    move.addEventListener('change', async () => {
+      try {
+        await admin.api(`/api/admin/stages/${stage.id}/participants/${member.participantId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ groupId: move.value ? Number(move.value) : null })
+        });
+        await loadCompetition();
+        admin.feedback('Jugador movido.');
+      } catch (error) {
+        admin.feedback(error.message, true);
+      }
+    });
+    row.append(name, move);
+    card.append(row);
+  });
+  return card;
+}
 
 /**
  * Los confirmados que no están en ningún grupo.
@@ -36,116 +93,816 @@ function renderGroup(stage,group){const card=document.createElement('article');c
  * un inscrito nuevo no aparece por ninguna parte y la única forma de meterlo
  * era repartir otra vez, que borra la distribución entera.
  */
-function renderUnassigned(stage){
-  const pendientes=stage.unassigned||[];
-  if(!pendientes.length)return null;
-  const card=document.createElement('article');
-  card.className='group-admin is-unassigned';
-  const title=document.createElement('h4');
-  title.textContent=`SIN GRUPO · ${pendientes.length}`;
+function renderUnassigned(stage) {
+  const pendientes = stage.unassigned || [];
+  if (!pendientes.length) return null;
+  const card = document.createElement('article');
+  card.className = 'group-admin is-unassigned';
+  const title = document.createElement('h4');
+  title.textContent = `SIN GRUPO · ${pendientes.length}`;
   card.append(title);
-  pendientes.forEach((member)=>{
-    const row=document.createElement('div');row.className='group-member';
-    const name=document.createElement('span');name.textContent=member.displayName;
-    const move=select([['','SIN GRUPO'],...stage.groups.map((item)=>[item.id,item.name])],'');
-    move.disabled=stage.groupsLocked;
-    move.addEventListener('change',async()=>{
-      if(!move.value)return;
-      try{
-        await admin.api(`/api/admin/stages/${stage.id}/participants/${member.participantId}`,
-          {method:'PUT',body:JSON.stringify({groupId:Number(move.value)})});
+  pendientes.forEach((member) => {
+    const row = document.createElement('div');
+    row.className = 'group-member';
+    const name = document.createElement('span');
+    name.textContent = member.displayName;
+    const move = select([['', 'SIN GRUPO'], ...stage.groups.map((item) => [item.id, item.name])], '');
+    move.disabled = stage.groupsLocked;
+    move.addEventListener('change', async () => {
+      if (!move.value) return;
+      try {
+        await admin.api(`/api/admin/stages/${stage.id}/participants/${member.participantId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ groupId: Number(move.value) })
+        });
         await loadCompetition();
         admin.feedback(`${member.displayName} añadido al grupo.`);
-      }catch(error){admin.feedback(error.message,true);}
+      } catch (error) {
+        admin.feedback(error.message, true);
+      }
     });
-    row.append(name,move);card.append(row);
+    row.append(name, move);
+    card.append(row);
   });
   return card;
 }
 
-function auditTable(board){const section=document.createElement('section');section.className='stage-audit-board';const heading=document.createElement('h4');heading.textContent=board.group?.name||board.stage.name;section.append(heading);if(!board.standings.length){const empty=document.createElement('p');empty.textContent='Todavía no hay jugadores ni puntuación.';section.append(empty);return section;}board.standings.forEach((player)=>{const row=document.createElement('div');row.className='audit-player';const title=document.createElement('strong');title.textContent=`${String(player.rank).padStart(2,'0')} · ${player.name} · ${player.points} PTS`;const detail=document.createElement('span');detail.textContent=player.breakdowns.length?player.breakdowns.map((item)=>`#${item.matchId}: ${item.score.victory} victoria + ${item.score.kills} kills + ${item.score.tasks} tareas = ${item.score.total}`).join(' | '):'Sin partidas puntuadas';row.append(title,detail);section.append(row);});return section;}
-
-function renderStage(stage){const card=document.createElement('article');card.className='stage-editor';const header=document.createElement('header');header.innerHTML=`<div><span>FASE ${String(stage.position).padStart(2,'0')} · ${stage.status.toUpperCase()}</span><h3></h3>${stage.type==='group_stage'?`<b class="group-lock-state">GRUPOS ${stage.groupsLocked?'CONFIRMADOS':'PENDIENTES'}</b>`:''}</div>`;header.querySelector('h3').textContent=stage.name;card.append(header);const config=document.createElement('div');config.className='stage-config';const name=input(stage.name),type=select([['group_stage','Grupos'],['final','Final'],['league','Liga'],['knockout','Eliminatoria']],stage.type),status=select([['pending','Pendiente'],['active','En curso'],...(stage.status==='completed'?[['completed','Completada']]:[])],stage.status),matches=input(stage.matchesPerGroup,'number'),qualifiers=input(stage.qualifiersPerGroup,'number'),position=input(stage.position,'number'),reset=input('', 'checkbox'),enabled=input('','checkbox');reset.checked=stage.resetPoints;enabled.checked=stage.enabled;config.append(label('NOMBRE',name),label('TIPO',type),label('ESTADO',status),label('POSICIÓN',position),label('PARTIDAS PREVISTAS',matches),label('CLASIFICAN POR GRUPO',qualifiers),label('REINICIAR PUNTOS',reset),label('HABILITADA',enabled));card.append(config);const actions=document.createElement('div');actions.className='stage-actions';
-  const action=(text,handler,className='')=>{const button=document.createElement('button');button.type='button';button.textContent=text;button.className=className;button.addEventListener('click',handler);actions.append(button);};
-  action('GUARDAR FASE',async()=>{try{await admin.api(`/api/admin/stages/${stage.id}`,{method:'PUT',body:JSON.stringify({name:name.value,type:type.value,status:status.value,position:Number(position.value),matchesPerGroup:Number(matches.value),qualifiersPerGroup:Number(qualifiers.value),resetPoints:reset.checked,enabled:enabled.checked})});await loadCompetition();admin.feedback('Fase actualizada.');}catch(error){admin.feedback(error.message,true);}});
-  action('EDITAR GRUPOS',async()=>{const names=prompt('Nombres de grupos separados por coma',stage.groups.map((group)=>group.name).join(', '));if(names===null)return;try{await admin.api(`/api/admin/stages/${stage.id}/groups`,{method:'PUT',body:JSON.stringify({groups:names.split(',').map((value,index)=>({id:stage.groups[index]?.id,name:value.trim(),position:index+1})).filter((group)=>group.name)})});await loadCompetition();}catch(error){admin.feedback(error.message,true);}});
-  action('REPARTIR AUTOMÁTICAMENTE',async()=>{if(!confirm('¿Repartir nuevamente? Se sobrescribirá la distribución actual de esta fase.'))return;try{await admin.api(`/api/admin/stages/${stage.id}/groups/distribute`,{method:'POST'});await loadCompetition();admin.feedback('Grupos repartidos de forma equilibrada.');}catch(error){admin.feedback(error.message,true);}},'warn');
-  action(stage.groupsLocked?'DESBLOQUEAR GRUPOS':'BLOQUEAR GRUPOS',async()=>{if(!confirm(stage.groupsLocked?'¿Desbloquear los grupos?':'¿Confirmar y bloquear los grupos?'))return;await admin.api(`/api/admin/stages/${stage.id}/groups/lock`,{method:'PATCH',body:JSON.stringify({locked:!stage.groupsLocked})});await loadCompetition();});
-  action('RECALCULAR',async()=>{if(!confirm('¿Reconstruir todas las clasificaciones desde los resultados brutos?'))return;await admin.api(`/api/admin/events/${currentEvent.id}/recalculate`,{method:'POST'});admin.feedback('Clasificaciones reconstruidas desde partidas válidas.');});
-  const audit=document.createElement('div');audit.className='stage-audit';audit.hidden=true;action('VER PUNTUACIÓN',async()=>{try{const scopes=stage.type==='group_stage'?stage.groups:[null];const boards=await Promise.all(scopes.map((group)=>admin.api(`/api/admin/stages/${stage.id}/leaderboard${group?`?groupId=${group.id}`:''}`)));audit.replaceChildren(...boards.map(auditTable));audit.hidden=!audit.hidden;}catch(error){admin.feedback(error.message,true);}});
-  action('FINALIZAR FASE',async()=>{try{const preview=await admin.api(`/api/admin/stages/${stage.id}/close-preview`);const summary=preview.summaries.map((item)=>{const count=stage.type==='group_stage'?stage.qualifiersPerGroup:1;const top=item.leaderboard.standings.slice(0,count).map((player)=>player.name).join(', ')||'sin clasificados';return `${item.group?.name||stage.name}: ${item.matchCount}/${stage.matchesPerGroup} partidas\nTop: ${top}`;}).join('\n\n');if(preview.blocking){const issue=preview.issues.find((item)=>item.participantIds),ids=issue?.participantIds||[];const higher=Number(prompt(`DESEMPATE NECESARIO entre IDs ${ids.join(', ')}. ID que queda por delante:`));const lower=Number(prompt(`ID que queda por detrás de ${higher}:`));const reason=prompt('Motivo de la resolución:','Desempate administrativo del corte');if(!higher||!lower||!reason||!confirm(`¿Confirmar que ${higher} queda por delante de ${lower}?`))return;await admin.api(`/api/admin/stages/${stage.id}/tie-resolutions`,{method:'POST',body:JSON.stringify({groupId:issue?.groupId||null,higherParticipantId:higher,lowerParticipantId:lower,reason})});await loadCompetition();admin.feedback('Orden de desempate guardado. Repite si aún quedan jugadores empatados.');return;}if(!confirm(`${summary}\n\n${preview.issues.length?'Hay avisos pendientes. ':''}¿Finalizar esta fase y generar clasificados?`))return;await admin.api(`/api/admin/stages/${stage.id}/complete`,{method:'POST',body:JSON.stringify({force:preview.issues.length>0})});await loadCompetition();admin.feedback('Fase finalizada y clasificados generados.');}catch(error){admin.feedback(error.message,true);}},'warn');
-  card.append(actions,audit);if(stage.groups.length){const grid=document.createElement('div');grid.className='group-admin-grid';stage.groups.forEach((group)=>grid.append(renderGroup(stage,group)));const sueltos=renderUnassigned(stage);if(sueltos)grid.append(sueltos);card.append(grid);}return card;}
-
-function compactRow(values,types,id=null){const row=document.createElement('div');row.className='compact-row';if(id!==null)row.dataset.entityId=String(id);types.forEach((type,index)=>{const field=type==='select'?select([['true','Activo'],['false','Oculto']],String(values[index])):input(values[index],type);field.dataset.value=String(index);row.append(field);});const up=document.createElement('button');up.type='button';up.title='Subir';up.textContent='↑';up.addEventListener('click',()=>{if(row.previousElementSibling)row.parentElement.insertBefore(row,row.previousElementSibling);});const down=document.createElement('button');down.type='button';down.title='Bajar';down.textContent='↓';down.addEventListener('click',()=>{if(row.nextElementSibling)row.parentElement.insertBefore(row.nextElementSibling,row);});const remove=document.createElement('button');remove.type='button';remove.title='Eliminar';remove.textContent='×';remove.addEventListener('click',()=>row.remove());row.append(up,down,remove);return row;}
-function values(container){return [...container.children].map((row)=>[...row.querySelectorAll('[data-value]')].map((field)=>field.value));}
-function formatHostDate(value){return value?new Intl.DateTimeFormat('es-ES',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value)):'Nunca';}
-function hostFeedback(message,isError=false){const element=q('#host-credential-feedback');element.textContent=message;element.classList.toggle('error',isError);}
-function downloadReporterConfig(config,identifier){const blob=new Blob([config],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`${identifier}-reporter.ini`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),0);}
-function copyReporterConfig(config){
-  if(!navigator.clipboard?.writeText)return;
-  navigator.clipboard.writeText(config).then(()=>hostFeedback('Archivo descargado y configuración copiada. Pégala sólo en el PC de este host.')).catch(()=>{});
+function auditTable(board) {
+  const section = document.createElement('section');
+  section.className = 'stage-audit-board';
+  const heading = document.createElement('h4');
+  heading.textContent = board.group?.name || board.stage.name;
+  section.append(heading);
+  if (!board.standings.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Todavía no hay jugadores ni puntuación.';
+    section.append(empty);
+    return section;
+  }
+  board.standings.forEach((player) => {
+    const row = document.createElement('div');
+    row.className = 'audit-player';
+    const title = document.createElement('strong');
+    title.textContent = `${String(player.rank).padStart(2, '0')} · ${player.name} · ${player.points} PTS`;
+    const detail = document.createElement('span');
+    detail.textContent = player.breakdowns.length
+      ? player.breakdowns
+          .map(
+            (item) =>
+              `#${item.matchId}: ${item.score.victory} victoria + ${item.score.kills} kills + ${item.score.tasks} tareas = ${item.score.total}`
+          )
+          .join(' | ')
+      : 'Sin partidas puntuadas';
+    row.append(title, detail);
+    section.append(row);
+  });
+  return section;
 }
-function renderHostAssignment(host){
-  const box=document.createElement('div');box.className='host-assignment';
-  const state=document.createElement('p');state.className='host-assignment-state';
-  if(!host.id){state.textContent='Guarda el host para poder asignarle una fase.';box.append(state);return box;}
-  const stageSelect=select([['','SIN ASIGNAR'],...stages.map((stage)=>[stage.id,`${stage.name} · ${stage.status}`])],host.assignedStageId??'');
-  const groupSelect=document.createElement('select');
-  const syncGroups=()=>{
-    const stage=stages.find((item)=>item.id===Number(stageSelect.value));
-    const options=stage&&stage.type==='group_stage'?[['','ELIGE GRUPO'],...stage.groups.map((group)=>[group.id,group.name])]:[['','SIN GRUPO']];
-    groupSelect.replaceChildren(...options.map(([key,text])=>{const option=document.createElement('option');option.value=key;option.textContent=text;return option;}));
-    groupSelect.disabled=!stage||stage.type!=='group_stage';
-    groupSelect.value=String(host.assignedStageId===Number(stageSelect.value)?(host.assignedGroupId??''):'');
+
+function renderStage(stage) {
+  const card = document.createElement('article');
+  card.className = 'stage-editor';
+  const header = document.createElement('header');
+  header.innerHTML = `<div><span>FASE ${String(stage.position).padStart(2, '0')} · ${stage.status.toUpperCase()}</span><h3></h3>${stage.type === 'group_stage' ? `<b class="group-lock-state">GRUPOS ${stage.groupsLocked ? 'CONFIRMADOS' : 'PENDIENTES'}</b>` : ''}</div>`;
+  header.querySelector('h3').textContent = stage.name;
+  card.append(header);
+  const config = document.createElement('div');
+  config.className = 'stage-config';
+  const name = input(stage.name),
+    type = select(
+      [
+        ['group_stage', 'Grupos'],
+        ['final', 'Final'],
+        ['league', 'Liga'],
+        ['knockout', 'Eliminatoria']
+      ],
+      stage.type
+    ),
+    status = select(
+      [
+        ['pending', 'Pendiente'],
+        ['active', 'En curso'],
+        ...(stage.status === 'completed' ? [['completed', 'Completada']] : [])
+      ],
+      stage.status
+    ),
+    matches = input(stage.matchesPerGroup, 'number'),
+    qualifiers = input(stage.qualifiersPerGroup, 'number'),
+    position = input(stage.position, 'number'),
+    reset = input('', 'checkbox'),
+    enabled = input('', 'checkbox');
+  reset.checked = stage.resetPoints;
+  enabled.checked = stage.enabled;
+  config.append(
+    label('NOMBRE', name),
+    label('TIPO', type),
+    label('ESTADO', status),
+    label('POSICIÓN', position),
+    label('PARTIDAS PREVISTAS', matches),
+    label('CLASIFICAN POR GRUPO', qualifiers),
+    label('REINICIAR PUNTOS', reset),
+    label('HABILITADA', enabled)
+  );
+  card.append(config);
+  const actions = document.createElement('div');
+  actions.className = 'stage-actions';
+  const action = (text, handler, className = '') => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = text;
+    button.className = className;
+    button.addEventListener('click', handler);
+    actions.append(button);
   };
-  syncGroups();stageSelect.addEventListener('change',syncGroups);
-  const describe=(context)=>{
-    if(!context){state.textContent='Sin asignar: este Reporter no enviará resultados.';return;}
-    state.textContent=context.reportingEnabled?`Listo: ${context.message}`:`No enviará resultados: ${context.message}`;
-    state.classList.toggle('ready',context.reportingEnabled);
+  action('GUARDAR FASE', async () => {
+    try {
+      await admin.api(`/api/admin/stages/${stage.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: name.value,
+          type: type.value,
+          status: status.value,
+          position: Number(position.value),
+          matchesPerGroup: Number(matches.value),
+          qualifiersPerGroup: Number(qualifiers.value),
+          resetPoints: reset.checked,
+          enabled: enabled.checked
+        })
+      });
+      await loadCompetition();
+      admin.feedback('Fase actualizada.');
+    } catch (error) {
+      admin.feedback(error.message, true);
+    }
+  });
+  action('EDITAR GRUPOS', async () => {
+    const names = prompt('Nombres de grupos separados por coma', stage.groups.map((group) => group.name).join(', '));
+    if (names === null) return;
+    try {
+      await admin.api(`/api/admin/stages/${stage.id}/groups`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          groups: names
+            .split(',')
+            .map((value, index) => ({ id: stage.groups[index]?.id, name: value.trim(), position: index + 1 }))
+            .filter((group) => group.name)
+        })
+      });
+      await loadCompetition();
+    } catch (error) {
+      admin.feedback(error.message, true);
+    }
+  });
+  action(
+    'REPARTIR AUTOMÁTICAMENTE',
+    async () => {
+      if (!confirm('¿Repartir nuevamente? Se sobrescribirá la distribución actual de esta fase.')) return;
+      try {
+        await admin.api(`/api/admin/stages/${stage.id}/groups/distribute`, { method: 'POST' });
+        await loadCompetition();
+        admin.feedback('Grupos repartidos de forma equilibrada.');
+      } catch (error) {
+        admin.feedback(error.message, true);
+      }
+    },
+    'warn'
+  );
+  action(stage.groupsLocked ? 'DESBLOQUEAR GRUPOS' : 'BLOQUEAR GRUPOS', async () => {
+    if (!confirm(stage.groupsLocked ? '¿Desbloquear los grupos?' : '¿Confirmar y bloquear los grupos?')) return;
+    await admin.api(`/api/admin/stages/${stage.id}/groups/lock`, {
+      method: 'PATCH',
+      body: JSON.stringify({ locked: !stage.groupsLocked })
+    });
+    await loadCompetition();
+  });
+  action('RECALCULAR', async () => {
+    if (!confirm('¿Reconstruir todas las clasificaciones desde los resultados brutos?')) return;
+    await admin.api(`/api/admin/events/${currentEvent.id}/recalculate`, { method: 'POST' });
+    admin.feedback('Clasificaciones reconstruidas desde partidas válidas.');
+  });
+  const audit = document.createElement('div');
+  audit.className = 'stage-audit';
+  audit.hidden = true;
+  action('VER PUNTUACIÓN', async () => {
+    try {
+      const scopes = stage.type === 'group_stage' ? stage.groups : [null];
+      const boards = await Promise.all(
+        scopes.map((group) =>
+          admin.api(`/api/admin/stages/${stage.id}/leaderboard${group ? `?groupId=${group.id}` : ''}`)
+        )
+      );
+      audit.replaceChildren(...boards.map(auditTable));
+      audit.hidden = !audit.hidden;
+    } catch (error) {
+      admin.feedback(error.message, true);
+    }
+  });
+  action(
+    'FINALIZAR FASE',
+    async () => {
+      try {
+        const preview = await admin.api(`/api/admin/stages/${stage.id}/close-preview`);
+        const summary = preview.summaries
+          .map((item) => {
+            const count = stage.type === 'group_stage' ? stage.qualifiersPerGroup : 1;
+            const top =
+              item.leaderboard.standings
+                .slice(0, count)
+                .map((player) => player.name)
+                .join(', ') || 'sin clasificados';
+            return `${item.group?.name || stage.name}: ${item.matchCount}/${stage.matchesPerGroup} partidas\nTop: ${top}`;
+          })
+          .join('\n\n');
+        if (preview.blocking) {
+          const issue = preview.issues.find((item) => item.participantIds),
+            ids = issue?.participantIds || [];
+          const higher = Number(prompt(`DESEMPATE NECESARIO entre IDs ${ids.join(', ')}. ID que queda por delante:`));
+          const lower = Number(prompt(`ID que queda por detrás de ${higher}:`));
+          const reason = prompt('Motivo de la resolución:', 'Desempate administrativo del corte');
+          if (!higher || !lower || !reason || !confirm(`¿Confirmar que ${higher} queda por delante de ${lower}?`))
+            return;
+          await admin.api(`/api/admin/stages/${stage.id}/tie-resolutions`, {
+            method: 'POST',
+            body: JSON.stringify({
+              groupId: issue?.groupId || null,
+              higherParticipantId: higher,
+              lowerParticipantId: lower,
+              reason
+            })
+          });
+          await loadCompetition();
+          admin.feedback('Orden de desempate guardado. Repite si aún quedan jugadores empatados.');
+          return;
+        }
+        if (
+          !confirm(
+            `${summary}\n\n${preview.issues.length ? 'Hay avisos pendientes. ' : ''}¿Finalizar esta fase y generar clasificados?`
+          )
+        )
+          return;
+        await admin.api(`/api/admin/stages/${stage.id}/complete`, {
+          method: 'POST',
+          body: JSON.stringify({ force: preview.issues.length > 0 })
+        });
+        await loadCompetition();
+        admin.feedback('Fase finalizada y clasificados generados.');
+      } catch (error) {
+        admin.feedback(error.message, true);
+      }
+    },
+    'warn'
+  );
+  card.append(actions, audit);
+  if (stage.groups.length) {
+    const grid = document.createElement('div');
+    grid.className = 'group-admin-grid';
+    stage.groups.forEach((group) => grid.append(renderGroup(stage, group)));
+    const sueltos = renderUnassigned(stage);
+    if (sueltos) grid.append(sueltos);
+    card.append(grid);
+  }
+  return card;
+}
+
+function compactRow(values, types, id = null) {
+  const row = document.createElement('div');
+  row.className = 'compact-row';
+  if (id !== null) row.dataset.entityId = String(id);
+  types.forEach((type, index) => {
+    const field =
+      type === 'select'
+        ? select(
+            [
+              ['true', 'Activo'],
+              ['false', 'Oculto']
+            ],
+            String(values[index])
+          )
+        : input(values[index], type);
+    field.dataset.value = String(index);
+    row.append(field);
+  });
+  const up = document.createElement('button');
+  up.type = 'button';
+  up.title = 'Subir';
+  up.textContent = '↑';
+  up.addEventListener('click', () => {
+    if (row.previousElementSibling) row.parentElement.insertBefore(row, row.previousElementSibling);
+  });
+  const down = document.createElement('button');
+  down.type = 'button';
+  down.title = 'Bajar';
+  down.textContent = '↓';
+  down.addEventListener('click', () => {
+    if (row.nextElementSibling) row.parentElement.insertBefore(row.nextElementSibling, row);
+  });
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.title = 'Eliminar';
+  remove.textContent = '×';
+  remove.addEventListener('click', () => row.remove());
+  row.append(up, down, remove);
+  return row;
+}
+function values(container) {
+  return [...container.children].map((row) => [...row.querySelectorAll('[data-value]')].map((field) => field.value));
+}
+function formatHostDate(value) {
+  return value
+    ? new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+    : 'Nunca';
+}
+function hostFeedback(message, isError = false) {
+  const element = q('#host-credential-feedback');
+  element.textContent = message;
+  element.classList.toggle('error', isError);
+}
+function downloadReporterConfig(config, identifier) {
+  const blob = new Blob([config], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${identifier}-reporter.ini`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+function copyReporterConfig(config) {
+  if (!navigator.clipboard?.writeText) return;
+  navigator.clipboard
+    .writeText(config)
+    .then(() => hostFeedback('Archivo descargado y configuración copiada. Pégala sólo en el PC de este host.'))
+    .catch(() => {});
+}
+function renderHostAssignment(host) {
+  const box = document.createElement('div');
+  box.className = 'host-assignment';
+  const state = document.createElement('p');
+  state.className = 'host-assignment-state';
+  if (!host.id) {
+    state.textContent = 'Guarda el host para poder asignarle una fase.';
+    box.append(state);
+    return box;
+  }
+  const stageSelect = select(
+    [['', 'SIN ASIGNAR'], ...stages.map((stage) => [stage.id, `${stage.name} · ${stage.status}`])],
+    host.assignedStageId ?? ''
+  );
+  const groupSelect = document.createElement('select');
+  const syncGroups = () => {
+    const stage = stages.find((item) => item.id === Number(stageSelect.value));
+    const options =
+      stage && stage.type === 'group_stage'
+        ? [['', 'ELIGE GRUPO'], ...stage.groups.map((group) => [group.id, group.name])]
+        : [['', 'SIN GRUPO']];
+    groupSelect.replaceChildren(
+      ...options.map(([key, text]) => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = text;
+        return option;
+      })
+    );
+    groupSelect.disabled = !stage || stage.type !== 'group_stage';
+    groupSelect.value = String(host.assignedStageId === Number(stageSelect.value) ? (host.assignedGroupId ?? '') : '');
+  };
+  syncGroups();
+  stageSelect.addEventListener('change', syncGroups);
+  const describe = (context) => {
+    if (!context) {
+      state.textContent = 'Sin asignar: este Reporter no enviará resultados.';
+      return;
+    }
+    state.textContent = context.reportingEnabled
+      ? `Listo: ${context.message}`
+      : `No enviará resultados: ${context.message}`;
+    state.classList.toggle('ready', context.reportingEnabled);
   };
   describe(host.reporterContext);
-  const save=document.createElement('button');save.type='button';save.className='secondary-action';save.textContent='ASIGNAR FASE';
-  save.addEventListener('click',async()=>{
-    save.disabled=true;
-    try{
-      const result=await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/assignment`,{method:'PUT',body:JSON.stringify({stageId:stageSelect.value?Number(stageSelect.value):null,groupId:groupSelect.value?Number(groupSelect.value):null})});
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'secondary-action';
+  save.textContent = 'ASIGNAR FASE';
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    try {
+      const result = await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/assignment`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          stageId: stageSelect.value ? Number(stageSelect.value) : null,
+          groupId: groupSelect.value ? Number(groupSelect.value) : null
+        })
+      });
       describe(result.context);
-      hostFeedback(`${host.identifier}: ${result.context.message}`,!result.context.reportingEnabled);
+      hostFeedback(`${host.identifier}: ${result.context.message}`, !result.context.reportingEnabled);
       await loadCompetition();
-    }catch(error){hostFeedback(error.message,true);}
-    save.disabled=false;
+    } catch (error) {
+      hostFeedback(error.message, true);
+    }
+    save.disabled = false;
   });
-  box.append(label('FASE QUE CUBRE ESTE PC',stageSelect),label('GRUPO',groupSelect),save,state);
+  box.append(label('FASE QUE CUBRE ESTE PC', stageSelect), label('GRUPO', groupSelect), save, state);
   return box;
 }
-function renderHostCard(host,index){
-  const card=document.createElement('article');card.className='host-card';if(host.id)card.dataset.entityId=String(host.id);
-  const header=document.createElement('header');const sequence=document.createElement('span');sequence.className='host-sequence';sequence.textContent=`HOST ${String(index+1).padStart(2,'0')}`;const title=document.createElement('h3');title.textContent=host.name||host.identifier||'Nuevo host';const badge=document.createElement('span');badge.className=`credential-badge ${host.tokenConfigured?'ready':'missing'}`;badge.textContent=host.tokenConfigured?'CONFIGURACIÓN LISTA':'SIN CONFIGURAR';header.append(sequence,title,badge);
-  const fields=document.createElement('div');fields.className='host-fields';const identifier=input(host.identifier);identifier.required=true;identifier.maxLength=40;identifier.autocomplete='off';identifier.spellcheck=false;identifier.dataset.value='0';identifier.disabled=host.tokenConfigured;identifier.title=host.tokenConfigured?'Revoca la configuración para cambiar el identificador':'';const name=input(host.name);name.required=true;name.maxLength=120;name.dataset.value='1';const enabled=select([['true','Activo'],['false','Desactivado']],String(host.enabled));enabled.dataset.value='2';fields.append(label(host.tokenConfigured?'IDENTIFICADOR DEL PC · REVOCA LA CLAVE PARA CAMBIARLO':'IDENTIFICADOR DEL PC',identifier),label('NOMBRE VISIBLE',name),label('ESTADO',enabled));
-  const telemetry=document.createElement('dl');telemetry.className='host-telemetry';const metric=(term,value)=>{const wrapper=document.createElement('div');const dt=document.createElement('dt');const dd=document.createElement('dd');dt.textContent=term;dd.textContent=value;wrapper.append(dt,dd);return wrapper;};telemetry.append(metric('CLAVE CREADA',formatHostDate(host.tokenCreatedAt)),metric('ÚLTIMO RESULTADO',formatHostDate(host.lastSeenAt)));
-  const actions=document.createElement('div');actions.className='host-actions';const credential=document.createElement('button');credential.type='button';credential.className='host-config-action';credential.textContent=host.tokenConfigured?'ROTAR Y DESCARGAR .INI':'CREAR Y DESCARGAR .INI';credential.disabled=!host.id;credential.title=host.id?'Genera un archivo que sólo debe recibir este host':'Guarda primero el nuevo host';credential.addEventListener('click',async()=>{const verb=host.tokenConfigured?'rotar':'crear';const warning=host.tokenConfigured?'La configuración anterior dejará de funcionar inmediatamente. ':'';if(!confirm(`${warning}¿${verb==='rotar'?'Rotar':'Crear'} la configuración privada de ${host.identifier}?`))return;credential.disabled=true;try{const data=await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/token`,{method:'POST'});downloadReporterConfig(data.reporterConfig,data.host.identifier);copyReporterConfig(data.reporterConfig);await loadCompetition();hostFeedback(`Configuración de ${data.host.identifier} descargada una sola vez. Envía el archivo sólo a ese host.`);}catch(error){credential.disabled=false;hostFeedback(error.message,true);admin.feedback(error.message,true);}});
-  const revoke=document.createElement('button');revoke.type='button';revoke.className='danger-action';revoke.textContent='REVOCAR';revoke.hidden=!host.tokenConfigured;revoke.addEventListener('click',async()=>{if(!confirm(`¿Revocar la configuración de ${host.identifier}? Ese Reporter dejará de poder enviar resultados.`))return;revoke.disabled=true;try{await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/token`,{method:'DELETE'});await loadCompetition();hostFeedback(`Acceso de ${host.identifier} revocado. Puedes crearle otro archivo cuando lo necesites.`);}catch(error){revoke.disabled=false;hostFeedback(error.message,true);}});
-  const remove=document.createElement('button');remove.type='button';remove.className='host-remove-action';remove.textContent='QUITAR HOST';remove.addEventListener('click',()=>{if(host.id&&!confirm(`¿Quitar ${host.identifier} del evento? El cambio se aplicará al guardar.`))return;card.remove();hostFeedback('Cambio pendiente: pulsa GUARDAR HOSTS para aplicarlo.');});actions.append(credential,revoke,remove);
-  const markDirty=()=>{card.classList.add('dirty');credential.disabled=true;credential.title='Guarda los cambios del host antes de crear su configuración';title.textContent=name.value||identifier.value||'Nuevo host';};identifier.addEventListener('input',markDirty);name.addEventListener('input',markDirty);enabled.addEventListener('change',markDirty);
-  card.append(header,fields,renderHostAssignment(host),telemetry,actions);return card;
+function renderHostCard(host, index) {
+  const card = document.createElement('article');
+  card.className = 'host-card';
+  if (host.id) card.dataset.entityId = String(host.id);
+  const header = document.createElement('header');
+  const sequence = document.createElement('span');
+  sequence.className = 'host-sequence';
+  sequence.textContent = `HOST ${String(index + 1).padStart(2, '0')}`;
+  const title = document.createElement('h3');
+  title.textContent = host.name || host.identifier || 'Nuevo host';
+  const badge = document.createElement('span');
+  badge.className = `credential-badge ${host.tokenConfigured ? 'ready' : 'missing'}`;
+  badge.textContent = host.tokenConfigured ? 'CONFIGURACIÓN LISTA' : 'SIN CONFIGURAR';
+  header.append(sequence, title, badge);
+  const fields = document.createElement('div');
+  fields.className = 'host-fields';
+  const identifier = input(host.identifier);
+  identifier.required = true;
+  identifier.maxLength = 40;
+  identifier.autocomplete = 'off';
+  identifier.spellcheck = false;
+  identifier.dataset.value = '0';
+  identifier.disabled = host.tokenConfigured;
+  identifier.title = host.tokenConfigured ? 'Revoca la configuración para cambiar el identificador' : '';
+  const name = input(host.name);
+  name.required = true;
+  name.maxLength = 120;
+  name.dataset.value = '1';
+  const enabled = select(
+    [
+      ['true', 'Activo'],
+      ['false', 'Desactivado']
+    ],
+    String(host.enabled)
+  );
+  enabled.dataset.value = '2';
+  fields.append(
+    label(
+      host.tokenConfigured ? 'IDENTIFICADOR DEL PC · REVOCA LA CLAVE PARA CAMBIARLO' : 'IDENTIFICADOR DEL PC',
+      identifier
+    ),
+    label('NOMBRE VISIBLE', name),
+    label('ESTADO', enabled)
+  );
+  const telemetry = document.createElement('dl');
+  telemetry.className = 'host-telemetry';
+  const metric = (term, value) => {
+    const wrapper = document.createElement('div');
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = term;
+    dd.textContent = value;
+    wrapper.append(dt, dd);
+    return wrapper;
+  };
+  telemetry.append(
+    metric('CLAVE CREADA', formatHostDate(host.tokenCreatedAt)),
+    metric('ÚLTIMO RESULTADO', formatHostDate(host.lastSeenAt))
+  );
+  const actions = document.createElement('div');
+  actions.className = 'host-actions';
+  const credential = document.createElement('button');
+  credential.type = 'button';
+  credential.className = 'host-config-action';
+  credential.textContent = host.tokenConfigured ? 'ROTAR Y DESCARGAR .INI' : 'CREAR Y DESCARGAR .INI';
+  credential.disabled = !host.id;
+  credential.title = host.id ? 'Genera un archivo que sólo debe recibir este host' : 'Guarda primero el nuevo host';
+  credential.addEventListener('click', async () => {
+    const verb = host.tokenConfigured ? 'rotar' : 'crear';
+    const warning = host.tokenConfigured ? 'La configuración anterior dejará de funcionar inmediatamente. ' : '';
+    if (!confirm(`${warning}¿${verb === 'rotar' ? 'Rotar' : 'Crear'} la configuración privada de ${host.identifier}?`))
+      return;
+    credential.disabled = true;
+    try {
+      const data = await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/token`, { method: 'POST' });
+      downloadReporterConfig(data.reporterConfig, data.host.identifier);
+      copyReporterConfig(data.reporterConfig);
+      await loadCompetition();
+      hostFeedback(
+        `Configuración de ${data.host.identifier} descargada una sola vez. Envía el archivo sólo a ese host.`
+      );
+    } catch (error) {
+      credential.disabled = false;
+      hostFeedback(error.message, true);
+      admin.feedback(error.message, true);
+    }
+  });
+  const revoke = document.createElement('button');
+  revoke.type = 'button';
+  revoke.className = 'danger-action';
+  revoke.textContent = 'REVOCAR';
+  revoke.hidden = !host.tokenConfigured;
+  revoke.addEventListener('click', async () => {
+    if (!confirm(`¿Revocar la configuración de ${host.identifier}? Ese Reporter dejará de poder enviar resultados.`))
+      return;
+    revoke.disabled = true;
+    try {
+      await admin.api(`/api/admin/events/${currentEvent.id}/hosts/${host.id}/token`, { method: 'DELETE' });
+      await loadCompetition();
+      hostFeedback(`Acceso de ${host.identifier} revocado. Puedes crearle otro archivo cuando lo necesites.`);
+    } catch (error) {
+      revoke.disabled = false;
+      hostFeedback(error.message, true);
+    }
+  });
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'host-remove-action';
+  remove.textContent = 'QUITAR HOST';
+  remove.addEventListener('click', () => {
+    if (host.id && !confirm(`¿Quitar ${host.identifier} del evento? El cambio se aplicará al guardar.`)) return;
+    card.remove();
+    hostFeedback('Cambio pendiente: pulsa GUARDAR HOSTS para aplicarlo.');
+  });
+  actions.append(credential, revoke, remove);
+  const markDirty = () => {
+    card.classList.add('dirty');
+    credential.disabled = true;
+    credential.title = 'Guarda los cambios del host antes de crear su configuración';
+    title.textContent = name.value || identifier.value || 'Nuevo host';
+  };
+  identifier.addEventListener('input', markDirty);
+  name.addEventListener('input', markDirty);
+  enabled.addEventListener('change', markDirty);
+  card.append(header, fields, renderHostAssignment(host), telemetry, actions);
+  return card;
 }
-function renderEditors(schedule,hostRows,prizes){q('#admin-schedule').replaceChildren(...schedule.map((row)=>compactRow([row.time,row.title,row.description],['time','text','text'],row.id)));q('#admin-hosts').replaceChildren(...hostRows.map(renderHostCard));q('#admin-prizes').replaceChildren(...prizes.map((row)=>compactRow([row.title,row.description,row.prizeValue||'',row.statKey||'',row.enabled],['text','text','text','text','select'],row.id)));}
+function renderEditors(schedule, hostRows, prizes) {
+  q('#admin-schedule').replaceChildren(
+    ...schedule.map((row) => compactRow([row.time, row.title, row.description], ['time', 'text', 'text'], row.id))
+  );
+  q('#admin-hosts').replaceChildren(...hostRows.map(renderHostCard));
+  q('#admin-prizes').replaceChildren(
+    ...prizes.map((row) =>
+      compactRow(
+        [row.title, row.description, row.prizeValue || '', row.statKey || '', row.enabled],
+        ['text', 'text', 'text', 'text', 'select'],
+        row.id
+      )
+    )
+  );
+}
 
-function updateSimulator(){const stageId=Number(q('#sim-stage').value);const stage=stages.find((item)=>item.id===stageId);q('#sim-group').replaceChildren(new Option('Sin grupo',''),...(stage?.groups||[]).map((group)=>new Option(group.name,group.id)));q('#sim-group').disabled=stage?.type!=='group_stage';if(stage?.type==='group_stage'&&stage.groups[0])q('#sim-group').value=stage.groups[0].id;renderSimulatorPlayers();}
-function expectedWin(role){return q('#sim-winner').value==='impostors'?role==='Impostor':role==='Crewmate';}
-function renderSimulatorPlayers(){const stage=stages.find((item)=>item.id===Number(q('#sim-stage').value));const groupId=q('#sim-group').value?Number(q('#sim-group').value):null;const members=(stage?.participants||[]).filter((member)=>groupId===null||member.groupId===groupId);q('#sim-players').replaceChildren(...members.map((member)=>{const row=document.createElement('div');row.className='sim-player';row.dataset.participantId=member.participantId;const name=document.createElement('strong');name.textContent=member.displayName;const role=select([['Crewmate','Tripulante'],['Impostor','Impostor']],'Crewmate');role.dataset.sim='role';const won=input('','checkbox');won.dataset.sim='won';won.checked=expectedWin(role.value);role.addEventListener('change',()=>{won.checked=expectedWin(role.value);});const kills=input(0,'number');kills.dataset.sim='kills';const tasks=input(0,'number');tasks.dataset.sim='tasksCompleted';const total=input(0,'number');total.dataset.sim='tasksTotal';const alive=input('','checkbox');alive.checked=true;alive.dataset.sim='alive';row.append(name,label('ROL',role),label('VICTORIA',won),label('KILLS',kills),label('TAREAS',tasks),label('TOTAL',total),label('VIVO',alive));return row;}));}
+function updateSimulator() {
+  const stageId = Number(q('#sim-stage').value);
+  const stage = stages.find((item) => item.id === stageId);
+  q('#sim-group').replaceChildren(
+    new Option('Sin grupo', ''),
+    ...(stage?.groups || []).map((group) => new Option(group.name, group.id))
+  );
+  q('#sim-group').disabled = stage?.type !== 'group_stage';
+  if (stage?.type === 'group_stage' && stage.groups[0]) q('#sim-group').value = stage.groups[0].id;
+  renderSimulatorPlayers();
+}
+function expectedWin(role) {
+  return q('#sim-winner').value === 'impostors' ? role === 'Impostor' : role === 'Crewmate';
+}
+function renderSimulatorPlayers() {
+  const stage = stages.find((item) => item.id === Number(q('#sim-stage').value));
+  const groupId = q('#sim-group').value ? Number(q('#sim-group').value) : null;
+  const members = (stage?.participants || []).filter((member) => groupId === null || member.groupId === groupId);
+  q('#sim-players').replaceChildren(
+    ...members.map((member) => {
+      const row = document.createElement('div');
+      row.className = 'sim-player';
+      row.dataset.participantId = member.participantId;
+      const name = document.createElement('strong');
+      name.textContent = member.displayName;
+      const role = select(
+        [
+          ['Crewmate', 'Tripulante'],
+          ['Impostor', 'Impostor']
+        ],
+        'Crewmate'
+      );
+      role.dataset.sim = 'role';
+      const won = input('', 'checkbox');
+      won.dataset.sim = 'won';
+      won.checked = expectedWin(role.value);
+      role.addEventListener('change', () => {
+        won.checked = expectedWin(role.value);
+      });
+      const kills = input(0, 'number');
+      kills.dataset.sim = 'kills';
+      const tasks = input(0, 'number');
+      tasks.dataset.sim = 'tasksCompleted';
+      const total = input(0, 'number');
+      total.dataset.sim = 'tasksTotal';
+      const alive = input('', 'checkbox');
+      alive.checked = true;
+      alive.dataset.sim = 'alive';
+      row.append(
+        name,
+        label('ROL', role),
+        label('VICTORIA', won),
+        label('KILLS', kills),
+        label('TAREAS', tasks),
+        label('TOTAL', total),
+        label('VIVO', alive)
+      );
+      return row;
+    })
+  );
+}
 
-async function loadCompetition(){if(!currentEvent)return;const [stageData,hostData,scheduleData,prizeData]=await Promise.all([admin.api(`/api/admin/events/${currentEvent.id}/stages`),admin.api(`/api/admin/events/${currentEvent.id}/hosts`),admin.api(`/api/admin/events/${currentEvent.id}/schedule`),admin.api(`/api/admin/events/${currentEvent.id}/prizes`)]);stages=stageData.stages;hosts=hostData.hosts;q('#admin-stages').replaceChildren(...stages.map(renderStage));renderEditors(scheduleData.schedule,hosts,prizeData.prizes);const activeStages=stages.filter((stage)=>stage.enabled&&stage.status==='active');q('#sim-stage').replaceChildren(...(activeStages.length?activeStages.map((stage)=>new Option(stage.name,stage.id)):[new Option('Activa una fase primero','')]));q('#simulator-form button[type="submit"]').disabled=!activeStages.length;q('#sim-host').replaceChildren(new Option('Sin host',''),...hosts.filter((host)=>host.enabled).map((host)=>new Option(`${host.identifier} · ${host.name}`,host.id)));updateSimulator();}
+async function loadCompetition() {
+  if (!currentEvent) return;
+  const [stageData, hostData, scheduleData, prizeData] = await Promise.all([
+    admin.api(`/api/admin/events/${currentEvent.id}/stages`),
+    admin.api(`/api/admin/events/${currentEvent.id}/hosts`),
+    admin.api(`/api/admin/events/${currentEvent.id}/schedule`),
+    admin.api(`/api/admin/events/${currentEvent.id}/prizes`)
+  ]);
+  stages = stageData.stages;
+  hosts = hostData.hosts;
+  q('#admin-stages').replaceChildren(...stages.map(renderStage));
+  renderEditors(scheduleData.schedule, hosts, prizeData.prizes);
+  const activeStages = stages.filter((stage) => stage.enabled && stage.status === 'active');
+  q('#sim-stage').replaceChildren(
+    ...(activeStages.length
+      ? activeStages.map((stage) => new Option(stage.name, stage.id))
+      : [new Option('Activa una fase primero', '')])
+  );
+  q('#simulator-form button[type="submit"]').disabled = !activeStages.length;
+  q('#sim-host').replaceChildren(
+    new Option('Sin host', ''),
+    ...hosts.filter((host) => host.enabled).map((host) => new Option(`${host.identifier} · ${host.name}`, host.id))
+  );
+  updateSimulator();
+}
 
-window.addEventListener('jartiland:event-selected',async(event)=>{currentEvent=event.detail.event;participants=event.detail.participants;q('#admin-tabs').hidden=false;q('#competition-admin-section').hidden=false;q('#schedule-admin-section').hidden=false;q('#reporter-simulator-section').hidden=false;selectTab('general');try{await loadCompetition();}catch(error){admin.feedback(error.message,true);}});
-q('#add-stage').addEventListener('click',async()=>{const name=prompt('Nombre de la nueva fase','Semifinal');if(!name)return;try{await admin.api(`/api/admin/events/${currentEvent.id}/stages`,{method:'POST',body:JSON.stringify({name,type:'knockout',position:stages.length+1,status:'pending',matchesPerGroup:1,qualifiersPerGroup:0,resetPoints:true,enabled:true})});await loadCompetition();}catch(error){admin.feedback(error.message,true);}});
-q('#sim-stage').addEventListener('change',updateSimulator);q('#sim-group').addEventListener('change',renderSimulatorPlayers);
-q('#sim-winner').addEventListener('change',()=>document.querySelectorAll('.sim-player').forEach((row)=>{row.querySelector('[data-sim="won"]').checked=expectedWin(row.querySelector('[data-sim="role"]').value);}));
-q('#simulator-form').addEventListener('submit',async(event)=>{event.preventDefault();if(!confirm('¿Enviar este resultado por la misma lógica del Reporter?'))return;const stage=stages.find((item)=>item.id===Number(q('#sim-stage').value));const groupId=q('#sim-group').value?Number(q('#sim-group').value):null;const players=[...document.querySelectorAll('.sim-player')].map((row)=>({participantId:Number(row.dataset.participantId),role:row.querySelector('[data-sim="role"]').value,won:row.querySelector('[data-sim="won"]').checked,kills:Number(row.querySelector('[data-sim="kills"]').value),tasksCompleted:Number(row.querySelector('[data-sim="tasksCompleted"]').value),tasksTotal:Number(row.querySelector('[data-sim="tasksTotal"]').value),alive:row.querySelector('[data-sim="alive"]').checked}));try{await admin.api(`/api/admin/events/${currentEvent.id}/simulator`,{method:'POST',body:JSON.stringify({report:{map:q('#sim-map').value,winnerTeam:q('#sim-winner').value,players},context:{stageId:stage.id,groupId,hostId:q('#sim-host').value?Number(q('#sim-host').value):null,matchNumber:Number(q('#sim-match-number').value)}})});await admin.refresh();admin.feedback('Resultado simulado, validado y puntuado.');}catch(error){admin.feedback(error.message,true);}});
-function nextHostIdentifier(){const used=new Set([...q('#admin-hosts').querySelectorAll('[data-value="0"]')].map((field)=>field.value.toUpperCase()));let number=1;while(used.has(`HOST_${number}`))number+=1;return `HOST_${number}`;}
-q('#add-schedule').addEventListener('click',()=>q('#admin-schedule').append(compactRow(['12:00','Nueva entrada',''],['time','text','text'])));q('#add-host').addEventListener('click',()=>{const identifier=nextHostIdentifier();const card=renderHostCard({identifier,name:`PC ${identifier.replace('_',' ')}`,enabled:true,tokenConfigured:false,tokenCreatedAt:null,lastSeenAt:null},q('#admin-hosts').children.length);q('#admin-hosts').append(card);card.querySelector('[data-value="1"]').focus();hostFeedback('Nuevo host preparado. Ponle un nombre claro y pulsa GUARDAR HOSTS.');});q('#add-prize').addEventListener('click',()=>q('#admin-prizes').append(compactRow(['Nuevo premio','','','','true'],['text','text','text','text','select'])));
-q('#save-schedule').addEventListener('click',async()=>{await admin.api(`/api/admin/events/${currentEvent.id}/schedule`,{method:'PUT',body:JSON.stringify({schedule:values(q('#admin-schedule')).map((row,index)=>({time:row[0],title:row[1],description:row[2],position:index+1}))})});admin.feedback('Agenda guardada.');});q('#save-hosts').addEventListener('click',async()=>{const rows=[...q('#admin-hosts').children];const fields=rows.flatMap((element)=>[...element.querySelectorAll('[data-value]')]);const invalid=fields.find((field)=>!field.reportValidity());if(invalid)return invalid.focus();try{await admin.api(`/api/admin/events/${currentEvent.id}/hosts`,{method:'PUT',body:JSON.stringify({hosts:rows.map((element)=>{const row=[...element.querySelectorAll('[data-value]')].map((field)=>field.value.trim());return {id:element.dataset.entityId?Number(element.dataset.entityId):undefined,identifier:row[0],name:row[1],enabled:row[2]==='true'};})})});await loadCompetition();hostFeedback('Hosts guardados. Ya puedes crear o rotar el archivo .ini de cada PC.');admin.feedback('Hosts guardados.');}catch(error){hostFeedback(error.message,true);admin.feedback(error.message,true);}});q('#save-prizes').addEventListener('click',async()=>{await admin.api(`/api/admin/events/${currentEvent.id}/prizes`,{method:'PUT',body:JSON.stringify({prizes:values(q('#admin-prizes')).map((row,index)=>({title:row[0],description:row[1],prizeValue:row[2],statKey:row[3],enabled:row[4]==='true',position:index+1}))})});admin.feedback('Premios guardados.');});
+window.addEventListener('jartiland:event-selected', async (event) => {
+  currentEvent = event.detail.event;
+  participants = event.detail.participants;
+  q('#admin-tabs').hidden = false;
+  q('#competition-admin-section').hidden = false;
+  q('#schedule-admin-section').hidden = false;
+  q('#reporter-simulator-section').hidden = false;
+  selectTab('general');
+  try {
+    await loadCompetition();
+  } catch (error) {
+    admin.feedback(error.message, true);
+  }
+});
+q('#add-stage').addEventListener('click', async () => {
+  const name = prompt('Nombre de la nueva fase', 'Semifinal');
+  if (!name) return;
+  try {
+    await admin.api(`/api/admin/events/${currentEvent.id}/stages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        type: 'knockout',
+        position: stages.length + 1,
+        status: 'pending',
+        matchesPerGroup: 1,
+        qualifiersPerGroup: 0,
+        resetPoints: true,
+        enabled: true
+      })
+    });
+    await loadCompetition();
+  } catch (error) {
+    admin.feedback(error.message, true);
+  }
+});
+q('#sim-stage').addEventListener('change', updateSimulator);
+q('#sim-group').addEventListener('change', renderSimulatorPlayers);
+q('#sim-winner').addEventListener('change', () =>
+  document.querySelectorAll('.sim-player').forEach((row) => {
+    row.querySelector('[data-sim="won"]').checked = expectedWin(row.querySelector('[data-sim="role"]').value);
+  })
+);
+q('#simulator-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!confirm('¿Enviar este resultado por la misma lógica del Reporter?')) return;
+  const stage = stages.find((item) => item.id === Number(q('#sim-stage').value));
+  const groupId = q('#sim-group').value ? Number(q('#sim-group').value) : null;
+  const players = [...document.querySelectorAll('.sim-player')].map((row) => ({
+    participantId: Number(row.dataset.participantId),
+    role: row.querySelector('[data-sim="role"]').value,
+    won: row.querySelector('[data-sim="won"]').checked,
+    kills: Number(row.querySelector('[data-sim="kills"]').value),
+    tasksCompleted: Number(row.querySelector('[data-sim="tasksCompleted"]').value),
+    tasksTotal: Number(row.querySelector('[data-sim="tasksTotal"]').value),
+    alive: row.querySelector('[data-sim="alive"]').checked
+  }));
+  try {
+    await admin.api(`/api/admin/events/${currentEvent.id}/simulator`, {
+      method: 'POST',
+      body: JSON.stringify({
+        report: { map: q('#sim-map').value, winnerTeam: q('#sim-winner').value, players },
+        context: {
+          stageId: stage.id,
+          groupId,
+          hostId: q('#sim-host').value ? Number(q('#sim-host').value) : null,
+          matchNumber: Number(q('#sim-match-number').value)
+        }
+      })
+    });
+    await admin.refresh();
+    admin.feedback('Resultado simulado, validado y puntuado.');
+  } catch (error) {
+    admin.feedback(error.message, true);
+  }
+});
+function nextHostIdentifier() {
+  const used = new Set(
+    [...q('#admin-hosts').querySelectorAll('[data-value="0"]')].map((field) => field.value.toUpperCase())
+  );
+  let number = 1;
+  while (used.has(`HOST_${number}`)) number += 1;
+  return `HOST_${number}`;
+}
+q('#add-schedule').addEventListener('click', () =>
+  q('#admin-schedule').append(compactRow(['12:00', 'Nueva entrada', ''], ['time', 'text', 'text']))
+);
+q('#add-host').addEventListener('click', () => {
+  const identifier = nextHostIdentifier();
+  const card = renderHostCard(
+    {
+      identifier,
+      name: `PC ${identifier.replace('_', ' ')}`,
+      enabled: true,
+      tokenConfigured: false,
+      tokenCreatedAt: null,
+      lastSeenAt: null
+    },
+    q('#admin-hosts').children.length
+  );
+  q('#admin-hosts').append(card);
+  card.querySelector('[data-value="1"]').focus();
+  hostFeedback('Nuevo host preparado. Ponle un nombre claro y pulsa GUARDAR HOSTS.');
+});
+q('#add-prize').addEventListener('click', () =>
+  q('#admin-prizes').append(
+    compactRow(['Nuevo premio', '', '', '', 'true'], ['text', 'text', 'text', 'text', 'select'])
+  )
+);
+q('#save-schedule').addEventListener('click', async () => {
+  await admin.api(`/api/admin/events/${currentEvent.id}/schedule`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      schedule: values(q('#admin-schedule')).map((row, index) => ({
+        time: row[0],
+        title: row[1],
+        description: row[2],
+        position: index + 1
+      }))
+    })
+  });
+  admin.feedback('Agenda guardada.');
+});
+q('#save-hosts').addEventListener('click', async () => {
+  const rows = [...q('#admin-hosts').children];
+  const fields = rows.flatMap((element) => [...element.querySelectorAll('[data-value]')]);
+  const invalid = fields.find((field) => !field.reportValidity());
+  if (invalid) return invalid.focus();
+  try {
+    await admin.api(`/api/admin/events/${currentEvent.id}/hosts`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        hosts: rows.map((element) => {
+          const row = [...element.querySelectorAll('[data-value]')].map((field) => field.value.trim());
+          return {
+            id: element.dataset.entityId ? Number(element.dataset.entityId) : undefined,
+            identifier: row[0],
+            name: row[1],
+            enabled: row[2] === 'true'
+          };
+        })
+      })
+    });
+    await loadCompetition();
+    hostFeedback('Hosts guardados. Ya puedes crear o rotar el archivo .ini de cada PC.');
+    admin.feedback('Hosts guardados.');
+  } catch (error) {
+    hostFeedback(error.message, true);
+    admin.feedback(error.message, true);
+  }
+});
+q('#save-prizes').addEventListener('click', async () => {
+  await admin.api(`/api/admin/events/${currentEvent.id}/prizes`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      prizes: values(q('#admin-prizes')).map((row, index) => ({
+        title: row[0],
+        description: row[1],
+        prizeValue: row[2],
+        statKey: row[3],
+        enabled: row[4] === 'true',
+        position: index + 1
+      }))
+    })
+  });
+  admin.feedback('Premios guardados.');
+});
 
 // El panel del draft se pinta con el mismo evento seleccionado.
 window.adminApi = (ruta, opciones) => admin.api(ruta, opciones);

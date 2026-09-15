@@ -18,7 +18,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SRC = path.join(__dirname, '..', 'src');
+const RAIZ = path.join(__dirname, '..');
+const SRC = path.join(RAIZ, 'src');
 
 // Medido el 2026-09-15, justo después de desplegar las líneas comprimidas (que
 // por sí solo sumó unas 120 líneas sin añadir nada). Sólo puede bajar.
@@ -64,9 +65,14 @@ describe('arquitectura', () => {
       `app.js tiene ${lineas} líneas (máximo ${APP_MAX_LINEAS}). Saca la parte nueva a su propio módulo.`);
   });
 
-  it('no hay código comprimido en una sola línea', () => {
+  it('no hay código comprimido en una sola línea, en ninguna parte de la web', () => {
     const comprimidas = [];
-    for (const fichero of ficherosJs(SRC)) {
+    // No sólo src/: el panel de administración y las pruebas tenían más de cien
+    // líneas así cuando esta comprobación sólo miraba el servidor.
+    const carpetas = ['src', 'public', 'tools', 'test'].map((nombre) => path.join(RAIZ, nombre));
+    const ficheros = carpetas.filter((c) => fs.existsSync(c)).flatMap(ficherosJs)
+      .filter((fichero) => fichero !== __filename);   // aquí la regex PEGADO se detecta a sí misma
+    for (const fichero of ficheros) {
       fs.readFileSync(fichero, 'utf8').split('\n').forEach((linea, indice) => {
         const codigo = soloCodigo(linea).trim();
         if (codigo.startsWith('//') || codigo.startsWith('*')) return;
@@ -74,7 +80,7 @@ describe('arquitectura', () => {
         // sentencias pegadas sin espacios. Hubo rutas enteras así de menos de
         // 200 caracteres que la longitud sola no veía.
         if (codigo.length > MAX_CODIGO_POR_LINEA || PEGADO.test(codigo)) {
-          comprimidas.push(`${path.relative(SRC, fichero)}:${indice + 1} (${codigo.length})`);
+          comprimidas.push(`${path.relative(RAIZ, fichero)}:${indice + 1} (${codigo.length})`);
         }
       });
     }

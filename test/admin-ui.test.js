@@ -28,8 +28,9 @@ describe('panel de hosts y auditoría', () => {
     assert.match(script, /hosts\/\$\{host\.id\}\/token/);
     assert.match(script, /new Blob\(\[config\]/);
     assert.match(script, /`\$\{identifier\}-reporter\.ini`/);
-    assert.match(script, /navigator\.clipboard\.writeText\(config\)/);
-    assert.match(script, /method:'DELETE'/);
+    // Con \s* porque el panel se formateó: se comprueba el código, no sus espacios.
+    assert.match(script, /navigator\.clipboard\s*\.writeText\(\s*config\s*\)/);
+    assert.match(script, /method:\s*'DELETE'/);
     assert.match(script, /confirm\(/);
     assert.match(script, /identifier\.disabled\s*=\s*host\.tokenConfigured/);
     assert.match(script, /Revoca[^'"`]+cambiar[^'"`]+identificador/i);
@@ -41,7 +42,7 @@ describe('panel de hosts y auditoría', () => {
     const script = fs.readFileSync(path.join(publicDirectory, 'admin-competition.js'), 'utf8');
 
     assert.match(script, /hosts\/\$\{host\.id\}\/assignment/);
-    assert.match(script, /method:'PUT'/);
+    assert.match(script, /method:\s*'PUT'/);
     assert.match(script, /FASE QUE CUBRE ESTE PC/);
     assert.match(script, /ASIGNAR FASE/);
     assert.match(script, /host\.assignedStageId/);

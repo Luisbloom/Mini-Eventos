@@ -3,15 +3,25 @@
 const slug = decodeURIComponent(location.pathname.split('/').filter(Boolean)[1] || '');
 let currentEvent;
 
-function byId(id) { return document.querySelector(`#${id}`); }
+function byId(id) {
+  return document.querySelector(`#${id}`);
+}
 function formatDate(value, includeTime = true) {
   if (!value) return 'Por anunciar';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Por anunciar';
-  return new Intl.DateTimeFormat('es-ES', includeTime ? { dateStyle: 'long', timeStyle: 'short' } : { dateStyle: 'long' }).format(date);
+  return new Intl.DateTimeFormat(
+    'es-ES',
+    includeTime ? { dateStyle: 'long', timeStyle: 'short' } : { dateStyle: 'long' }
+  ).format(date);
 }
-function iconLabel(icon) { return ({ crewmate: 'AU', blocks: 'MC', crosshair: 'V', trophy: '★', gamepad: 'J' })[icon] || 'J'; }
-function setConnection(ok, text) { byId('event-dot').className = `live-dot ${ok ? 'live' : 'error'}`; byId('event-connection').textContent = text; }
+function iconLabel(icon) {
+  return { crewmate: 'AU', blocks: 'MC', crosshair: 'V', trophy: '★', gamepad: 'J' }[icon] || 'J';
+}
+function setConnection(ok, text) {
+  byId('event-dot').className = `live-dot ${ok ? 'live' : 'error'}`;
+  byId('event-connection').textContent = text;
+}
 
 function renderMinimum(event) {
   const panel = byId('event-quorum');
@@ -31,7 +41,8 @@ function renderMinimum(event) {
   byId('event-minimum-status').textContent = reached
     ? 'Mínimo alcanzado: el evento ya cuenta con las inscripciones necesarias.'
     : `Faltan ${remaining} ${remaining === 1 ? 'persona' : 'personas'} para poder realizar el evento.`;
-  byId('event-minimum-progress').style.width = `${Math.min(100, Math.round((event.participantCount / minimum) * 100))}%`;
+  byId('event-minimum-progress').style.width =
+    `${Math.min(100, Math.round((event.participantCount / minimum) * 100))}%`;
 
   /*
     Lo que el contador de al lado NO dice: en cuántos equipos se traduce la
@@ -86,11 +97,19 @@ function renderEvent(event) {
   byId('event-description').textContent = event.description;
   byId('event-status').textContent = event.status;
   byId('event-date').textContent = formatDate(event.startsAt);
-  byId('event-participant-count').textContent = event.maxParticipants ? `${event.participantCount} / ${event.maxParticipants}` : event.participantCount;
+  byId('event-participant-count').textContent = event.maxParticipants
+    ? `${event.participantCount} / ${event.maxParticipants}`
+    : event.participantCount;
   renderMinimum(event);
   const cover = byId('event-hero-cover');
   cover.src = event.bannerImage || event.coverImage || '/images/events/default-event-cover.jpg';
-  cover.addEventListener('error', () => { cover.src = '/images/events/default-event-cover.jpg'; }, { once: true });
+  cover.addEventListener(
+    'error',
+    () => {
+      cover.src = '/images/events/default-event-cover.jpg';
+    },
+    { once: true }
+  );
   byId('event-monogram').textContent = iconLabel(event.icon);
   byId('hero-registration-state').textContent = event.registration.label.toUpperCase();
   byId('register-cta').hidden = !event.modules.registration || !event.registration.available;
@@ -104,15 +123,28 @@ function fieldControl(field) {
   let input;
   if (field.type === 'select') {
     input = document.createElement('select');
-    const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'Selecciona una opción'; input.append(empty);
-    for (const value of field.options) { const option = document.createElement('option'); option.value = value; option.textContent = value; input.append(option); }
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = 'Selecciona una opción';
+    input.append(empty);
+    for (const value of field.options) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = value;
+      input.append(option);
+    }
   } else {
-    input = document.createElement('input'); input.type = field.type;
+    input = document.createElement('input');
+    input.type = field.type;
   }
-  input.name = field.key; input.id = `field-${field.key}`; input.required = field.required;
+  input.name = field.key;
+  input.id = `field-${field.key}`;
+  input.required = field.required;
   if (field.placeholder) input.placeholder = field.placeholder;
-  const caption = document.createElement('span'); caption.textContent = `${field.label}${field.required ? ' *' : ''}`;
-  if (field.type === 'checkbox') label.append(input, caption); else label.append(caption, input);
+  const caption = document.createElement('span');
+  caption.textContent = `${field.label}${field.required ? ' *' : ''}`;
+  if (field.type === 'checkbox') label.append(input, caption);
+  else label.append(caption, input);
   return label;
 }
 
@@ -125,7 +157,10 @@ function fieldControl(field) {
  */
 function renderRegistration(event, fields, yo = { authenticated: false }) {
   // Los torneos por equipos usan otro camino: la identidad la pone Discord.
-  if (event.modules?.draft) { renderDiscordRegistration(event); return; }
+  if (event.modules?.draft) {
+    renderDiscordRegistration(event);
+    return;
+  }
 
   const form = byId('registration-form');
   const closed = byId('registration-closed');
@@ -133,15 +168,17 @@ function renderRegistration(event, fields, yo = { authenticated: false }) {
   closed.hidden = event.registration.available;
   if (!event.registration.available) {
     byId('registration-closed-title').textContent = event.registration.label.toUpperCase();
-    byId('registration-closed-copy').textContent = event.registration.code === 'FULL' ? 'Se ha alcanzado el máximo de participantes.' : 'Ahora mismo no se admiten nuevas inscripciones.';
+    byId('registration-closed-copy').textContent =
+      event.registration.code === 'FULL'
+        ? 'Se ha alcanzado el máximo de participantes.'
+        : 'Ahora mismo no se admiten nuevas inscripciones.';
     return;
   }
   // Sin sesión no hay formulario que enseñar: primero se entra con Discord.
   const puerta = byId('registration-login');
   if (puerta) {
     puerta.hidden = Boolean(yo.authenticated);
-    byId('registration-login-link').href =
-      `/auth/discord?redirect=${encodeURIComponent(`/eventos/${event.slug}`)}`;
+    byId('registration-login-link').href = `/auth/discord?redirect=${encodeURIComponent(`/eventos/${event.slug}`)}`;
   }
   form.hidden = !yo.authenticated;
   if (!yo.authenticated) return;
@@ -159,8 +196,7 @@ function renderRegistration(event, fields, yo = { authenticated: false }) {
   if (normas) {
     normas.hidden = !event.modules.information;
     byId('registration-rules').required = event.modules.information;
-    byId('registration-rules-link').href =
-      `/eventos/${encodeURIComponent(event.slug)}/informacion`;
+    byId('registration-rules-link').href = `/eventos/${encodeURIComponent(event.slug)}/informacion`;
   }
 
   const quien = byId('registration-as');
@@ -173,8 +209,10 @@ function renderRegistration(event, fields, yo = { authenticated: false }) {
   const gameName = form.elements.game_name;
   if (same && gameName) {
     const sync = () => {
-      if (same.checked) { gameName.value = yo.displayName; gameName.disabled = true; }
-      else gameName.disabled = false;
+      if (same.checked) {
+        gameName.value = yo.displayName;
+        gameName.disabled = true;
+      } else gameName.disabled = false;
     };
     same.addEventListener('change', sync);
   }
@@ -193,12 +231,20 @@ async function submitRegistration(event) {
   // de inscripción, es la base legal para tratarlos.
   const acceptedTerms = byId('registration-consent')?.checked === true;
   const acceptedRules = byId('registration-rules')?.checked === true;
-  byId('registration-submit').disabled = true; feedback.textContent = 'Enviando inscripción…'; feedback.className = ''; feedback.setAttribute('role', 'status');
+  byId('registration-submit').disabled = true;
+  feedback.textContent = 'Enviando inscripción…';
+  feedback.className = '';
+  feedback.setAttribute('role', 'status');
   try {
-    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/registrations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values, acceptedTerms, acceptedRules }) });
+    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/registrations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values, acceptedTerms, acceptedRules })
+    });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || 'No se pudo completar la inscripción.');
-    form.hidden = true; byId('registration-success').hidden = false;
+    form.hidden = true;
+    byId('registration-success').hidden = false;
   } catch (error) {
     /*
       Que el error se vea Y se oiga. Con role="status" el lector de pantalla
@@ -215,16 +261,40 @@ async function submitRegistration(event) {
   }
 }
 
-async function loadPrizes(event){if(!event.modules.prizes)return;try{const response=await fetch(`/api/events/${encodeURIComponent(event.slug)}/prizes`,{cache:'no-store'});const data=await response.json();/* Un titular «Lo que está en juego» sin nada debajo promete premios que no hay: si la lista viene vacía, la sección no se enseña. */byId('premios').hidden=!data.prizes.length;byId('event-prizes').replaceChildren(...data.prizes.map((prize,index)=>{const card=document.createElement('article');card.innerHTML=`<span>PREMIO ${String(index+1).padStart(2,'0')}</span><h3></h3><p></p><b></b>`;card.querySelector('h3').textContent=prize.title;card.querySelector('p').textContent=prize.description;card.querySelector('b').textContent=prize.prizeValue||'';return card;}));}catch{byId('event-prizes').textContent='No se han podido cargar los premios.';}}
+async function loadPrizes(event) {
+  if (!event.modules.prizes) return;
+  try {
+    const response = await fetch(`/api/events/${encodeURIComponent(event.slug)}/prizes`, { cache: 'no-store' });
+    const data = await response.json();
+    // Un titular «Lo que está en juego» sin nada debajo promete premios que no hay:
+    // si la lista viene vacía, la sección no se enseña.
+    byId('premios').hidden = !data.prizes.length;
+    byId('event-prizes').replaceChildren(
+      ...data.prizes.map((prize, index) => {
+        const card = document.createElement('article');
+        card.innerHTML = `<span>PREMIO ${String(index + 1).padStart(2, '0')}</span><h3></h3><p></p><b></b>`;
+        card.querySelector('h3').textContent = prize.title;
+        card.querySelector('p').textContent = prize.description;
+        card.querySelector('b').textContent = prize.prizeValue || '';
+        return card;
+      })
+    );
+  } catch {
+    byId('event-prizes').textContent = 'No se han podido cargar los premios.';
+  }
+}
 
 async function loadEvent() {
   try {
-    const response = await fetch(`/api/events/${encodeURIComponent(slug)}`, { cache: 'no-store' }); if (!response.ok) throw new Error();
+    const response = await fetch(`/api/events/${encodeURIComponent(slug)}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error();
     const data = await response.json();
-    currentEvent = data.event; renderEvent(data.event);
+    currentEvent = data.event;
+    renderEvent(data.event);
     // Quién eres decide qué formulario se enseña, así que se pregunta antes.
     const yo = await fetch(`/api/me?event=${encodeURIComponent(slug)}`, { cache: 'no-store' })
-      .then((r) => r.json()).catch(() => ({ authenticated: false }));
+      .then((r) => r.json())
+      .catch(() => ({ authenticated: false }));
     renderRegistration(data.event, data.registrationFields, yo);
     setConnection(true, 'EVENTO ONLINE');
     const mode = window.DraftView.publicEventMode(data.event);
@@ -233,11 +303,18 @@ async function loadEvent() {
     // El calendario de disponibilidad va por su cuenta: si falla, no se lleva
     // por delante el resto de la página.
     window.Availability?.cargar(data.event);
-    const section = location.pathname.split('/').filter(Boolean)[2]; if (section) document.querySelector(`#${section}`)?.scrollIntoView();
-  } catch { byId('event-error').hidden = false; setConnection(false, 'NO DISPONIBLE'); }
+    const section = location.pathname.split('/').filter(Boolean)[2];
+    if (section) document.querySelector(`#${section}`)?.scrollIntoView();
+  } catch {
+    byId('event-error').hidden = false;
+    setConnection(false, 'NO DISPONIBLE');
+  }
 }
 
-byId('registration-form').addEventListener('submit', (event) => { event.preventDefault(); submitRegistration(currentEvent); });
+byId('registration-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  submitRegistration(currentEvent);
+});
 loadEvent();
 
 /* ------------------------------------------------------------------ Discord
@@ -248,7 +325,7 @@ loadEvent();
 
 const ERRORES_INSCRIPCION = {
   AUTH_REQUIRED: 'Entra con Discord antes de inscribirte.',
-  INVALID_RIOT_ID: null,                    // el backend ya explica cuál es el fallo
+  INVALID_RIOT_ID: null, // el backend ya explica cuál es el fallo
   ALREADY_REGISTERED: 'Ya estás inscrito en este torneo.',
   RIOT_ID_ALREADY_REGISTERED: 'Ese Riot ID ya está inscrito en este torneo.',
   MODULE_DISABLED: 'Este torneo no admite inscripción por equipos.',
@@ -273,16 +350,22 @@ const iniciales = (nombre) => window.DraftView.initials(nombre);
 
 async function cargarEstadoDiscord(event) {
   const [estado, yo] = await Promise.all([
-    fetch('/api/auth/discord/status', { cache: 'no-store' }).then((r) => r.json()).catch(() => ({ configured: false })),
+    fetch('/api/auth/discord/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .catch(() => ({ configured: false })),
     fetch(`/api/me?event=${encodeURIComponent(event.slug)}`, { cache: 'no-store' })
-      .then((r) => r.json()).catch(() => ({ authenticated: false }))
+      .then((r) => r.json())
+      .catch(() => ({ authenticated: false }))
   ]);
   return { estado, yo };
 }
 
 function pintarIdentidad(yo) {
   const caja = byId('discord-identity');
-  if (!yo.authenticated) { caja.hidden = true; return; }
+  if (!yo.authenticated) {
+    caja.hidden = true;
+    return;
+  }
   caja.hidden = false;
   window.Avatar?.pintar(byId('discord-initials'), yo);
   byId('discord-name').textContent = yo.displayName;
@@ -321,7 +404,8 @@ function pasoCerrado(etiqueta) {
 function pasoFormulario(event) {
   const ranks = event.valorantPeakRanks?.length ? event.valorantPeakRanks : ['Sin rango'];
   const rankOptions = ranks
-    .map((rank) => `<option value="${escaparTexto(rank)}">${escaparTexto(rank)}</option>`).join('');
+    .map((rank) => `<option value="${escaparTexto(rank)}">${escaparTexto(rank)}</option>`)
+    .join('');
   return `<form id="riot-form" class="riot-form" novalidate>
       <div class="riot-field">
         <label for="riot-id">Riot ID</label>
@@ -392,15 +476,26 @@ async function renderDiscordRegistration(event) {
   }
 
   switch (window.DraftView.registrationState({ discordConfigured: estado.configured, me: yo })) {
-    case 'unavailable': paso.innerHTML = pasoNoConfigurado(); return;
-    case 'login': paso.innerHTML = pasoEntrar(event); return;
-    case 'registered': paso.innerHTML = pasoInscrito(datos); return;
-    case 'closed': paso.innerHTML = pasoCerrado(datos.registrationLabel); return;
-    default: paso.innerHTML = pasoFormulario(event);
+    case 'unavailable':
+      paso.innerHTML = pasoNoConfigurado();
+      return;
+    case 'login':
+      paso.innerHTML = pasoEntrar(event);
+      return;
+    case 'registered':
+      paso.innerHTML = pasoInscrito(datos);
+      return;
+    case 'closed':
+      paso.innerHTML = pasoCerrado(datos.registrationLabel);
+      return;
+    default:
+      paso.innerHTML = pasoFormulario(event);
   }
   const bio = byId('player-bio');
   const count = byId('player-bio-count');
-  bio.addEventListener('input', () => { count.textContent = `${bio.value.length} / 160`; });
+  bio.addEventListener('input', () => {
+    count.textContent = `${bio.value.length} / 160`;
+  });
   byId('riot-form').addEventListener('submit', async (submit) => {
     submit.preventDefault();
     const boton = byId('riot-form').querySelector('button');
